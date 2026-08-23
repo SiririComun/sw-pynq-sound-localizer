@@ -1,11 +1,12 @@
 """
 pynq_localizer.kinematics_dashboard: Multi-Tab Real-Time Kinematics Dashboard.
-Features 3 synchronized tabs (Mic 1, Mic 2, Dual), concurrent dual-channel DSP,
-instant hardware stop, scatter-only pitch dots, and active-tab throttled rendering.
+Features 3 synchronized tabs, full Y-axis frequency zooming (f_min to f_max),
+instant 10-second CSV export, and decoupled 30 FPS Plotly rendering.
 """
 
 import time
 import threading
+from pathlib import Path
 from typing import Optional
 from IPython.display import display
 import numpy as np
@@ -81,9 +82,10 @@ class KinematicsDashboard:
 
     def _build_ui(self):
         # 1. Action Row
-        self.start_btn = widgets.Button(description="Start Stream", button_style="success", icon="play", layout=widgets.Layout(width="125px"))
-        self.stop_btn = widgets.Button(description="Stop", button_style="danger", icon="stop", layout=widgets.Layout(width="95px"))
-        self.clear_btn = widgets.Button(description="Reset View", button_style="warning", icon="refresh", layout=widgets.Layout(width="110px"))
+        self.start_btn = widgets.Button(description="Start Stream", button_style="success", icon="play", layout=widgets.Layout(width="120px"))
+        self.stop_btn = widgets.Button(description="Stop", button_style="danger", icon="stop", layout=widgets.Layout(width="90px"))
+        self.clear_btn = widgets.Button(description="Reset View", button_style="warning", icon="refresh", layout=widgets.Layout(width="105px"))
+        self.export_btn = widgets.Button(description="Export CSV", button_style="info", icon="download", layout=widgets.Layout(width="115px"))
 
         # 2. Live Dual-Channel Readouts
         self.readout_metrics = widgets.HTML(
@@ -100,7 +102,7 @@ class KinematicsDashboard:
         )
 
         self.f_min_input = widgets.BoundedIntText(
-            value=100, min=20, max=20000, step=50,
+            value=100, min=20, max=24000, step=50,
             description="f_min (Hz):", layout=widgets.Layout(width="170px")
         )
 
@@ -126,7 +128,7 @@ class KinematicsDashboard:
         self.fig_mic1.add_scatter(x=self.t_axis, y=self.buf_freq_a0, mode="markers", marker=dict(size=4.0, color="#00FFCC", opacity=0.85), name="A0 Pitch (Hz)", row=2, col=1)
         self.fig_mic1.update_layout(template="plotly_dark", height=520, margin=dict(l=50, r=25, t=40, b=30), uirevision="mic1")
         self.fig_mic1.update_yaxes(range=[0, 1.65], title="A0 (V)", row=1, col=1)
-        self.fig_mic1.update_yaxes(range=[0, 6000], title="Pitch (Hz)", row=2, col=1)
+        self.fig_mic1.update_yaxes(range=[self.f_min_input.value, self.f_max_input.value], title="Pitch (Hz)", row=2, col=1)
         self.fig_mic1.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=2, col=1)
 
         # ---------------------------------------------------------------------
@@ -145,7 +147,7 @@ class KinematicsDashboard:
         self.fig_mic2.add_scatter(x=self.t_axis, y=self.buf_freq_a1, mode="markers", marker=dict(size=4.0, color="#FF007F", opacity=0.85), name="A1 Pitch (Hz)", row=2, col=1)
         self.fig_mic2.update_layout(template="plotly_dark", height=520, margin=dict(l=50, r=25, t=40, b=30), uirevision="mic2")
         self.fig_mic2.update_yaxes(range=[0, 1.65], title="A1 (V)", row=1, col=1)
-        self.fig_mic2.update_yaxes(range=[0, 6000], title="Pitch (Hz)", row=2, col=1)
+        self.fig_mic2.update_yaxes(range=[self.f_min_input.value, self.f_max_input.value], title="Pitch (Hz)", row=2, col=1)
         self.fig_mic2.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=2, col=1)
 
         # ---------------------------------------------------------------------
@@ -168,7 +170,7 @@ class KinematicsDashboard:
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_freq_a1, mode="markers", marker=dict(size=4.0, color="#FF007F", opacity=0.85), name="A1 Pitch", row=2, col=1)
         self.fig_dual.update_layout(template="plotly_dark", height=520, margin=dict(l=50, r=25, t=40, b=30), uirevision="dual")
         self.fig_dual.update_yaxes(range=[0, 1.65], title="Amplitude (V)", row=1, col=1)
-        self.fig_dual.update_yaxes(range=[0, 6000], title="Pitch (Hz)", row=2, col=1)
+        self.fig_dual.update_yaxes(range=[self.f_min_input.value, self.f_max_input.value], title="Pitch (Hz)", row=2, col=1)
         self.fig_dual.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=2, col=1)
 
         # Assemble Tabs Container
@@ -181,13 +183,50 @@ class KinematicsDashboard:
         self.start_btn.on_click(lambda _: self.start())
         self.stop_btn.on_click(lambda _: self.stop())
         self.clear_btn.on_click(lambda _: self.reset_buffers())
-        self.f_max_input.observe(self._on_f_max_change, names="value")
+        self.export_btn.on_click(lambda _: self.export_csv())
+        self.f_min_input.observe(self._on_freq_bounds_change, names="value")
+        self.f_max_input.observe(self._on_freq_bounds_change, names="value")
 
-    def _on_f_max_change(self, change):
-        new_max = change["new"] * 1.1
-        self.fig_mic1.update_yaxes(range=[0, new_max], row=2, col=1)
-        self.fig_mic2.update_yaxes(range=[0, new_max], row=2, col=1)
-        self.fig_dual.update_yaxes(range=[0, new_max], row=2, col=1)
+    def _on_freq_bounds_change(self, _):
+        f_min = float(self.f_min_input.value)
+        f_max = float(self.f_max_input.value)
+        if f_max > f_min:
+            self.fig_mic1.update_yaxes(range=[f_min, f_max], row=2, col=1)
+            self.fig_mic2.update_yaxes(range=[f_min, f_max], row=2, col=1)
+            self.fig_dual.update_yaxes(range=[f_min, f_max], row=2, col=1)
+
+    def export_csv(self, filename: Optional[str] = None) -> str:
+        """
+        Exports the entire synchronized 10-second rolling buffer to a CSV file.
+        :param filename: Optional custom path. If None, saves as kinematics_telemetry_YYYYMMDD_HHMMSS.csv.
+        :return: Path of the saved CSV file.
+        """
+        if filename is None:
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            filename = f"kinematics_telemetry_{ts}.csv"
+
+        out_path = Path(filename).resolve()
+
+        with self._buf_lock:
+            t = np.copy(self.t_axis)
+            a0_amp = np.copy(self.buf_amp_a0)
+            a0_freq = np.copy(self.buf_freq_a0)
+            a1_amp = np.copy(self.buf_amp_a1)
+            a1_freq = np.copy(self.buf_freq_a1)
+
+        # Stack into 2D table
+        data_matrix = np.column_stack([t, a0_amp, a0_freq, a1_amp, a1_freq])
+        header = "time_sec,a0_amplitude_v,a0_frequency_hz,a1_amplitude_v,a1_frequency_hz"
+
+        np.savetxt(out_path, data_matrix, delimiter=",", header=header, comments="", fmt="%.4f,%.4f,%.2f,%.4f,%.2f")
+
+        self.readout_metrics.value = (
+            f"<span style='color:#00FFCC; font-family:monospace; font-size:13px; font-weight:bold;'>"
+            f"✅ Saved CSV: {out_path.name} ({len(t)} points)"
+            f"</span>"
+        )
+        print(f"[KinematicsDashboard] Exported 10s telemetry to: {out_path}")
+        return str(out_path)
 
     def reset_buffers(self):
         with self._buf_lock:
@@ -219,19 +258,18 @@ class KinematicsDashboard:
         dma = self.overlay.axi_dma_0
         trig = self.trigger
 
-        # Initialize simultaneous dual sampling (0.00 µs skew)
         if hasattr(self.overlay, "xadc_wiz_0"):
             self.overlay.xadc_wiz_0.mmio.write(0x304, 0x2000)
             self.overlay.xadc_wiz_0.mmio.write(0x320, 0x0000)
             self.overlay.xadc_wiz_0.mmio.write(0x324, 0x0202)
 
-        chunk_pts = 1024  # 512 samples/channel = 10.24 ms at 50 kSPS
+        chunk_pts = 1024
         if trig:
-            trig.set_decimation(10)  # 50 kSPS
+            trig.set_decimation(10)
             trig.set_packet_size(chunk_pts)
             trig.set_mode("Auto")
 
-        dma.mmio.write(0x30, 0x04)  # Reset DMA channel
+        dma.mmio.write(0x30, 0x04)
         time.sleep(0.002)
         dma.recvchannel.start()
 
@@ -250,7 +288,6 @@ class KinematicsDashboard:
                     dma_armed = False
                     raw = np.array(cma_buf)
 
-                    # De-interleave BOTH channels
                     raw_a0 = raw[0::2]
                     raw_a1 = raw[1::2]
 
@@ -290,7 +327,6 @@ class KinematicsDashboard:
                     self._cur_amp_a1 = amp_a1
                     self._cur_f0_a1 = f0_a1
 
-                    # Update thread-safe ring buffers
                     with self._buf_lock:
                         self.buf_amp_a0[:-1] = self.buf_amp_a0[1:]
                         self.buf_amp_a0[-1] = amp_a0
@@ -315,7 +351,7 @@ class KinematicsDashboard:
     # =========================================================================
     def _render_worker(self):
         while self._is_running:
-            time.sleep(0.033)  # 30 FPS
+            time.sleep(0.033)
             if not self._is_running:
                 break
 
@@ -328,7 +364,6 @@ class KinematicsDashboard:
             squelch = float(self.squelch_slider.value)
             active_tab = self.tabs.selected_index
 
-            # Render ONLY the active visible tab to eliminate WebSocket bottleneck!
             if active_tab == 0:
                 with self.fig_mic1.batch_update():
                     self.fig_mic1.data[0].y = amp_a0
@@ -367,7 +402,6 @@ class KinematicsDashboard:
     def stop(self):
         if self._is_running:
             self._is_running = False
-            # Immediate hardware abort
             if self.overlay and hasattr(self.overlay, "axi_dma_0"):
                 self.overlay.axi_dma_0.mmio.write(0x30, 0x04)
             if self.trigger:
@@ -386,7 +420,7 @@ class KinematicsDashboard:
             print("[KinematicsDashboard] Stream Stopped Cleanly.")
 
     def display(self):
-        r1 = widgets.HBox([self.start_btn, self.stop_btn, self.clear_btn, self.readout_metrics], layout=widgets.Layout(gap="10px", margin="0 0 8px 0"))
+        r1 = widgets.HBox([self.start_btn, self.stop_btn, self.clear_btn, self.export_btn, self.readout_metrics], layout=widgets.Layout(gap="10px", margin="0 0 8px 0"))
         r2 = widgets.HBox([self.squelch_slider, self.f_min_input, self.f_max_input])
         control_panel = widgets.VBox([r1, r2], layout=widgets.Layout(margin="0 0 10px 0"))
         display(widgets.VBox([control_panel, self.tabs]))
