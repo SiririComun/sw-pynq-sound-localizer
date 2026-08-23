@@ -3,10 +3,11 @@ Git Context & Branch Info:
 ```log
 Current Branch: main
 Branch Tracking Status:
-* main 1cd138d [origin/main] fix(array): align kinematics_dashboard signature with multi-tab dashboard
+* main 8f98eb7 [origin/main] feat(dashboard): add 10-second CSV export button and full [f_min, f_max] frequency zoom
 
 Git Commit Graph & History:
-* 1cd138d  (HEAD -> main, origin/main) - 2026-08-23 : fix(array): align kinematics_dashboard signature with multi-tab dashboard (SiririComun)
+* 8f98eb7  (HEAD -> main, origin/main) - 2026-08-23 : feat(dashboard): add 10-second CSV export button and full [f_min, f_max] frequency zoom (SiririComun)
+* 1cd138d  - 2026-08-23 : fix(array): align kinematics_dashboard signature with multi-tab dashboard (SiririComun)
 * 5214663  - 2026-08-23 : fix(dashboard): resolve streaming lag via decoupled multi-threading, add 3-tab UI, and instant stop (SiririComun)
 * 60dca63  - 2026-08-23 : feat(dashboard): implement real-time 10-second rolling KinematicsDashboard for A(t) and f0(t) (SiririComun)
 * 5827263  - 2026-08-23 : feat(kinematics): implement KinematicAnalytics DSP engine with sub-Hertz STFT ridge tracker (SiririComun)
@@ -1133,14 +1134,15 @@ kinematics_dashboard.py:
 ```python
 """
 pynq_localizer.kinematics_dashboard: Multi-Tab Real-Time Kinematics Dashboard.
-Features 3 synchronized tabs, full Y-axis frequency zooming (f_min to f_max),
-instant 10-second CSV export, and decoupled 30 FPS Plotly rendering.
+Features 2048-point STFT resolution, moving median DSP smoothing,
+clean non-NaN CSV exports, and direct Python data handoff for curve fitting.
 """
 
 import time
 import threading
 from pathlib import Path
-from typing import Optional
+from collections import deque
+from typing import Optional, Tuple
 from IPython.display import display
 import numpy as np
 import ipywidgets as widgets
@@ -1182,8 +1184,12 @@ class KinematicsDashboard:
         self.buf_freq_a1 = np.full(self.buffer_len, np.nan, dtype=np.float64)
         self._buf_lock = threading.Lock()
 
-        # STFT window pre-calculation (20 ms window = 1024 samples at 50 kSPS)
-        self.win_len = 1024
+        # Moving median history deques for reflection noise rejection
+        self._hist_f0_a0 = deque(maxlen=5)
+        self._hist_f0_a1 = deque(maxlen=5)
+
+        # High-resolution STFT window (40.96 ms = 2048 samples at 50 kSPS, Δf = 24.41 Hz)
+        self.win_len = 2048
         n = np.arange(self.win_len)
         self.stft_win = (0.35875 - 0.48829 * np.cos(2.0 * np.pi * n / (self.win_len - 1)) +
                          0.14128 * np.cos(4.0 * np.pi * n / (self.win_len - 1)) -
@@ -1219,6 +1225,7 @@ class KinematicsDashboard:
         self.stop_btn = widgets.Button(description="Stop", button_style="danger", icon="stop", layout=widgets.Layout(width="90px"))
         self.clear_btn = widgets.Button(description="Reset View", button_style="warning", icon="refresh", layout=widgets.Layout(width="105px"))
         self.export_btn = widgets.Button(description="Export CSV", button_style="info", icon="download", layout=widgets.Layout(width="115px"))
+        self.clean_csv_chk = widgets.Checkbox(value=True, description="Clean NaNs", indent=False, layout=widgets.Layout(width="110px"))
 
         # 2. Live Dual-Channel Readouts
         self.readout_metrics = widgets.HTML(
@@ -1227,21 +1234,28 @@ class KinematicsDashboard:
             "</span>"
         )
 
-        # 3. Tuning Controls
+        # 3. Tuning & DSP Controls
         self.squelch_slider = widgets.FloatSlider(
             value=0.015, min=0.001, max=0.150, step=0.002,
             description="Noise Gate:", readout_format=".3f",
-            layout=widgets.Layout(width="260px")
+            layout=widgets.Layout(width="240px")
+        )
+
+        self.smooth_dd = widgets.Dropdown(
+            options=[("Off (Raw)", 1), ("Medium (3x / 30ms)", 3), ("Strong (5x / 50ms)", 5)],
+            value=3,
+            description="Smooth:",
+            layout=widgets.Layout(width="190px")
         )
 
         self.f_min_input = widgets.BoundedIntText(
             value=100, min=20, max=24000, step=50,
-            description="f_min (Hz):", layout=widgets.Layout(width="170px")
+            description="f_min (Hz):", layout=widgets.Layout(width="160px")
         )
 
         self.f_max_input = widgets.BoundedIntText(
             value=10000, min=50, max=25000, step=100,
-            description="f_max (Hz):", layout=widgets.Layout(width="170px")
+            description="f_max (Hz):", layout=widgets.Layout(width="160px")
         )
 
     def _build_plots(self):
@@ -1316,7 +1330,7 @@ class KinematicsDashboard:
         self.start_btn.on_click(lambda _: self.start())
         self.stop_btn.on_click(lambda _: self.stop())
         self.clear_btn.on_click(lambda _: self.reset_buffers())
-        self.export_btn.on_click(lambda _: self.export_csv())
+        self.export_btn.on_click(lambda _: self.export_csv(clean_silence=self.clean_csv_chk.value))
         self.f_min_input.observe(self._on_freq_bounds_change, names="value")
         self.f_max_input.observe(self._on_freq_bounds_change, names="value")
 
@@ -1328,10 +1342,25 @@ class KinematicsDashboard:
             self.fig_mic2.update_yaxes(range=[f_min, f_max], row=2, col=1)
             self.fig_dual.update_yaxes(range=[f_min, f_max], row=2, col=1)
 
-    def export_csv(self, filename: Optional[str] = None) -> str:
+    def get_clean_data(self, channel: int = 1) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Exports the entire synchronized 10-second rolling buffer to a CSV file.
+        Returns clean, sanitized, non-NaN arrays for direct post-processing in Jupyter cells.
+        :param channel: 1 for Mic 1 (A0), 2 for Mic 2 (A1).
+        :return: (time_clean_sec, amp_clean_v, freq_clean_hz).
+        """
+        with self._buf_lock:
+            t = np.copy(self.t_axis)
+            amp = np.copy(self.buf_amp_a0 if channel == 1 else self.buf_amp_a1)
+            freq = np.copy(self.buf_freq_a0 if channel == 1 else self.buf_freq_a1)
+
+        valid_mask = np.isfinite(freq) & (amp >= float(self.squelch_slider.value))
+        return t[valid_mask], amp[valid_mask], freq[valid_mask]
+
+    def export_csv(self, filename: Optional[str] = None, clean_silence: bool = True) -> str:
+        """
+        Exports the synchronized 10-second rolling buffer to a CSV file.
         :param filename: Optional custom path. If None, saves as kinematics_telemetry_YYYYMMDD_HHMMSS.csv.
+        :param clean_silence: If True, strips out silent NaN rows so data is ready for instant analysis.
         :return: Path of the saved CSV file.
         """
         if filename is None:
@@ -1347,18 +1376,30 @@ class KinematicsDashboard:
             a1_amp = np.copy(self.buf_amp_a1)
             a1_freq = np.copy(self.buf_freq_a1)
 
-        # Stack into 2D table
+        if clean_silence:
+            # Keep rows where at least one channel detected active pitch
+            valid_mask = np.isfinite(a0_freq) | np.isfinite(a1_freq)
+            if np.sum(valid_mask) == 0:
+                valid_mask = (a0_amp >= float(self.squelch_slider.value)) | (a1_amp >= float(self.squelch_slider.value))
+
+            t = t[valid_mask]
+            a0_amp = a0_amp[valid_mask]
+            a0_freq = a0_freq[valid_mask]
+            a1_amp = a1_amp[valid_mask]
+            a1_freq = a1_freq[valid_mask]
+
         data_matrix = np.column_stack([t, a0_amp, a0_freq, a1_amp, a1_freq])
         header = "time_sec,a0_amplitude_v,a0_frequency_hz,a1_amplitude_v,a1_frequency_hz"
 
         np.savetxt(out_path, data_matrix, delimiter=",", header=header, comments="", fmt="%.4f,%.4f,%.2f,%.4f,%.2f")
 
+        tag = "Clean (No NaNs)" if clean_silence else "Full (1000 pts)"
         self.readout_metrics.value = (
             f"<span style='color:#00FFCC; font-family:monospace; font-size:13px; font-weight:bold;'>"
-            f"✅ Saved CSV: {out_path.name} ({len(t)} points)"
+            f"✅ Saved CSV ({tag}): {out_path.name} ({len(t)} points)"
             f"</span>"
         )
-        print(f"[KinematicsDashboard] Exported 10s telemetry to: {out_path}")
+        print(f"[KinematicsDashboard] Exported telemetry to: {out_path}")
         return str(out_path)
 
     def reset_buffers(self):
@@ -1367,6 +1408,8 @@ class KinematicsDashboard:
             self.buf_freq_a0.fill(np.nan)
             self.buf_amp_a1.fill(0.0)
             self.buf_freq_a1.fill(np.nan)
+            self._hist_f0_a0.clear()
+            self._hist_f0_a1.clear()
 
         active_tab = self.tabs.selected_index
         if active_tab == 0:
@@ -1433,27 +1476,40 @@ class KinematicsDashboard:
                     amp_a0 = float(np.sqrt(np.mean(x_ac_a0 ** 2)))
                     amp_a1 = float(np.sqrt(np.mean(x_ac_a1 ** 2)))
                     squelch = float(self.squelch_slider.value)
+                    smooth_taps = int(self.smooth_dd.value)
 
                     f_min = float(self.f_min_input.value)
                     f_max = float(self.f_max_input.value)
 
-                    # Pitch tracking Channel 1 (A0)
+                    # 1. Channel 1 (A0) Pitch Tracking (2048-point STFT)
                     if amp_a0 >= squelch and len(x_ac_a0) >= 128:
                         pad_len = self.win_len - len(x_ac_a0)
                         p0 = np.pad(x_ac_a0, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a0[:self.win_len]
                         mag_db0 = 20.0 * np.log10(np.maximum((np.abs(np.fft.rfft(p0 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4), 1e-6))
-                        f0_a0, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db0, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
+                        raw_f0_a0, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db0, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
+
+                        # Moving Median Filter
+                        self._hist_f0_a0.append(raw_f0_a0)
+                        recent_pts = list(self._hist_f0_a0)[-smooth_taps:]
+                        f0_a0 = float(np.median(recent_pts))
                     else:
                         f0_a0 = np.nan
+                        self._hist_f0_a0.clear()
 
-                    # Pitch tracking Channel 2 (A1)
+                    # 2. Channel 2 (A1) Pitch Tracking (2048-point STFT)
                     if amp_a1 >= squelch and len(x_ac_a1) >= 128:
                         pad_len = self.win_len - len(x_ac_a1)
                         p1 = np.pad(x_ac_a1, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a1[:self.win_len]
                         mag_db1 = 20.0 * np.log10(np.maximum((np.abs(np.fft.rfft(p1 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4), 1e-6))
-                        f0_a1, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db1, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
+                        raw_f0_a1, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db1, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
+
+                        # Moving Median Filter
+                        self._hist_f0_a1.append(raw_f0_a1)
+                        recent_pts = list(self._hist_f0_a1)[-smooth_taps:]
+                        f0_a1 = float(np.median(recent_pts))
                     else:
                         f0_a1 = np.nan
+                        self._hist_f0_a1.clear()
 
                     self._cur_amp_a0 = amp_a0
                     self._cur_f0_a0 = f0_a0
@@ -1553,8 +1609,8 @@ class KinematicsDashboard:
             print("[KinematicsDashboard] Stream Stopped Cleanly.")
 
     def display(self):
-        r1 = widgets.HBox([self.start_btn, self.stop_btn, self.clear_btn, self.export_btn, self.readout_metrics], layout=widgets.Layout(gap="10px", margin="0 0 8px 0"))
-        r2 = widgets.HBox([self.squelch_slider, self.f_min_input, self.f_max_input])
+        r1 = widgets.HBox([self.start_btn, self.stop_btn, self.clear_btn, self.export_btn, self.clean_csv_chk, self.readout_metrics], layout=widgets.Layout(gap="10px", margin="0 0 8px 0"))
+        r2 = widgets.HBox([self.squelch_slider, self.smooth_dd, self.f_min_input, self.f_max_input])
         control_panel = widgets.VBox([r1, r2], layout=widgets.Layout(margin="0 0 10px 0"))
         display(widgets.VBox([control_panel, self.tabs]))```
 
