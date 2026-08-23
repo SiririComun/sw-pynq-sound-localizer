@@ -3,10 +3,11 @@ Git Context & Branch Info:
 ```log
 Current Branch: main
 Branch Tracking Status:
-* main 60dca63 [origin/main] feat(dashboard): implement real-time 10-second rolling KinematicsDashboard for A(t) and f0(t)
+* main 5214663 [origin/main] fix(dashboard): resolve streaming lag via decoupled multi-threading, add 3-tab UI, and instant stop
 
 Git Commit Graph & History:
-* 60dca63  (HEAD -> main, origin/main) - 2026-08-23 : feat(dashboard): implement real-time 10-second rolling KinematicsDashboard for A(t) and f0(t) (SiririComun)
+* 5214663  (HEAD -> main, origin/main) - 2026-08-23 : fix(dashboard): resolve streaming lag via decoupled multi-threading, add 3-tab UI, and instant stop (SiririComun)
+* 60dca63  - 2026-08-23 : feat(dashboard): implement real-time 10-second rolling KinematicsDashboard for A(t) and f0(t) (SiririComun)
 * 5827263  - 2026-08-23 : feat(kinematics): implement KinematicAnalytics DSP engine with sub-Hertz STFT ridge tracker (SiririComun)
 * 540c19a  - 2026-08-23 : feat(array): implement MicrophoneArrayOverlay with zero-skew capture and continuous flight recorder (SiririComun)
 * cf73d1d  - 2026-08-23 : feat(hw): implement HardwareLoader and HardwareTrigger driver for v1.5.0 overlay (SiririComun)
@@ -119,6 +120,7 @@ from pynq_localizer.loader import HardwareLoader
 from pynq_localizer.hw_trigger import HardwareTrigger
 from pynq_localizer.array import MicrophoneArrayOverlay
 from pynq_localizer.kinematics import KinematicAnalytics
+from pynq_localizer.kinematics_dashboard import KinematicsDashboard
 from pynq_localizer.notebooks import copy_notebooks
 
 __version__ = "1.0.0"
@@ -127,6 +129,7 @@ __all__ = [
     "HardwareTrigger",
     "MicrophoneArrayOverlay",
     "KinematicAnalytics",
+    "KinematicsDashboard",
     "copy_notebooks",
 ]```
 
@@ -770,22 +773,19 @@ class MicrophoneArrayOverlay(Overlay):
     def kinematics_dashboard(
         self,
         window_duration_sec: float = 10.0,
-        hop_ms: float = 10.0,
-        channel: int = 1
+        hop_ms: float = 10.0
     ):
         """
-        Launches the real-time 10-second rolling Kinematics Dashboard (A(t) & f0(t)).
+        Launches the real-time 10-second rolling Multi-Tab Kinematics Dashboard (A(t) & f0(t)).
         :param window_duration_sec: Rolling time window in seconds (default: 10.0s).
         :param hop_ms: Telemetry extraction rate in milliseconds (default: 10.0 ms).
-        :param channel: 1 for Mic 1 (A0), 2 for Mic 2 (A1).
         """
         from pynq_localizer.kinematics_dashboard import KinematicsDashboard
         dash = KinematicsDashboard(
             overlay=self,
             window_duration_sec=window_duration_sec,
             hop_ms=hop_ms,
-            fs_per_ch=self.fs_per_ch,
-            channel=channel
+            fs_per_ch=self.fs_per_ch
         )
         dash.display()
         return dash
