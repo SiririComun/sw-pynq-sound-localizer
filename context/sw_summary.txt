@@ -3,10 +3,11 @@ Git Context & Branch Info:
 ```log
 Current Branch: main
 Branch Tracking Status:
-* main 8f98eb7 [origin/main] feat(dashboard): add 10-second CSV export button and full [f_min, f_max] frequency zoom
+* main ccfa0f7 [origin/main] feat(dashboard): add moving median DSP filter, 2048-pt STFT resolution, and clean NaN CSV export
 
 Git Commit Graph & History:
-* 8f98eb7  (HEAD -> main, origin/main) - 2026-08-23 : feat(dashboard): add 10-second CSV export button and full [f_min, f_max] frequency zoom (SiririComun)
+* ccfa0f7  (HEAD -> main, origin/main) - 2026-08-23 : feat(dashboard): add moving median DSP filter, 2048-pt STFT resolution, and clean NaN CSV export (SiririComun)
+* 8f98eb7  - 2026-08-23 : feat(dashboard): add 10-second CSV export button and full [f_min, f_max] frequency zoom (SiririComun)
 * 1cd138d  - 2026-08-23 : fix(array): align kinematics_dashboard signature with multi-tab dashboard (SiririComun)
 * 5214663  - 2026-08-23 : fix(dashboard): resolve streaming lag via decoupled multi-threading, add 3-tab UI, and instant stop (SiririComun)
 * 60dca63  - 2026-08-23 : feat(dashboard): implement real-time 10-second rolling KinematicsDashboard for A(t) and f0(t) (SiririComun)
@@ -26,12 +27,14 @@ Files structure:
 │   └── sw_summary.txt
 ├── docs
 │   └── images
+│       └── 01_kinematics_telemetry_dual.png
 ├── .github
 │   └── workflows
 ├── .gitignore
 ├── hardware.json
 ├── LICENSE
 ├── notebooks
+│   └── 01_realtime_kinematics_telemetry.ipynb
 ├── pynq_localizer
 │   ├── array.py
 │   ├── hw_trigger.py
@@ -44,7 +47,7 @@ Files structure:
 ├── requirements.txt
 └── setup.py
 
-8 directories, 15 files
+8 directories, 17 files
 ```
 
 hardware.json:
