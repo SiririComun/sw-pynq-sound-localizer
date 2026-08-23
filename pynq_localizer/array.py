@@ -250,6 +250,29 @@ class MicrophoneArrayOverlay(Overlay):
         max_val = np.max(np.abs(ac_signal))
         normalized = (ac_signal / max_val) if max_val > 1e-4 else ac_signal
         display(Audio(normalized, rate=int(self.fs_per_ch)))
+    
+    def kinematics_dashboard(
+        self,
+        window_duration_sec: float = 10.0,
+        hop_ms: float = 10.0,
+        channel: int = 1
+    ):
+        """
+        Launches the real-time 10-second rolling Kinematics Dashboard (A(t) & f0(t)).
+        :param window_duration_sec: Rolling time window in seconds (default: 10.0s).
+        :param hop_ms: Telemetry extraction rate in milliseconds (default: 10.0 ms).
+        :param channel: 1 for Mic 1 (A0), 2 for Mic 2 (A1).
+        """
+        from pynq_localizer.kinematics_dashboard import KinematicsDashboard
+        dash = KinematicsDashboard(
+            overlay=self,
+            window_duration_sec=window_duration_sec,
+            hop_ms=hop_ms,
+            fs_per_ch=self.fs_per_ch,
+            channel=channel
+        )
+        dash.display()
+        return dash
 
     # =========================================================================
     # Cleanup & Context Management
