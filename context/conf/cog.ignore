@@ -45,3 +45,7 @@ build/
 # OS Metadata
 .DS_Store
 Thumbs.db
+
+pynq_localizer/notebooks/01_realtime_kinematics_telemetry.ipynb
+pynq_localizer/notebooks/02_physical_distance_decay.ipynb
+pynq_localizer/notebooks/03_dual_source_isolation.ipynb
