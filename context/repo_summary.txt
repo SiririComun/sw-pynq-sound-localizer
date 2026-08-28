@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/v1.6.0-overlay-integration @ 40df672
+• Repository State    : feat/v1.6.0-overlay-integration @ fbf000b
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.6.0
 • Package Version     : v1.0.0
 ==============================================================================
@@ -9,19 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (5 modified/untracked files)
+Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/v1.6.0-overlay-integration                40df672 [origin/feat/v1.6.0-overlay-integration] fix(packaging): add MANIFEST.in to guarantee .ipynb wheel inclusion
+* feat/v1.6.0-overlay-integration                fbf000b [origin/feat/v1.6.0-overlay-integration] chore(context): update repository summary with Cog
   main                                           ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/v1.6.0-overlay-integration 40df672 fix(packaging): add MANIFEST.in to guarantee .ipynb wheel inclusion
+  remotes/origin/feat/v1.6.0-overlay-integration fbf000b chore(context): update repository summary with Cog
   remotes/origin/main                            ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
 Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 40df672  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : fix(packaging): add MANIFEST.in to guarantee .ipynb wheel inclusion (SiririComun)
+* fbf000b  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : chore(context): update repository summary with Cog (SiririComun)
+* afdaa76  - 2026-08-28 : fix(packaging): structure pynq_localizer.notebooks as subpackage for isolated bundling (SiririComun)
+* 40df672  - 2026-08-28 : fix(packaging): add MANIFEST.in to guarantee .ipynb wheel inclusion (SiririComun)
 * 8ee0cb8  - 2026-08-28 : fix(packaging): embed isolated notebooks_data inside package namespace (SiririComun)
 * db25fc2  - 2026-08-28 : fix(packaging): isolate notebook discovery to package namespace to prevent cross-package collisions (SiririComun)
 * f44a74d  - 2026-08-28 : docs(notebook): update getting-started notebook with spectral filtering and 1/r verification (SiririComun)
@@ -34,8 +36,6 @@ Multi-Branch Git Commit Graph:
 * 61f9c70  (tag: v1.0.0) - 2026-08-23 : docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook (SiririComun)
 * ccfa0f7  - 2026-08-23 : feat(dashboard): add moving median DSP filter, 2048-pt STFT resolution, and clean NaN CSV export (SiririComun)
 * 8f98eb7  - 2026-08-23 : feat(dashboard): add 10-second CSV export button and full [f_min, f_max] frequency zoom (SiririComun)
-* 1cd138d  - 2026-08-23 : fix(array): align kinematics_dashboard signature with multi-tab dashboard (SiririComun)
-* 5214663  - 2026-08-23 : fix(dashboard): resolve streaming lag via decoupled multi-threading, add 3-tab UI, and instant stop (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -197,7 +197,6 @@ from pynq_localizer.spectral_mask import SpectralMaskDriver
 from pynq_localizer.array import MicrophoneArrayOverlay
 from pynq_localizer.kinematics import KinematicAnalytics
 from pynq_localizer.kinematics_dashboard import KinematicsDashboard
-from pynq_localizer.notebooks import copy_notebooks
 
 __version__ = "1.0.0"
 __all__ = [
@@ -207,7 +206,6 @@ __all__ = [
     "MicrophoneArrayOverlay",
     "KinematicAnalytics",
     "KinematicsDashboard",
-    "copy_notebooks",
 ]
 ```
 
@@ -2044,12 +2042,7 @@ setup(
         "pynq_localizer": ["hardware.json"],
         "pynq_localizer.notebooks": ["*.ipynb"],
     },
-    include_package_data=True,
-    entry_points={
-        "console_scripts": [
-            "pynq-localizer-get-notebooks=pynq_localizer.notebooks:copy_notebooks",
-        ],
-    },
+    include_package_data=True
 )
 ```
 

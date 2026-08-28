@@ -33,10 +33,5 @@ setup(
         "pynq_localizer": ["hardware.json"],
         "pynq_localizer.notebooks": ["*.ipynb"],
     },
-    include_package_data=True,
-    entry_points={
-        "console_scripts": [
-            "pynq-localizer-get-notebooks=pynq_localizer.notebooks:copy_notebooks",
-        ],
-    },
+    include_package_data=True
 )
