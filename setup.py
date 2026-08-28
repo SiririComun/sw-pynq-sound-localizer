@@ -30,7 +30,7 @@ setup(
         "ipywidgets>=8.0.0",
     ],
     package_data={
-        "pynq_localizer": ["notebooks/*.ipynb", "hardware.json", "../hardware.json"],
+        "pynq_localizer": ["notebooks_data/*.ipynb", "hardware.json", "../hardware.json"],
     },
     include_package_data=True,
     entry_points={

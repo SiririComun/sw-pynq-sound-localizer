@@ -6,14 +6,18 @@ from pathlib import Path
 def copy_notebooks(target_dir: str = None):
     """
     Copies pynq_sound_localizer example notebooks into the Jupyter root folder.
+    Guaranteed to be isolated and agnostic to any other libraries on the board.
     """
-    # 1. First check inside the installed package namespace
     pkg_dir = Path(__file__).resolve().parent
-    src_notebooks = pkg_dir / "notebooks"
 
-    # 2. Fallback to repo root if running in editable / source mode
+    # 1. Primary source: inside installed package namespace
+    src_notebooks = pkg_dir / "notebooks_data"
+
+    # 2. Secondary source: git root only if running in development mode (setup.py present)
     if not src_notebooks.exists() or not any(src_notebooks.glob("*.ipynb")):
-        src_notebooks = pkg_dir.parent / "notebooks"
+        repo_root = pkg_dir.parent
+        if (repo_root / "setup.py").exists():
+            src_notebooks = repo_root / "notebooks"
 
     if target_dir is None:
         pynq_jupyter_root = Path("/home/xilinx/jupyter_notebooks")
