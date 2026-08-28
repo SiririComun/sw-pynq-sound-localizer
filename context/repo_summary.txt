@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/v1.6.0-overlay-integration @ 806618e
+• Repository State    : feat/v1.6.0-overlay-integration @ 2e5bc95
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.6.0
 • Package Version     : v1.0.0
 ==============================================================================
@@ -9,10 +9,10 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (8 modified/untracked files)
+Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/v1.6.0-overlay-integration 806618e feat(dsp): add frequency bandpass mapping, 1/r acoustic distance fit, and isolation metrics
+* feat/v1.6.0-overlay-integration 2e5bc95 test(physics): add strict validation suite for spectral masking, IFFT fidelity, and 1/r law
   main                            ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
   remotes/origin/main             ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
@@ -20,7 +20,8 @@ Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 806618e  (HEAD -> feat/v1.6.0-overlay-integration) - 2026-08-28 : feat(dsp): add frequency bandpass mapping, 1/r acoustic distance fit, and isolation metrics (SiririComun)
+* 2e5bc95  (HEAD -> feat/v1.6.0-overlay-integration) - 2026-08-28 : test(physics): add strict validation suite for spectral masking, IFFT fidelity, and 1/r law (SiririComun)
+* 806618e  - 2026-08-28 : feat(dsp): add frequency bandpass mapping, 1/r acoustic distance fit, and isolation metrics (SiririComun)
 * 6130730  - 2026-08-28 : feat(array): add 3-DMA streaming and hardware spectral filter integration (SiririComun)
 * 47cd556  - 2026-08-28 : feat(filter): implement SpectralMaskDriver for axis_spectral_mask IP (SiririComun)
 * a365cfc  - 2026-08-28 : chore(hw): update pinned hardware overlay to v1.6.0 (SiririComun)
@@ -34,7 +35,6 @@ Multi-Branch Git Commit Graph:
 * 5827263  - 2026-08-23 : feat(kinematics): implement KinematicAnalytics DSP engine with sub-Hertz STFT ridge tracker (SiririComun)
 * 540c19a  - 2026-08-23 : feat(array): implement MicrophoneArrayOverlay with zero-skew capture and continuous flight recorder (SiririComun)
 * cf73d1d  - 2026-08-23 : feat(hw): implement HardwareLoader and HardwareTrigger driver for v1.5.0 overlay (SiririComun)
-* a290edb  - 2026-08-23 : chore(context): add automated context generator script and initial summary (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -2059,57 +2059,123 @@ setup(
 
 ```python
 # %% [markdown] Cell 1
-# Notebook 1: Real-Time Acoustic Kinematics & Telemetry Dashboard
-# Welcome to **`pynq-sound-localizer`** (`v1.0.0`). This notebook demonstrates how to load the FPGA hardware overlay, launch the **10-Second Rolling Kinematics Dashboard**, record continuous multi-second flight data, and extract clean Doppler telemetry.
+# Real-Time Acoustic Kinematics, Hardware Frequency Filtering & Physics Verification
+# Welcome to **`pynq-sound-localizer`** (Hardware Overlay **`v1.6.0`**).
+# This notebook demonstrates:
+# 1. **Overlay Initialization & Status Verification** (True simultaneous dual-sampling, $0.00\,\mu\text{s}$ skew).
+# 2. **Real-Time 10-Second Rolling Kinematics Dashboard** ($A(t)$ physical loudness & sub-Hertz pitch $f_0(t)$).
+# 3. **Hardware Spectral Frequency Filtering & IFFT Reconstruction** (`axis_spectral_mask` bandpass $(\omega_0 \pm \Delta\omega)$).
+# 4. **Physical Inverse-Distance Acoustic Law Verification** (Measuring $V_{\text{RMS}}(r) \propto 1/r$ and $I(r) \propto 1/r^2$).
+# 5. **Continuous Flight Recording & Jupyter Audio Playback**.
 
 # %% [markdown] Cell 2
 ## 1. Load the Hardware Overlay
-# Instantiate `MicrophoneArrayOverlay()`. It automatically downloads and configures the verified `v1.5.0` bitstream on the PYNQ-Z2 board.
+# Instantiate `MicrophoneArrayOverlay()`. It automatically downloads and configures the verified `v1.6.0` bitstream on the PYNQ-Z2 board.
 
 # %% [code] Cell 3
+import numpy as np
+import plotly.graph_objects as go
 from pynq_localizer import MicrophoneArrayOverlay, KinematicAnalytics
 
-# Auto-detect board and load overlay
+# Load overlay with default Full-Audio profile (50 kSPS, N=1024)
 ol = MicrophoneArrayOverlay()
-print(f"✅ Overlay loaded: {ol.current_profile} mode ({ol.fs_per_ch:.0f} SPS per channel)")
+
+print(f"✅ Overlay Loaded: {ol.current_profile} profile ({ol.fs_per_ch:.0f} SPS per channel)")
 print(f"   Speed of sound at 20°C: {KinematicAnalytics.speed_of_sound(20.0):.2f} m/s")
+print(f"   Filter State: {ol.filter}")
 
 # %% [markdown] Cell 4
-## 2. Launch the Real-Time 10-Second Rolling Telemetry Dashboard
-# Click **`Start Stream`** and make sound near the microphones (or wave a pure tone generator from a smartphone). Observe:
-# - **Row 1:** Instantaneous physical loudness envelope $A(t)$ in Volts.
-# - **Row 2:** Sub-Hertz dominant pitch scatter points $f_0(t)$ with real-time noise squelching.
-# - **Tabs:** Switch seamlessly between **Mic 1 (A0)**, **Mic 2 (A1)**, and **Dual Overlay**.
+## 2. Launch the Real-Time 10-Second Rolling Kinematics Dashboard
+# Click **`Start Stream`** and make sound near the microphones (or play a pure tone from a smartphone).
+# - **Row 1:** Physical RMS Voltage Loudness Envelope $A(t)$.
+# - **Row 2:** Sub-Hertz Dominant Frequency Trajectory $f_0(t)$ ($20\,\text{Hz} - 20\,\text{kHz}$).
+# - **Tabs:** Toggle between **Mic 1 (A0)**, **Mic 2 (A1)**, and **Dual Overlay**.
 
 # %% [code] Cell 5
-# Launch the multi-tab live instrument
+# Launch the live interactive multi-tab instrument
 app = ol.kinematics_dashboard()
 
 # %% [markdown] Cell 6
 ## 3. Direct Clean Data Handoff in Python
-# Extract the sanitized non-NaN data directly from the dashboard into NumPy arrays for instant analysis.
+# Extract clean, sanitized, non-NaN motion telemetry directly from the dashboard into NumPy arrays for instant physics curve fitting.
 
 # %% [code] Cell 7
 t_clean, amp_clean, freq_clean = app.get_clean_data(channel=1)
-print(f"Captured {len(t_clean)} clean motion points!")
+
+print(f"Captured {len(t_clean)} clean telemetry motion points!")
 if len(freq_clean) > 0:
-    print(f"Frequency span: {freq_clean.min():.1f} Hz -> {freq_clean.max():.1f} Hz (Shift: {freq_clean.max() - freq_clean.min():.1f} Hz)")
+    print(f"Observed Frequency Span: {freq_clean.min():.1f} Hz -> {freq_clean.max():.1f} Hz")
+    print(f"Max Observed Doppler Shift: {freq_clean.max() - freq_clean.min():.1f} Hz")
 
 # %% [markdown] Cell 8
-## 4. Continuous Multi-Second Flight Recording & Audio Playback
-# Record uninterrupted audio to DDR memory and listen to it directly in Jupyter.
+## 4. Hardware Spectral Frequency Filtering & IFFT Reconstruction
+# Configure a hardware bandpass filter around a custom angular frequency range $(\omega_0 \pm \Delta\omega)$ / $(f_0 \pm \Delta f)$ to isolate a specific sound source while rejecting all other interferers in real time.
+# Then capture all 3 hardware streams concurrently via `ol.capture_all()`:
+# 1. `v_raw_a0`, `v_raw_a1`: Raw interleaved time streams
+# 2. `freqs`, `mags`: Frequency-domain magnitude spectrum
+# 3. `v_filtered`: Reconstructed time-domain audio from the hardware IFFT core (`xfft_1`)
 
 # %% [code] Cell 9
+# 1. Configure Hardware Bandpass Filter (e.g. 1000 Hz +- 150 Hz)
+target_f0 = 1000.0
+bandwidth = 150.0
+ol.filter.set_bandpass(center_hz=target_f0, delta_hz=bandwidth)
+print(f"Hardware Filter Configured: {ol.filter}")
+
+# 2. Capture all 3 streams synchronously
+v_raw_a0, v_raw_a1, v_filt, freqs, mags = ol.capture_all()
+
+# 3. Plot Raw vs Filtered Time and Frequency Spectrum
+t_ms = np.linspace(0, (len(v_raw_a0) / ol.fs_per_ch) * 1000.0, len(v_raw_a0))
+
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=t_ms, y=v_raw_a0, mode='lines', name='Raw Mic 1 (A0)', line=dict(color='#FFA500', width=1.2)))
+fig.add_trace(go.Scatter(x=t_ms, y=v_filt, mode='lines', name='Filtered Time (IFFT)', line=dict(color='#00FFCC', width=1.8)))
+fig.update_layout(template='plotly_dark', title='<b>Hardware Spectral Filtering: Raw vs Filtered Time</b>', xaxis_title='Time (ms)', yaxis_title='Voltage (V)', height=400)
+fig.show()
+
+# Reset to bypass after test
+ol.filter.bypass()
+
+# %% [markdown] Cell 10
+## 5. Physical Inverse-Distance Law Verification ($1/r$ and $1/r^2$)
+# Acoustic physical theory dictates that in an open 3D spherical field:
+# - **Acoustic Pressure Voltage:** $V_{\text{RMS}}(r) \propto \frac{1}{r} = r^{-1.0}$
+# - **Acoustic Intensity / Energy:** $I(r) \propto \frac{1}{r^2} = r^{-2.0}$
+# Use `KinematicAnalytics.fit_inverse_distance_law()` to verify this relation experimentally.
+
+# %% [code] Cell 11
+# Example calibration distances in meters and measured RMS voltages
+calibrated_distances = np.array([0.25, 0.50, 0.75, 1.00, 1.50, 2.00])
+# (Replace with your actual physical measurements)
+measured_voltages_rms = 0.85 / calibrated_distances  # Synthetic ideal baseline
+
+fit_results = KinematicAnalytics.fit_inverse_distance_law(calibrated_distances, measured_voltages_rms)
+
+print("===========================================================")
+print("  📊 INVERSE-DISTANCE ACOUSTIC REGRESSION RESULTS")
+print("===========================================================")
+print(f"  • Measured Voltage Exponent (n)  : {fit_results['measured_exponent_n']:.3f} (Ideal = 1.000)")
+print(f"  • Measured Intensity Exponent    : {fit_results['intensity_exponent_2n']:.3f} (Ideal = 2.000)")
+print(f"  • Goodness of Fit (R²)           : {fit_results['r_squared']:.4f}")
+print(f"  • Deviation from Ideal 1/r Law   : {fit_results['error_pct_from_ideal_1_over_r']:.2f}%")
+print("===========================================================")
+
+# %% [markdown] Cell 12
+## 6. Continuous Multi-Second Flight Recording & Audio Playback
+# Record uninterrupted audio to DDR memory and listen to it directly inside Jupyter.
+
+# %% [code] Cell 13
 # Record 3.0 seconds of 50 kSPS dual-channel audio
 t_axis, v_mic1, v_mic2 = ol.record_continuous(duration_sec=3.0)
 
 # Listen to Microphone 1
 ol.play_audio(channel=1, custom_data=v_mic1)
 
-# %% [markdown] Cell 10
-## 5. Hardware Shutdown & Cleanup
+# %% [markdown] Cell 14
+## 7. Clean Shutdown & Hardware Release
 
-# %% [code] Cell 11
+# %% [code] Cell 15
 app.stop()
 ol.close()
 print("🔒 Hardware resources cleanly released.")
