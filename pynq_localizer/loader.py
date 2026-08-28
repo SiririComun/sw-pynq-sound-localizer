@@ -7,8 +7,10 @@ import os
 import json
 import urllib.request
 from pathlib import Path
-from pynq import Overlay
-
+try:
+    from pynq import Overlay
+except ImportError:
+    Overlay = object
 
 class HardwareLoader:
     """

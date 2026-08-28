@@ -4,7 +4,10 @@ Acts as the central Timing & Configuration Controller for Triggering, Decimation
 """
 
 from typing import Union
-from pynq import MMIO
+try:
+    from pynq import MMIO
+except ImportError:
+    MMIO = object
 
 
 class HardwareTrigger:

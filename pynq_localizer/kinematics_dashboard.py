@@ -14,7 +14,10 @@ import numpy as np
 import ipywidgets as widgets
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from pynq import allocate
+try:
+    from pynq import allocate
+except ImportError:
+    allocate = None
 
 from pynq_localizer.kinematics import KinematicAnalytics
 from pynq_localizer.hw_trigger import HardwareTrigger

@@ -5,7 +5,10 @@ Bandpass, Notch) with Hermitian symmetry preservation for IFFT time reconstructi
 """
 
 from typing import Union, Optional, Dict
-from pynq import MMIO
+try:
+    from pynq import MMIO
+except ImportError:
+    MMIO = object
 
 
 class SpectralMaskDriver:

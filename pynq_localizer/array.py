@@ -8,7 +8,11 @@ import time
 from pathlib import Path
 from typing import Union, Optional, Tuple, Dict
 import numpy as np
-from pynq import Overlay, allocate
+try:
+    from pynq import Overlay, allocate
+except ImportError:
+    Overlay = object
+    allocate = None
 
 from pynq_localizer.loader import HardwareLoader
 from pynq_localizer.hw_trigger import HardwareTrigger
