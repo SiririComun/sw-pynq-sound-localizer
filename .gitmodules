@@ -1,0 +1,3 @@
+[submodule "Cog"]
+	path = Cog
+	url = https://github.com/SiririComun/Cog.git

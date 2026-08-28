@@ -1,12 +1,26 @@
-Git Context & Branch Info:
+==============================================================================
+⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
+==============================================================================
+• Repository State    : main @ 61f9c70
+• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.0
+• Package Version     : v1.0.0
+==============================================================================
+
+Git Context & Branch Topology:
 
 ```log
-Current Branch: main
-Branch Tracking Status:
-* main ccfa0f7 [origin/main] feat(dashboard): add moving median DSP filter, 2048-pt STFT resolution, and clean NaN CSV export
+Current Branch: main | Working Tree: Dirty (3 modified/untracked files)
 
-Git Commit Graph & History:
-* ccfa0f7  (HEAD -> main, origin/main) - 2026-08-23 : feat(dashboard): add moving median DSP filter, 2048-pt STFT resolution, and clean NaN CSV export (SiririComun)
+Branch Tracking & Divergence Status:
+* main                61f9c70 [origin/main] docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook
+  remotes/origin/main 61f9c70 docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook
+
+Repository Tags & Release History:
+v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
+
+Multi-Branch Git Commit Graph:
+* 61f9c70  (HEAD -> main, tag: v1.0.0, origin/main) - 2026-08-23 : docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook (SiririComun)
+* ccfa0f7  - 2026-08-23 : feat(dashboard): add moving median DSP filter, 2048-pt STFT resolution, and clean NaN CSV export (SiririComun)
 * 8f98eb7  - 2026-08-23 : feat(dashboard): add 10-second CSV export button and full [f_min, f_max] frequency zoom (SiririComun)
 * 1cd138d  - 2026-08-23 : fix(array): align kinematics_dashboard signature with multi-tab dashboard (SiririComun)
 * 5214663  - 2026-08-23 : fix(dashboard): resolve streaming lag via decoupled multi-threading, add 3-tab UI, and instant stop (SiririComun)
@@ -16,105 +30,255 @@ Git Commit Graph & History:
 * cf73d1d  - 2026-08-23 : feat(hw): implement HardwareLoader and HardwareTrigger driver for v1.5.0 overlay (SiririComun)
 * a290edb  - 2026-08-23 : chore(context): add automated context generator script and initial summary (SiririComun)
 * 04e00e6  - 2026-08-23 : chore(packaging): configure setup.py, requirements, and hardware.json pinning (SiririComun)
-* 364f033  - 2026-08-23 : chore(repo): initialize repository structure and gitignore (SiririComun)```
-
-Files structure: 
-
-```log
-.
-├── context
-│   ├── generate_sw_summary.sh
-│   └── sw_summary.txt
-├── docs
-│   └── images
-│       └── 01_kinematics_telemetry_dual.png
-├── .github
-│   └── workflows
-├── .gitignore
-├── hardware.json
-├── LICENSE
-├── notebooks
-│   └── 01_realtime_kinematics_telemetry.ipynb
-├── pynq_localizer
-│   ├── array.py
-│   ├── hw_trigger.py
-│   ├── __init__.py
-│   ├── kinematics_dashboard.py
-│   ├── kinematics.py
-│   ├── loader.py
-│   └── notebooks.py
-├── README.md
-├── requirements.txt
-└── setup.py
-
-8 directories, 17 files
+* 364f033  - 2026-08-23 : chore(repo): initialize repository structure and gitignore (SiririComun)
 ```
 
-hardware.json:
-
-```json
-{
-    "repo": "SiririComun/hw-xadc-dma-overlays",
-    "version": "v1.5.0"
-}
-```
-
-setup.py:
-
-```python
-import os
-from setuptools import setup, find_packages
-
-long_description = ""
-if os.path.exists("README.md"):
-    with open("README.md", "r", encoding="utf-8") as fh:
-        long_description = fh.read()
-
-setup(
-    name="pynq-sound-localizer",
-    version="1.0.0",
-    author="Juan Pablo Sánchez (SiririComun)",
-    description="FPGA-Accelerated Acoustic Kinematics, Doppler Tracking & Direction-of-Arrival Sound Localizer for PYNQ-Z2",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/SiririComun/sw-pynq-sound-localizer",
-    packages=find_packages(),
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: POSIX :: Linux",
-        "Topic :: Scientific/Engineering :: Physics",
-        "Topic :: Scientific/Engineering :: Atmospheric Science",
-    ],
-    python_requires=">=3.8",
-    install_requires=[
-        "numpy>=1.19.0",
-        "scipy>=1.7.0",
-        "plotly>=5.10.0,<6.0.0",
-        "ipywidgets>=8.0.0",
-    ],
-    package_data={
-        "pynq_localizer": ["../notebooks/*.ipynb", "../hardware.json"],
-    },
-    include_package_data=True,
-    entry_points={
-        "console_scripts": [
-            "pynq-localizer-get-notebooks=pynq_localizer.notebooks:copy_notebooks",
-        ],
-    },
-)
-```
-
-requirements.txt:
+LICENSE: (LICENSE)
 
 ```text
-numpy>=1.19.0
-scipy>=1.7.0
-plotly>=5.10.0,<6.0.0
-ipywidgets>=8.0.0
+MIT License
+
+Copyright (c) 2026 Juan Pablo Sánchez (SiririComun)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
-__init__.py:
+README.md: (README.md)
+
+```markdown
+# Real-Time Acoustic Kinematics, Doppler Tracking & Sound Localizer on PYNQ-Z2
+
+[![PyPI Version](https://img.shields.io/pypi/v/pynq-sound-localizer.svg)](https://pypi.org/project/pynq-sound-localizer/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Hardware Overlay](https://img.shields.io/badge/Hardware-hw--xadc--dma--overlays%20v1.5.0-orange.svg)](https://github.com/SiririComun/hw-xadc-dma-overlays)
+[![Board Support](https://img.shields.io/badge/Board-PYNQ--Z2-green.svg)](https://tul.com.tw/ProductsPYNQ-Z2.html)
+
+A high-performance FPGA-accelerated acoustic processing platform on the **PYNQ-Z2 board (`xc7z020clg400-1`)** providing **true simultaneous dual-ADC parallel sampling ($0.00\,\mu\text{s}$ inter-channel skew)**, **$20\,\text{Hz} - 20\,\text{kHz}$ sub-Hertz fundamental pitch tracking**, **real-time 10-second rolling dual-telemetry curves**, and multi-second continuous flight recording for Doppler kinematics.
+
+---
+
+## 🏛 System Architecture
+
+The package automatically downloads its pre-compiled hardware bitstream (`v1.5.0`) and metadata from GitHub Releases into local cache and encapsulates the dual DMA receivers, XADC parallel sequencer, hardware decimators, and telemetry engines into a clean Python API.
+
+```
+ [ MAX4466 Mic 1 ] ─────────────────────────> [ PYNQ-Z2 Pin A0 (Vaux1) ]
+ [ MAX4466 Mic 2 ] ─────────────────────────> [ PYNQ-Z2 Pin A1 (Vaux9) ]
+                                                            │
+                                             (XADC Dual Continuous Sequencer)
+                                             (1 MSPS Interleaved Stream, 0.00 µs Skew)
+                                                            ▼
+                                                  [ axis_decimator IP ]
+                                                (FPGA Anti-Aliasing M=10)
+                                                            │ (50 kSPS Decimated Audio Stream)
+                                                            ▼
+                                                  [ AXI DMA 0 (Time) ]
+                                                            │
+                                                            ▼ (DDR Memory)
+                                               [ MicrophoneArrayOverlay ]
+                                      ├── .trigger               (HardwareTrigger AXI-Lite)
+                                      ├── .capture_frame()       (0.00 µs Synchronous Snapshot)
+                                      ├── .record_continuous()   (Multi-Second Flight Logger)
+                                      ├── .play_audio()          (Jupyter Audio Playback)
+                                      └── .kinematics_dashboard()(10s Rolling Real-Time GUI)
+```
+
+---
+
+## 🎛 Real-Time 10-Second Rolling Telemetry Dashboard
+
+The flagship **`KinematicsDashboard`** uses a decoupled two-thread architecture ($100\,\text{Hz}$ background DSP worker + $30\,\text{FPS}$ Plotly rendering) to display real-time physical telemetry without browser lag:
+
+* **Row 1 (Amplitude vs. Time):** Instantaneous smoothed RMS acoustic loudness envelope $A(t)$ in physical Volts with an active noise gate threshold.
+* **Row 2 (Frequency vs. Time):** Sub-Hertz fundamental pitch trajectory $f_0(t)$ ($20\,\text{Hz} - 20\,\text{kHz}$) with moving median reflection filtering and noise squelch gating.
+* **3-Tab Synchronized View:** Dedicated **Mic 1 (A0)**, **Mic 2 (A1)**, and **Dual Comparison Overlay**.
+* **Clean CSV Export:** Exports 10-second synchronized data without `NaN` values directly to disk.
+
+![Real-Time Acoustic Kinematics Dashboard](docs/images/01_kinematics_telemetry_dual.png)
+
+---
+
+## 🔌 Hardware Setup & Physical Pin Constraints
+
+Connect two analog electret microphones (such as Adafruit **MAX4466** or MAX9814) to the PYNQ-Z2 Arduino Header **`J1`**:
+
+| Microphone Pin | PYNQ-Z2 Connection | Header Location | Description |
+| :--- | :--- | :--- | :--- |
+| **`VCC`** (Both Mics) | **`3.3V`** | Power Header | Clean analog supply voltage |
+| **`GND`** (Both Mics) | **`GND`** | Power Header | Common system analog ground |
+| **`OUT` (Mic 1)** | **Header `J1` Pin A0** | Pin 6 (Bottom) | Channel 1 Analog Input (`Vaux1`, pins `E17`/`D18`) |
+| **`OUT` (Mic 2)** | **Header `J1` Pin A1** | Pin 5 (2nd from Bottom) | Channel 2 Analog Input (`Vaux9`, pins `E18`/`E19`) |
+
+---
+
+## 🚀 Quick Start & Installation
+
+### 1. Install from PyPI (or GitHub)
+```bash
+pip install --upgrade pynq-sound-localizer
+```
+
+### 2. Copy Example Notebooks to Jupyter Workspace
+```bash
+pynq-localizer-get-notebooks
+```
+
+---
+
+## 💻 Python API Usage
+
+### 1. Launch the Live 10-Second Rolling Dashboard
+```python
+from pynq_localizer import MicrophoneArrayOverlay
+
+# Auto-downloads and loads the pinned v1.5.0 bitstream
+ol = MicrophoneArrayOverlay()
+
+# Launch the live interactive multi-tab instrument
+app = ol.kinematics_dashboard()
+```
+
+### 2. Direct Clean Data Handoff in Jupyter
+```python
+# Extract clean non-NaN telemetry arrays directly from the dashboard
+t_sec, amp_v, freq_hz = app.get_clean_data(channel=1)
+
+print(f"Captured {len(t_sec)} clean motion points!")
+print(f"Observed Doppler frequency span: {freq_hz.min():.1f} Hz -> {freq_hz.max():.1f} Hz")
+```
+
+### 3. Continuous Multi-Second Flight Recording
+```python
+# Record 5.0 seconds of continuous 50 kSPS dual-channel flight data
+t_axis, v_mic1, v_mic2 = ol.record_continuous(duration_sec=5.0)
+
+# Listen to captured audio directly in Jupyter
+ol.play_audio(channel=1)
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```
+
+generate_sw_summary.sh: (context/generate_sw_summary.sh)
+
+```bash
+#!/usr/bin/env bash
+# ==============================================================================
+# Script: context/generate_sw_summary.sh
+# Target: sw-pynq-sound-localizer
+# Purpose: Dump Git history, structure, SW files, and notebook JSON into context/sw_summary.txt
+# ==============================================================================
+
+# Dynamically resolve paths
+CONTEXT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${CONTEXT_DIR}/.." && pwd)"
+OUTPUT_FILE="${CONTEXT_DIR}/sw_summary.txt"
+
+echo "Generating concise SW summary into: ${OUTPUT_FILE}..."
+> "${OUTPUT_FILE}"
+
+cd "${REPO_ROOT}" || exit 1
+
+# 1. Header, Branch Status & Git History
+cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
+Git Context & Branch Info:
+
+```log
+LOG_EOF
+
+if command -v git &> /dev/null && git rev-parse --is-inside-work-tree &> /dev/null; then
+    echo "Current Branch: $(git branch --show-current)" >> "${OUTPUT_FILE}"
+    echo "Branch Tracking Status:" >> "${OUTPUT_FILE}"
+    git branch -vv >> "${OUTPUT_FILE}"
+    echo "" >> "${OUTPUT_FILE}"
+    echo "Git Commit Graph & History:" >> "${OUTPUT_FILE}"
+    git log --graph --pretty=format:"%h %d - %cd : %s (%an)" --date=short -n 15 >> "${OUTPUT_FILE}"
+fi
+
+cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
+```
+
+Files structure:
+
+```log
+LOG_EOF
+
+# 2. Directory Tree
+if command -v tree &> /dev/null; then
+    tree -a -I '.git|__pycache__|*.egg-info|.pytest_cache|venv|env|dist|build|.ipynb_checkpoints' >> "${OUTPUT_FILE}"
+fi
+
+cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
+```
+
+LOG_EOF
+
+# 3. Exact list of targeted files and their markdown syntax
+TARGET_FILES=(
+    ".github/workflows/pypi.yml:yaml"
+    "hardware.json:json"
+    "setup.py:python"
+    "requirements.txt:text"
+    "pynq_localizer/__init__.py:python"
+    "pynq_localizer/loader.py:python"
+    "pynq_localizer/hw_trigger.py:python"
+    "pynq_localizer/array.py:python"
+    "pynq_localizer/kinematics.py:python"
+    "pynq_localizer/kinematics_dashboard.py:python"
+    "pynq_localizer/doa.py:python"
+    "pynq_localizer/radar_dashboard.py:python"
+    "pynq_localizer/notebooks.py:python"
+    "notebooks/01_zero_skew_verification.ipynb:json"
+    "notebooks/02_realtime_kinematics_telemetry.ipynb:json"
+    "notebooks/03_doppler_velocity_tracking.ipynb:json"
+    "notebooks/04_acoustic_free_fall_gravity.ipynb:json"
+    "notebooks/05_doa_polar_radar.ipynb:json"
+    "context/generate_sw_summary.sh:bash"
+)
+
+# 4. Append each file
+for item in "${TARGET_FILES[@]}"; do
+    filepath="${item%%:*}"
+    syntax="${item##*:}"
+    filename=$(basename "$filepath")
+
+    if [ -f "$filepath" ]; then
+        echo "Adding: ${filepath}"
+        {
+            echo "${filename}:"
+            echo ""
+            echo "\`\`\`${syntax}"
+            cat "${filepath}"
+            echo "\`\`\`"
+            echo ""
+        } >> "${OUTPUT_FILE}"
+    fi
+done
+
+echo "Done! SW context generated in: ${OUTPUT_FILE}"
+```
+
+__init__.py: (pynq_localizer/__init__.py)
 
 ```python
 """
@@ -136,122 +300,308 @@ __all__ = [
     "KinematicAnalytics",
     "KinematicsDashboard",
     "copy_notebooks",
-]```
+]
+```
 
-loader.py:
+array.py: (pynq_localizer/array.py)
 
 ```python
 """
-pynq_localizer.loader: Smart Hardware Overlay Downloader & Binary Manager.
-Pulls target bitstream and handoff metadata from GitHub Releases based on hardware.json.
+pynq_localizer.array: Core Dual-Microphone Hardware Interface & Continuous Flight Streaming Engine.
+Features zero-skew simultaneous sampling (A0 & A1), hardware anti-aliasing decimation,
+snapshot capture, and multi-second continuous flight recording.
 """
 
-import os
-import json
-import urllib.request
+import time
 from pathlib import Path
-from pynq import Overlay
+from typing import Union, Optional, Tuple, Dict
+import numpy as np
+from pynq import Overlay, allocate
 
+from pynq_localizer.loader import HardwareLoader
+from pynq_localizer.hw_trigger import HardwareTrigger
 
-class HardwareLoader:
+class MicrophoneArrayOverlay(Overlay):
     """
-    Smart Overlay Loader that detects the target board and pulls matching
-    .bit and .hwh release binaries from GitHub Releases API based on hardware.json.
+    Core Hardware Overlay Driver for Dual-Microphone Acoustic Kinematics & Sound Localization on PYNQ-Z2.
     """
 
-    @staticmethod
-    def get_project_root() -> Path:
-        """Find the root directory of the package where hardware.json lives."""
-        return Path(__file__).resolve().parent.parent
+    PROFILES = {
+        "audio":        {"m": 10, "desc": "Full Audio Band (50 kSPS per ch, 0 - 25 kHz span)"},
+        "speech":       {"m": 20, "desc": "Speech / Acoustic (25 kSPS per ch, 0 - 12.5 kHz span)"},
+        "bass_zoom":    {"m": 50, "desc": "Deep Bass Zoom (10 kSPS per ch, 0 - 5 kHz span)"},
+        "oscilloscope": {"m": 1,  "desc": "Wideband Ultrasonic Scope (500 kSPS per ch, 0 - 250 kHz span)"},
+    }
 
-    @classmethod
-    def get_hardware_config(cls) -> dict:
-        """Load hardware pinning configuration from hardware.json."""
-        config_path = cls.get_project_root() / "hardware.json"
-        if not config_path.exists():
-            return {
-                "repo": "SiririComun/hw-xadc-dma-overlays",
-                "version": "v1.5.0"
-            }
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    @staticmethod
-    def get_board_name() -> str:
+    def __init__(
+        self,
+        bitfile_name: Optional[Union[str, Path]] = None,
+        version: Optional[str] = None,
+        default_packet_size: int = 2048,
+        **kwargs
+    ):
         """
-        Detect active board running PYNQ across all PYNQ OS versions.
-        Normalizes 'PYNQ-Z2' -> 'pynq_z2', 'ZedBoard' -> 'zedboard', etc.
+        Initializes the dual-microphone hardware overlay.
+        Auto-fetches the pinned v1.5.0 bitstream if bitfile_name is None.
         """
-        board_env = os.environ.get("BOARD")
-        if board_env:
-            return board_env.lower().replace("-", "_")
-
-        try:
-            if os.path.exists("/etc/board.name"):
-                with open("/etc/board.name", "r", encoding="utf-8") as f:
-                    return f.read().strip().lower().replace("-", "_")
-        except Exception:
-            pass
-
-        try:
-            from pynq import Device
-            if Device.active_device and Device.active_device.name:
-                return Device.active_device.name.lower().replace("-", "_")
-        except Exception:
-            pass
-
-        return "pynq_z2"
-
-    @classmethod
-    def get_overlay_path(cls, version: str = None, download_dir: str = None) -> Path:
-        """
-        Detects host board, downloads matching .bit and .hwh if missing,
-        and returns the local Path to the .bit file.
-        """
-        config = cls.get_hardware_config()
-        repo = config.get("repo", "SiririComun/hw-xadc-dma-overlays")
-        target_version = version or config.get("version", "v1.5.0")
-
-        board_name = cls.get_board_name()
-        bit_filename = f"{board_name}.bit"
-        hwh_filename = f"{board_name}.hwh"
-
-        if download_dir is None:
-            download_dir = Path.home() / ".cache" / "pynq_sound_localizer" / target_version
+        if bitfile_name is None:
+            resolved_bit = str(HardwareLoader.get_overlay_path(version=version))
         else:
-            download_dir = Path(download_dir)
+            resolved_bit = str(Path(bitfile_name).resolve())
 
-        download_dir.mkdir(parents=True, exist_ok=True)
+        super().__init__(resolved_bit, **kwargs)
 
-        local_bit = download_dir / bit_filename
-        local_hwh = download_dir / hwh_filename
+        self.packet_size = default_packet_size
+        self.current_profile = "audio"
+        self.fs_per_ch = 50_000.0  # Default 50 kSPS (M=10)
 
-        base_url = f"https://github.com/{repo}/releases/download/{target_version}/"
-        url_bit = f"{base_url}{bit_filename}"
-        url_hwh = f"{base_url}{hwh_filename}"
+        # Persistent CMA buffer pool for fast snapshot capture
+        self._buf_time = allocate(shape=(self.packet_size,), dtype="u2")
 
-        if not local_bit.exists() or not local_hwh.exists():
-            print(f"[HardwareLoader] Target board: '{board_name}'")
-            print(f"[HardwareLoader] Fetching overlay '{target_version}' from {repo}...")
+        # Hardware Trigger & Decimation Controller
+        self.trigger = HardwareTrigger(self)
+
+        # Apply default Full-Audio profile (M=10, 50 kSPS per channel)
+        self.set_profile("audio")
+
+    # =========================================================================
+    # 1. Operating Profile Configuration
+    # =========================================================================
+
+    def set_profile(self, mode: str = "audio", packet_size: Optional[int] = None) -> Dict:
+        """
+        Dynamically configures FPGA Decimator (M) and sampling rate.
+        :param mode: 'audio' (50 kSPS), 'speech' (25 kSPS), 'bass_zoom' (10 kSPS), or 'oscilloscope' (500 kSPS).
+        :param packet_size: Optional manual override for snapshot packet size (e.g. 1024, 2048, 4096).
+        """
+        mode_clean = mode.lower().strip()
+        base_cfg = self.PROFILES.get(mode_clean, self.PROFILES["audio"])
+        m_val = base_cfg["m"]
+        pkt_val = packet_size if packet_size is not None else self.packet_size
+
+        # 1. Update Hardware Trigger Registers
+        self.trigger.set_decimation(m_val)
+        self.trigger.set_packet_size(pkt_val)
+
+        # 2. Re-allocate snapshot buffer if packet size changed
+        if self._buf_time is None or len(self._buf_time) != pkt_val:
+            if self._buf_time is not None:
+                try:
+                    self._buf_time.close()
+                except Exception:
+                    pass
+            self._buf_time = allocate(shape=(pkt_val,), dtype="u2")
+
+        # 3. Update driver state
+        self.current_profile = mode_clean
+        self.packet_size = pkt_val
+        self.fs_per_ch = 500_000.0 / float(m_val)
+
+        info = {
+            "mode": mode_clean,
+            "decimation_M": m_val,
+            "sample_rate_hz": self.fs_per_ch,
+            "time_window_ms": ((pkt_val // 2) / self.fs_per_ch) * 1000.0,
+            "nyquist_bandwidth_hz": self.fs_per_ch / 2.0,
+        }
+        return info
+
+    def _init_xadc_simultaneous(self):
+        """Initializes XADC into simultaneous dual-channel parallel sequencer mode (0.00 µs skew)."""
+        if hasattr(self, "xadc_wiz_0"):
+            self.xadc_wiz_0.mmio.write(0x304, 0x2000)  # DRP 0x41: Continuous Sequence Mode
+            self.xadc_wiz_0.mmio.write(0x320, 0x0000)  # DRP 0x48: Disable internal temp/vcc channels
+            self.xadc_wiz_0.mmio.write(0x324, 0x0202)  # DRP 0x49: Enable Vaux1 (A0) & Vaux9 (A1)
+
+    # =========================================================================
+    # 2. Synchronous Snapshot Capture
+    # =========================================================================
+
+    def capture_frame(
+        self,
+        crop_startup_samples: int = 8,
+        timeout: float = 2.0
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Captures a single synchronous dual-channel audio frame from A0 (Mic 1) and A1 (Mic 2).
+        :return: (voltages_mic1_a0, voltages_mic2_a1) arrays of length packet_size / 2.
+        """
+        self._init_xadc_simultaneous()
+
+        # Reset DMA channel
+        self.axi_dma_0.mmio.write(0x30, 0x04)
+        time.sleep(0.002)
+        self.axi_dma_0.recvchannel.start()
+
+        # Arm DMA transfer
+        self.axi_dma_0.recvchannel.transfer(self._buf_time)
+        self.trigger.arm()
+
+        # Poll with timeout
+        start = time.time()
+        while time.time() - start < timeout:
+            if self.axi_dma_0.recvchannel.idle:
+                raw_samples = np.array(self._buf_time)
+
+                # De-interleave: Even = Mic 1 (A0 / Vaux1), Odd = Mic 2 (A1 / Vaux9)
+                raw_a0 = raw_samples[0::2]
+                raw_a1 = raw_samples[1::2]
+
+                # Convert 12-bit left-aligned raw words to physical Volts (0.0 - 3.3V)
+                v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
+                v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
+
+                # Crop boundary pipeline startup words
+                if crop_startup_samples > 0 and len(v_a0) > (2 * crop_startup_samples):
+                    v_a0 = v_a0[crop_startup_samples:-crop_startup_samples]
+                    v_a1 = v_a1[crop_startup_samples:-crop_startup_samples]
+
+                return v_a0, v_a1
+            time.sleep(0.002)
+
+        raise TimeoutError(f"Snapshot capture timed out after {timeout} seconds. Check trigger threshold.")
+
+    # =========================================================================
+    # 3. Continuous Multi-Second Flight Recorder
+    # =========================================================================
+
+    def record_continuous(
+        self,
+        duration_sec: float = 3.0,
+        chunk_size: int = 4096
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Continuously streams and records uninterrupted multi-second flight data from both microphones.
+        Ideal for Doppler moving vehicle tracking and free-fall gravitational acceleration measurement.
+
+        :param duration_sec: Total duration to record in seconds (e.g. 3.0, 5.0, 10.0).
+        :param chunk_size: Size of individual DMA streaming packets (default: 4096).
+        :return: (time_axis_sec, v_mic1_a0, v_mic2_a1) arrays.
+        """
+        self._init_xadc_simultaneous()
+        self.trigger.set_packet_size(chunk_size)
+        self.trigger.set_mode("Auto")
+
+        total_samples_per_ch = int(float(duration_sec) * self.fs_per_ch)
+        total_interleaved_samples = total_samples_per_ch * 2
+        num_chunks = int(np.ceil(total_interleaved_samples / chunk_size))
+
+        # Pre-allocate output arrays in system memory
+        raw_interleaved = np.empty(num_chunks * chunk_size, dtype=np.uint16)
+        chunk_buf = allocate(shape=(chunk_size,), dtype="u2")
+
+        # Reset DMA
+        self.axi_dma_0.mmio.write(0x30, 0x04)
+        time.sleep(0.002)
+        self.axi_dma_0.recvchannel.start()
+
+        print(f"[FlightRecorder] Recording {duration_sec:.2f}s ({self.fs_per_ch:.0f} SPS dual stream, {num_chunks} DMA blocks)...")
+
+        try:
+            write_ptr = 0
+            self.trigger.arm()
+
+            for _ in range(num_chunks):
+                self.axi_dma_0.recvchannel.transfer(chunk_buf)
+                self.trigger.arm()
+
+                # Wait for DMA chunk completion
+                t0 = time.time()
+                while not self.axi_dma_0.recvchannel.idle:
+                    if time.time() - t0 > 2.0:
+                        raise TimeoutError("Continuous DMA streaming timed out. Hardware stalled.")
+                    time.sleep(0.001)
+
+                raw_interleaved[write_ptr : write_ptr + chunk_size] = np.array(chunk_buf)
+                write_ptr += chunk_size
+
+            # Trim to exact requested length
+            valid_samples = raw_interleaved[:total_interleaved_samples]
+            raw_a0 = valid_samples[0::2]
+            raw_a1 = valid_samples[1::2]
+
+            v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
+            v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
+
+            t_axis = np.linspace(0, duration_sec, len(v_a0), endpoint=False)
+            print(f"[FlightRecorder] Captured {len(v_a0)} stereo samples successfully with 0.00 µs skew.")
+            return t_axis, v_a0, v_a1
+
+        finally:
+            chunk_buf.close()
+            # Restore default snapshot packet size
+            self.trigger.set_packet_size(self.packet_size)
+
+    # =========================================================================
+    # 4. Jupyter Audio Playback
+    # =========================================================================
+
+    def play_audio(self, channel: int = 1, custom_data: Optional[np.ndarray] = None):
+        """
+        Plays captured microphone audio directly in Jupyter Notebook.
+        :param channel: 1 for Mic 1 (A0), 2 for Mic 2 (A1).
+        :param custom_data: Optional custom 1D numpy array of audio samples to play.
+        """
+        try:
+            from IPython.display import Audio, display
+        except ImportError:
+            raise RuntimeError("IPython is required for audio playback.")
+
+        if custom_data is not None:
+            audio_samples = custom_data
+        else:
+            v_a0, v_a1 = self.capture_frame()
+            audio_samples = v_a0 if channel == 1 else v_a1
+
+        ac_signal = audio_samples - np.mean(audio_samples)
+        max_val = np.max(np.abs(ac_signal))
+        normalized = (ac_signal / max_val) if max_val > 1e-4 else ac_signal
+        display(Audio(normalized, rate=int(self.fs_per_ch)))
+
+    def kinematics_dashboard(
+        self,
+        window_duration_sec: float = 10.0,
+        hop_ms: float = 10.0
+    ):
+        """
+        Launches the real-time 10-second rolling Multi-Tab Kinematics Dashboard (A(t) & f0(t)).
+        :param window_duration_sec: Rolling time window in seconds (default: 10.0s).
+        :param hop_ms: Telemetry extraction rate in milliseconds (default: 10.0 ms).
+        """
+        from pynq_localizer.kinematics_dashboard import KinematicsDashboard
+        dash = KinematicsDashboard(
+            overlay=self,
+            window_duration_sec=window_duration_sec,
+            hop_ms=hop_ms,
+            fs_per_ch=self.fs_per_ch
+        )
+        dash.display()
+        return dash
+
+    # =========================================================================
+    # Cleanup & Context Management
+    # =========================================================================
+
+    def close(self):
+        """Frees all CMA buffers and cleans hardware state."""
+        if hasattr(self, "_buf_time") and self._buf_time is not None:
             try:
-                urllib.request.urlretrieve(url_bit, local_bit)
-                urllib.request.urlretrieve(url_hwh, local_hwh)
-                print("[HardwareLoader] Bitstream and handoff metadata downloaded.")
-            except Exception as e:
-                raise RuntimeError(
-                    f"Could not download {bit_filename} from {base_url}. Check internet connection."
-                ) from e
+                self._buf_time.close()
+                self._buf_time = None
+            except Exception:
+                pass
 
-        return local_bit
+    def __del__(self):
+        self.close()
 
-    @classmethod
-    def load_overlay(cls, version: str = None, download_dir: str = None) -> Overlay:
-        """Helper to load Overlay directly."""
-        bit_path = cls.get_overlay_path(version, download_dir)
-        print(f"[HardwareLoader] Loading overlay: {bit_path}")
-        return Overlay(str(bit_path))```
+    def __enter__(self):
+        return self
 
-hw_trigger.py:
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+```
+
+hw_trigger.py: (pynq_localizer/hw_trigger.py)
 
 ```python
 """
@@ -261,7 +611,6 @@ Acts as the central Timing & Configuration Controller for Triggering, Decimation
 
 from typing import Union
 from pynq import MMIO
-
 
 class HardwareTrigger:
     """
@@ -517,307 +866,10 @@ class HardwareTrigger:
         m = self.get_decimation()
         n = self.get_fft_length()
         pkt = self.get_packet_size()
-        return f"<HardwareTrigger: {armed}, TrigSrc={src}, FFTSrc={fft_src}, Mode={mode}, Edge={edge}, M={m}x, N={n}, Pkt={pkt}>"```
+        return f"<HardwareTrigger: {armed}, TrigSrc={src}, FFTSrc={fft_src}, Mode={mode}, Edge={edge}, M={m}x, N={n}, Pkt={pkt}>"
+```
 
-array.py:
-
-```python
-"""
-pynq_localizer.array: Core Dual-Microphone Hardware Interface & Continuous Flight Streaming Engine.
-Features zero-skew simultaneous sampling (A0 & A1), hardware anti-aliasing decimation,
-snapshot capture, and multi-second continuous flight recording.
-"""
-
-import time
-from pathlib import Path
-from typing import Union, Optional, Tuple, Dict
-import numpy as np
-from pynq import Overlay, allocate
-
-from pynq_localizer.loader import HardwareLoader
-from pynq_localizer.hw_trigger import HardwareTrigger
-
-
-class MicrophoneArrayOverlay(Overlay):
-    """
-    Core Hardware Overlay Driver for Dual-Microphone Acoustic Kinematics & Sound Localization on PYNQ-Z2.
-    """
-
-    PROFILES = {
-        "audio":        {"m": 10, "desc": "Full Audio Band (50 kSPS per ch, 0 - 25 kHz span)"},
-        "speech":       {"m": 20, "desc": "Speech / Acoustic (25 kSPS per ch, 0 - 12.5 kHz span)"},
-        "bass_zoom":    {"m": 50, "desc": "Deep Bass Zoom (10 kSPS per ch, 0 - 5 kHz span)"},
-        "oscilloscope": {"m": 1,  "desc": "Wideband Ultrasonic Scope (500 kSPS per ch, 0 - 250 kHz span)"},
-    }
-
-    def __init__(
-        self,
-        bitfile_name: Optional[Union[str, Path]] = None,
-        version: Optional[str] = None,
-        default_packet_size: int = 2048,
-        **kwargs
-    ):
-        """
-        Initializes the dual-microphone hardware overlay.
-        Auto-fetches the pinned v1.5.0 bitstream if bitfile_name is None.
-        """
-        if bitfile_name is None:
-            resolved_bit = str(HardwareLoader.get_overlay_path(version=version))
-        else:
-            resolved_bit = str(Path(bitfile_name).resolve())
-
-        super().__init__(resolved_bit, **kwargs)
-
-        self.packet_size = default_packet_size
-        self.current_profile = "audio"
-        self.fs_per_ch = 50_000.0  # Default 50 kSPS (M=10)
-
-        # Persistent CMA buffer pool for fast snapshot capture
-        self._buf_time = allocate(shape=(self.packet_size,), dtype="u2")
-
-        # Hardware Trigger & Decimation Controller
-        self.trigger = HardwareTrigger(self)
-
-        # Apply default Full-Audio profile (M=10, 50 kSPS per channel)
-        self.set_profile("audio")
-
-    # =========================================================================
-    # 1. Operating Profile Configuration
-    # =========================================================================
-
-    def set_profile(self, mode: str = "audio", packet_size: Optional[int] = None) -> Dict:
-        """
-        Dynamically configures FPGA Decimator (M) and sampling rate.
-        :param mode: 'audio' (50 kSPS), 'speech' (25 kSPS), 'bass_zoom' (10 kSPS), or 'oscilloscope' (500 kSPS).
-        :param packet_size: Optional manual override for snapshot packet size (e.g. 1024, 2048, 4096).
-        """
-        mode_clean = mode.lower().strip()
-        base_cfg = self.PROFILES.get(mode_clean, self.PROFILES["audio"])
-        m_val = base_cfg["m"]
-        pkt_val = packet_size if packet_size is not None else self.packet_size
-
-        # 1. Update Hardware Trigger Registers
-        self.trigger.set_decimation(m_val)
-        self.trigger.set_packet_size(pkt_val)
-
-        # 2. Re-allocate snapshot buffer if packet size changed
-        if self._buf_time is None or len(self._buf_time) != pkt_val:
-            if self._buf_time is not None:
-                try:
-                    self._buf_time.close()
-                except Exception:
-                    pass
-            self._buf_time = allocate(shape=(pkt_val,), dtype="u2")
-
-        # 3. Update driver state
-        self.current_profile = mode_clean
-        self.packet_size = pkt_val
-        self.fs_per_ch = 500_000.0 / float(m_val)
-
-        info = {
-            "mode": mode_clean,
-            "decimation_M": m_val,
-            "sample_rate_hz": self.fs_per_ch,
-            "time_window_ms": ((pkt_val // 2) / self.fs_per_ch) * 1000.0,
-            "nyquist_bandwidth_hz": self.fs_per_ch / 2.0,
-        }
-        return info
-
-    def _init_xadc_simultaneous(self):
-        """Initializes XADC into simultaneous dual-channel parallel sequencer mode (0.00 µs skew)."""
-        if hasattr(self, "xadc_wiz_0"):
-            self.xadc_wiz_0.mmio.write(0x304, 0x2000)  # DRP 0x41: Continuous Sequence Mode
-            self.xadc_wiz_0.mmio.write(0x320, 0x0000)  # DRP 0x48: Disable internal temp/vcc channels
-            self.xadc_wiz_0.mmio.write(0x324, 0x0202)  # DRP 0x49: Enable Vaux1 (A0) & Vaux9 (A1)
-
-    # =========================================================================
-    # 2. Synchronous Snapshot Capture
-    # =========================================================================
-
-    def capture_frame(
-        self,
-        crop_startup_samples: int = 8,
-        timeout: float = 2.0
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Captures a single synchronous dual-channel audio frame from A0 (Mic 1) and A1 (Mic 2).
-        :return: (voltages_mic1_a0, voltages_mic2_a1) arrays of length packet_size / 2.
-        """
-        self._init_xadc_simultaneous()
-
-        # Reset DMA channel
-        self.axi_dma_0.mmio.write(0x30, 0x04)
-        time.sleep(0.002)
-        self.axi_dma_0.recvchannel.start()
-
-        # Arm DMA transfer
-        self.axi_dma_0.recvchannel.transfer(self._buf_time)
-        self.trigger.arm()
-
-        # Poll with timeout
-        start = time.time()
-        while time.time() - start < timeout:
-            if self.axi_dma_0.recvchannel.idle:
-                raw_samples = np.array(self._buf_time)
-
-                # De-interleave: Even = Mic 1 (A0 / Vaux1), Odd = Mic 2 (A1 / Vaux9)
-                raw_a0 = raw_samples[0::2]
-                raw_a1 = raw_samples[1::2]
-
-                # Convert 12-bit left-aligned raw words to physical Volts (0.0 - 3.3V)
-                v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
-                v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
-
-                # Crop boundary pipeline startup words
-                if crop_startup_samples > 0 and len(v_a0) > (2 * crop_startup_samples):
-                    v_a0 = v_a0[crop_startup_samples:-crop_startup_samples]
-                    v_a1 = v_a1[crop_startup_samples:-crop_startup_samples]
-
-                return v_a0, v_a1
-            time.sleep(0.002)
-
-        raise TimeoutError(f"Snapshot capture timed out after {timeout} seconds. Check trigger threshold.")
-
-    # =========================================================================
-    # 3. Continuous Multi-Second Flight Recorder
-    # =========================================================================
-
-    def record_continuous(
-        self,
-        duration_sec: float = 3.0,
-        chunk_size: int = 4096
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Continuously streams and records uninterrupted multi-second flight data from both microphones.
-        Ideal for Doppler moving vehicle tracking and free-fall gravitational acceleration measurement.
-
-        :param duration_sec: Total duration to record in seconds (e.g. 3.0, 5.0, 10.0).
-        :param chunk_size: Size of individual DMA streaming packets (default: 4096).
-        :return: (time_axis_sec, v_mic1_a0, v_mic2_a1) arrays.
-        """
-        self._init_xadc_simultaneous()
-        self.trigger.set_packet_size(chunk_size)
-        self.trigger.set_mode("Auto")
-
-        total_samples_per_ch = int(float(duration_sec) * self.fs_per_ch)
-        total_interleaved_samples = total_samples_per_ch * 2
-        num_chunks = int(np.ceil(total_interleaved_samples / chunk_size))
-
-        # Pre-allocate output arrays in system memory
-        raw_interleaved = np.empty(num_chunks * chunk_size, dtype=np.uint16)
-        chunk_buf = allocate(shape=(chunk_size,), dtype="u2")
-
-        # Reset DMA
-        self.axi_dma_0.mmio.write(0x30, 0x04)
-        time.sleep(0.002)
-        self.axi_dma_0.recvchannel.start()
-
-        print(f"[FlightRecorder] Recording {duration_sec:.2f}s ({self.fs_per_ch:.0f} SPS dual stream, {num_chunks} DMA blocks)...")
-
-        try:
-            write_ptr = 0
-            self.trigger.arm()
-
-            for _ in range(num_chunks):
-                self.axi_dma_0.recvchannel.transfer(chunk_buf)
-                self.trigger.arm()
-
-                # Wait for DMA chunk completion
-                t0 = time.time()
-                while not self.axi_dma_0.recvchannel.idle:
-                    if time.time() - t0 > 2.0:
-                        raise TimeoutError("Continuous DMA streaming timed out. Hardware stalled.")
-                    time.sleep(0.001)
-
-                raw_interleaved[write_ptr : write_ptr + chunk_size] = np.array(chunk_buf)
-                write_ptr += chunk_size
-
-            # Trim to exact requested length
-            valid_samples = raw_interleaved[:total_interleaved_samples]
-            raw_a0 = valid_samples[0::2]
-            raw_a1 = valid_samples[1::2]
-
-            v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
-            v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
-
-            t_axis = np.linspace(0, duration_sec, len(v_a0), endpoint=False)
-            print(f"[FlightRecorder] Captured {len(v_a0)} stereo samples successfully with 0.00 µs skew.")
-            return t_axis, v_a0, v_a1
-
-        finally:
-            chunk_buf.close()
-            # Restore default snapshot packet size
-            self.trigger.set_packet_size(self.packet_size)
-
-    # =========================================================================
-    # 4. Jupyter Audio Playback
-    # =========================================================================
-
-    def play_audio(self, channel: int = 1, custom_data: Optional[np.ndarray] = None):
-        """
-        Plays captured microphone audio directly in Jupyter Notebook.
-        :param channel: 1 for Mic 1 (A0), 2 for Mic 2 (A1).
-        :param custom_data: Optional custom 1D numpy array of audio samples to play.
-        """
-        try:
-            from IPython.display import Audio, display
-        except ImportError:
-            raise RuntimeError("IPython is required for audio playback.")
-
-        if custom_data is not None:
-            audio_samples = custom_data
-        else:
-            v_a0, v_a1 = self.capture_frame()
-            audio_samples = v_a0 if channel == 1 else v_a1
-
-        ac_signal = audio_samples - np.mean(audio_samples)
-        max_val = np.max(np.abs(ac_signal))
-        normalized = (ac_signal / max_val) if max_val > 1e-4 else ac_signal
-        display(Audio(normalized, rate=int(self.fs_per_ch)))
-    
-    def kinematics_dashboard(
-        self,
-        window_duration_sec: float = 10.0,
-        hop_ms: float = 10.0
-    ):
-        """
-        Launches the real-time 10-second rolling Multi-Tab Kinematics Dashboard (A(t) & f0(t)).
-        :param window_duration_sec: Rolling time window in seconds (default: 10.0s).
-        :param hop_ms: Telemetry extraction rate in milliseconds (default: 10.0 ms).
-        """
-        from pynq_localizer.kinematics_dashboard import KinematicsDashboard
-        dash = KinematicsDashboard(
-            overlay=self,
-            window_duration_sec=window_duration_sec,
-            hop_ms=hop_ms,
-            fs_per_ch=self.fs_per_ch
-        )
-        dash.display()
-        return dash
-
-    # =========================================================================
-    # Cleanup & Context Management
-    # =========================================================================
-
-    def close(self):
-        """Frees all CMA buffers and cleans hardware state."""
-        if hasattr(self, "_buf_time") and self._buf_time is not None:
-            try:
-                self._buf_time.close()
-                self._buf_time = None
-            except Exception:
-                pass
-
-    def __del__(self):
-        self.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()```
-
-kinematics.py:
+kinematics.py: (pynq_localizer/kinematics.py)
 
 ```python
 """
@@ -828,7 +880,6 @@ sliding STFT frequency trajectories, temperature-compensated sound speed, Dopple
 
 from typing import Tuple, Optional, Union, Dict
 import numpy as np
-
 
 class KinematicAnalytics:
     """
@@ -1130,9 +1181,10 @@ class KinematicAnalytics:
                 )
                 freq_traj[i] = f0
 
-        return times_sec, amp_traj, freq_traj```
+        return times_sec, amp_traj, freq_traj
+```
 
-kinematics_dashboard.py:
+kinematics_dashboard.py: (pynq_localizer/kinematics_dashboard.py)
 
 ```python
 """
@@ -1155,7 +1207,6 @@ from pynq import allocate
 
 from pynq_localizer.kinematics import KinematicAnalytics
 from pynq_localizer.hw_trigger import HardwareTrigger
-
 
 class KinematicsDashboard:
     """
@@ -1615,15 +1666,128 @@ class KinematicsDashboard:
         r1 = widgets.HBox([self.start_btn, self.stop_btn, self.clear_btn, self.export_btn, self.clean_csv_chk, self.readout_metrics], layout=widgets.Layout(gap="10px", margin="0 0 8px 0"))
         r2 = widgets.HBox([self.squelch_slider, self.smooth_dd, self.f_min_input, self.f_max_input])
         control_panel = widgets.VBox([r1, r2], layout=widgets.Layout(margin="0 0 10px 0"))
-        display(widgets.VBox([control_panel, self.tabs]))```
+        display(widgets.VBox([control_panel, self.tabs]))
+```
 
-notebooks.py:
+loader.py: (pynq_localizer/loader.py)
+
+```python
+"""
+pynq_localizer.loader: Smart Hardware Overlay Downloader & Binary Manager.
+Pulls target bitstream and handoff metadata from GitHub Releases based on hardware.json.
+"""
+
+import os
+import json
+import urllib.request
+from pathlib import Path
+from pynq import Overlay
+
+class HardwareLoader:
+    """
+    Smart Overlay Loader that detects the target board and pulls matching
+    .bit and .hwh release binaries from GitHub Releases API based on hardware.json.
+    """
+
+    @staticmethod
+    def get_project_root() -> Path:
+        """Find the root directory of the package where hardware.json lives."""
+        return Path(__file__).resolve().parent.parent
+
+    @classmethod
+    def get_hardware_config(cls) -> dict:
+        """Load hardware pinning configuration from hardware.json."""
+        config_path = cls.get_project_root() / "hardware.json"
+        if not config_path.exists():
+            return {
+                "repo": "SiririComun/hw-xadc-dma-overlays",
+                "version": "v1.5.0"
+            }
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    @staticmethod
+    def get_board_name() -> str:
+        """
+        Detect active board running PYNQ across all PYNQ OS versions.
+        Normalizes 'PYNQ-Z2' -> 'pynq_z2', 'ZedBoard' -> 'zedboard', etc.
+        """
+        board_env = os.environ.get("BOARD")
+        if board_env:
+            return board_env.lower().replace("-", "_")
+
+        try:
+            if os.path.exists("/etc/board.name"):
+                with open("/etc/board.name", "r", encoding="utf-8") as f:
+                    return f.read().strip().lower().replace("-", "_")
+        except Exception:
+            pass
+
+        try:
+            from pynq import Device
+            if Device.active_device and Device.active_device.name:
+                return Device.active_device.name.lower().replace("-", "_")
+        except Exception:
+            pass
+
+        return "pynq_z2"
+
+    @classmethod
+    def get_overlay_path(cls, version: str = None, download_dir: str = None) -> Path:
+        """
+        Detects host board, downloads matching .bit and .hwh if missing,
+        and returns the local Path to the .bit file.
+        """
+        config = cls.get_hardware_config()
+        repo = config.get("repo", "SiririComun/hw-xadc-dma-overlays")
+        target_version = version or config.get("version", "v1.5.0")
+
+        board_name = cls.get_board_name()
+        bit_filename = f"{board_name}.bit"
+        hwh_filename = f"{board_name}.hwh"
+
+        if download_dir is None:
+            download_dir = Path.home() / ".cache" / "pynq_sound_localizer" / target_version
+        else:
+            download_dir = Path(download_dir)
+
+        download_dir.mkdir(parents=True, exist_ok=True)
+
+        local_bit = download_dir / bit_filename
+        local_hwh = download_dir / hwh_filename
+
+        base_url = f"https://github.com/{repo}/releases/download/{target_version}/"
+        url_bit = f"{base_url}{bit_filename}"
+        url_hwh = f"{base_url}{hwh_filename}"
+
+        if not local_bit.exists() or not local_hwh.exists():
+            print(f"[HardwareLoader] Target board: '{board_name}'")
+            print(f"[HardwareLoader] Fetching overlay '{target_version}' from {repo}...")
+            try:
+                urllib.request.urlretrieve(url_bit, local_bit)
+                urllib.request.urlretrieve(url_hwh, local_hwh)
+                print("[HardwareLoader] Bitstream and handoff metadata downloaded.")
+            except Exception as e:
+                raise RuntimeError(
+                    f"Could not download {bit_filename} from {base_url}. Check internet connection."
+                ) from e
+
+        return local_bit
+
+    @classmethod
+    def load_overlay(cls, version: str = None, download_dir: str = None) -> Overlay:
+        """Helper to load Overlay directly."""
+        bit_path = cls.get_overlay_path(version, download_dir)
+        print(f"[HardwareLoader] Loading overlay: {bit_path}")
+        return Overlay(str(bit_path))
+```
+
+notebooks.py: (pynq_localizer/notebooks.py)
 
 ```python
 import os
 import shutil
 from pathlib import Path
-
 
 def copy_notebooks(target_dir: str = None):
     """
@@ -1659,106 +1823,122 @@ def copy_notebooks(target_dir: str = None):
     for f in copied_files:
         print(f"  • {f}")
 
-
 if __name__ == "__main__":
     copy_notebooks()
 ```
 
-generate_sw_summary.sh:
+requirements.txt: (requirements.txt)
 
-```bash
-#!/usr/bin/env bash
-# ==============================================================================
-# Script: context/generate_sw_summary.sh
-# Target: sw-pynq-sound-localizer
-# Purpose: Dump Git history, structure, SW files, and notebook JSON into context/sw_summary.txt
-# ==============================================================================
-
-# Dynamically resolve paths
-CONTEXT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${CONTEXT_DIR}/.." && pwd)"
-OUTPUT_FILE="${CONTEXT_DIR}/sw_summary.txt"
-
-echo "Generating concise SW summary into: ${OUTPUT_FILE}..."
-> "${OUTPUT_FILE}"
-
-cd "${REPO_ROOT}" || exit 1
-
-# 1. Header, Branch Status & Git History
-cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
-Git Context & Branch Info:
-
-```log
-LOG_EOF
-
-if command -v git &> /dev/null && git rev-parse --is-inside-work-tree &> /dev/null; then
-    echo "Current Branch: $(git branch --show-current)" >> "${OUTPUT_FILE}"
-    echo "Branch Tracking Status:" >> "${OUTPUT_FILE}"
-    git branch -vv >> "${OUTPUT_FILE}"
-    echo "" >> "${OUTPUT_FILE}"
-    echo "Git Commit Graph & History:" >> "${OUTPUT_FILE}"
-    git log --graph --pretty=format:"%h %d - %cd : %s (%an)" --date=short -n 15 >> "${OUTPUT_FILE}"
-fi
-
-cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
+```text
+numpy>=1.19.0
+scipy>=1.7.0
+plotly>=5.10.0,<6.0.0
+ipywidgets>=8.0.0
 ```
 
-Files structure: 
+setup.py: (setup.py)
 
-```log
-LOG_EOF
+```python
+import os
+from setuptools import setup, find_packages
 
-# 2. Directory Tree
-if command -v tree &> /dev/null; then
-    tree -a -I '.git|__pycache__|*.egg-info|.pytest_cache|venv|env|dist|build|.ipynb_checkpoints' >> "${OUTPUT_FILE}"
-fi
+long_description = ""
+if os.path.exists("README.md"):
+    with open("README.md", "r", encoding="utf-8") as fh:
+        long_description = fh.read()
 
-cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
-```
-
-LOG_EOF
-
-# 3. Exact list of targeted files and their markdown syntax
-TARGET_FILES=(
-    ".github/workflows/pypi.yml:yaml"
-    "hardware.json:json"
-    "setup.py:python"
-    "requirements.txt:text"
-    "pynq_localizer/__init__.py:python"
-    "pynq_localizer/loader.py:python"
-    "pynq_localizer/hw_trigger.py:python"
-    "pynq_localizer/array.py:python"
-    "pynq_localizer/kinematics.py:python"
-    "pynq_localizer/kinematics_dashboard.py:python"
-    "pynq_localizer/doa.py:python"
-    "pynq_localizer/radar_dashboard.py:python"
-    "pynq_localizer/notebooks.py:python"
-    "notebooks/01_zero_skew_verification.ipynb:json"
-    "notebooks/02_realtime_kinematics_telemetry.ipynb:json"
-    "notebooks/03_doppler_velocity_tracking.ipynb:json"
-    "notebooks/04_acoustic_free_fall_gravity.ipynb:json"
-    "notebooks/05_doa_polar_radar.ipynb:json"
-    "context/generate_sw_summary.sh:bash"
+setup(
+    name="pynq-sound-localizer",
+    version="1.0.0",
+    author="Juan Pablo Sánchez (SiririComun)",
+    description="FPGA-Accelerated Acoustic Kinematics, Doppler Tracking & Direction-of-Arrival Sound Localizer for PYNQ-Z2",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/SiririComun/sw-pynq-sound-localizer",
+    packages=find_packages(),
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: POSIX :: Linux",
+        "Topic :: Scientific/Engineering :: Physics",
+        "Topic :: Scientific/Engineering :: Atmospheric Science",
+    ],
+    python_requires=">=3.8",
+    install_requires=[
+        "numpy>=1.19.0",
+        "scipy>=1.7.0",
+        "plotly>=5.10.0,<6.0.0",
+        "ipywidgets>=8.0.0",
+    ],
+    package_data={
+        "pynq_localizer": ["../notebooks/*.ipynb", "../hardware.json"],
+    },
+    include_package_data=True,
+    entry_points={
+        "console_scripts": [
+            "pynq-localizer-get-notebooks=pynq_localizer.notebooks:copy_notebooks",
+        ],
+    },
 )
+```
 
-# 4. Append each file
-for item in "${TARGET_FILES[@]}"; do
-    filepath="${item%%:*}"
-    syntax="${item##*:}"
-    filename=$(basename "$filepath")
+01_realtime_kinematics_telemetry.ipynb: (notebooks/01_realtime_kinematics_telemetry.ipynb)
 
-    if [ -f "$filepath" ]; then
-        echo "Adding: ${filepath}"
-        {
-            echo "${filename}:"
-            echo ""
-            echo "\`\`\`${syntax}"
-            cat "${filepath}"
-            echo "\`\`\`"
-            echo ""
-        } >> "${OUTPUT_FILE}"
-    fi
-done
+```python
+# %% [markdown] Cell 1
+# Notebook 1: Real-Time Acoustic Kinematics & Telemetry Dashboard
+# Welcome to **`pynq-sound-localizer`** (`v1.0.0`). This notebook demonstrates how to load the FPGA hardware overlay, launch the **10-Second Rolling Kinematics Dashboard**, record continuous multi-second flight data, and extract clean Doppler telemetry.
 
-echo "Done! SW context generated in: ${OUTPUT_FILE}"```
+# %% [markdown] Cell 2
+## 1. Load the Hardware Overlay
+# Instantiate `MicrophoneArrayOverlay()`. It automatically downloads and configures the verified `v1.5.0` bitstream on the PYNQ-Z2 board.
 
+# %% [code] Cell 3
+from pynq_localizer import MicrophoneArrayOverlay, KinematicAnalytics
+
+# Auto-detect board and load overlay
+ol = MicrophoneArrayOverlay()
+print(f"✅ Overlay loaded: {ol.current_profile} mode ({ol.fs_per_ch:.0f} SPS per channel)")
+print(f"   Speed of sound at 20°C: {KinematicAnalytics.speed_of_sound(20.0):.2f} m/s")
+
+# %% [markdown] Cell 4
+## 2. Launch the Real-Time 10-Second Rolling Telemetry Dashboard
+# Click **`Start Stream`** and make sound near the microphones (or wave a pure tone generator from a smartphone). Observe:
+# - **Row 1:** Instantaneous physical loudness envelope $A(t)$ in Volts.
+# - **Row 2:** Sub-Hertz dominant pitch scatter points $f_0(t)$ with real-time noise squelching.
+# - **Tabs:** Switch seamlessly between **Mic 1 (A0)**, **Mic 2 (A1)**, and **Dual Overlay**.
+
+# %% [code] Cell 5
+# Launch the multi-tab live instrument
+app = ol.kinematics_dashboard()
+
+# %% [markdown] Cell 6
+## 3. Direct Clean Data Handoff in Python
+# Extract the sanitized non-NaN data directly from the dashboard into NumPy arrays for instant analysis.
+
+# %% [code] Cell 7
+t_clean, amp_clean, freq_clean = app.get_clean_data(channel=1)
+print(f"Captured {len(t_clean)} clean motion points!")
+if len(freq_clean) > 0:
+    print(f"Frequency span: {freq_clean.min():.1f} Hz -> {freq_clean.max():.1f} Hz (Shift: {freq_clean.max() - freq_clean.min():.1f} Hz)")
+
+# %% [markdown] Cell 8
+## 4. Continuous Multi-Second Flight Recording & Audio Playback
+# Record uninterrupted audio to DDR memory and listen to it directly in Jupyter.
+
+# %% [code] Cell 9
+# Record 3.0 seconds of 50 kSPS dual-channel audio
+t_axis, v_mic1, v_mic2 = ol.record_continuous(duration_sec=3.0)
+
+# Listen to Microphone 1
+ol.play_audio(channel=1, custom_data=v_mic1)
+
+# %% [markdown] Cell 10
+## 5. Hardware Shutdown & Cleanup
+
+# %% [code] Cell 11
+app.stop()
+ol.close()
+print("🔒 Hardware resources cleanly released.")
+
+```
