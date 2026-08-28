@@ -317,28 +317,28 @@ class KinematicsDashboard:
             trig.set_mode("Auto")
 
         dma0.mmio.write(0x30, 0x04)
-        if dma1:
+        if dma1 is not None:
             dma1.mmio.write(0x30, 0x04)
-        if dma2:
+        if dma2 is not None:
             dma2.mmio.write(0x30, 0x04)
         time.sleep(0.002)
 
         dma0.recvchannel.start()
-        if dma1:
+        if dma1 is not None:
             dma1.recvchannel.start()
-        if dma2:
+        if dma2 is not None:
             dma2.recvchannel.start()
 
         cma_raw = allocate(shape=(chunk_pts,), dtype="u2")
-        cma_fft = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma1 else None
-        cma_filt = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma2 else None
+        cma_fft = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma1 is not None else None
+        cma_filt = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma2 is not None else None
 
         try:
             while self._is_running:
                 dma0.recvchannel.transfer(cma_raw)
-                if dma1 and cma_fft:
+                if dma1 is not None and cma_fft is not None:
                     dma1.recvchannel.transfer(cma_fft)
-                if dma2 and cma_filt:
+                if dma2 is not None and cma_filt is not None:
                     dma2.recvchannel.transfer(cma_filt)
 
                 if trig:
@@ -417,9 +417,9 @@ class KinematicsDashboard:
 
         finally:
             cma_raw.close()
-            if cma_fft:
+            if cma_fft is not None:
                 cma_fft.close()
-            if cma_filt:
+            if cma_filt is not None:
                 cma_filt.close()
             dma0.mmio.write(0x30, 0x04)
             if trig:

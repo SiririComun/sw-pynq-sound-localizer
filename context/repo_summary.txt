@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/v1.6.0-overlay-integration @ 052727e
+• Repository State    : feat/v1.6.0-overlay-integration @ 7921524
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.6.0
 • Package Version     : v1.0.0
 ==============================================================================
@@ -9,19 +9,20 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/v1.6.0-overlay-integration                052727e [origin/feat/v1.6.0-overlay-integration] fix(init): remove conflicting notebooks import to enable clean package import
+* feat/v1.6.0-overlay-integration                7921524 [origin/feat/v1.6.0-overlay-integration] fix(dma): integrate lock-step multi-DMA streaming and pipeline flush into core overlay
   main                                           ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/v1.6.0-overlay-integration 052727e fix(init): remove conflicting notebooks import to enable clean package import
+  remotes/origin/feat/v1.6.0-overlay-integration 7921524 fix(dma): integrate lock-step multi-DMA streaming and pipeline flush into core overlay
   remotes/origin/main                            ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
 Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 052727e  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : fix(init): remove conflicting notebooks import to enable clean package import (SiririComun)
+* 7921524  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : fix(dma): integrate lock-step multi-DMA streaming and pipeline flush into core overlay (SiririComun)
+* 052727e  - 2026-08-28 : fix(init): remove conflicting notebooks import to enable clean package import (SiririComun)
 * fbf000b  - 2026-08-28 : chore(context): update repository summary with Cog (SiririComun)
 * afdaa76  - 2026-08-28 : fix(packaging): structure pynq_localizer.notebooks as subpackage for isolated bundling (SiririComun)
 * 40df672  - 2026-08-28 : fix(packaging): add MANIFEST.in to guarantee .ipynb wheel inclusion (SiririComun)
@@ -35,7 +36,6 @@ Multi-Branch Git Commit Graph:
 * a365cfc  - 2026-08-28 : chore(hw): update pinned hardware overlay to v1.6.0 (SiririComun)
 * ab1de60  (origin/main, main) - 2026-08-27 : feat(context): integrate Cog v1.0.0 context engine and scaffold configuration (SiririComun)
 * 61f9c70  (tag: v1.0.0) - 2026-08-23 : docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook (SiririComun)
-* ccfa0f7  - 2026-08-23 : feat(dashboard): add moving median DSP filter, 2048-pt STFT resolution, and clean NaN CSV export (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -1685,28 +1685,28 @@ class KinematicsDashboard:
             trig.set_mode("Auto")
 
         dma0.mmio.write(0x30, 0x04)
-        if dma1:
+        if dma1 is not None:
             dma1.mmio.write(0x30, 0x04)
-        if dma2:
+        if dma2 is not None:
             dma2.mmio.write(0x30, 0x04)
         time.sleep(0.002)
 
         dma0.recvchannel.start()
-        if dma1:
+        if dma1 is not None:
             dma1.recvchannel.start()
-        if dma2:
+        if dma2 is not None:
             dma2.recvchannel.start()
 
         cma_raw = allocate(shape=(chunk_pts,), dtype="u2")
-        cma_fft = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma1 else None
-        cma_filt = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma2 else None
+        cma_fft = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma1 is not None else None
+        cma_filt = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma2 is not None else None
 
         try:
             while self._is_running:
                 dma0.recvchannel.transfer(cma_raw)
-                if dma1 and cma_fft:
+                if dma1 is not None and cma_fft is not None:
                     dma1.recvchannel.transfer(cma_fft)
-                if dma2 and cma_filt:
+                if dma2 is not None and cma_filt is not None:
                     dma2.recvchannel.transfer(cma_filt)
 
                 if trig:
@@ -1785,9 +1785,9 @@ class KinematicsDashboard:
 
         finally:
             cma_raw.close()
-            if cma_fft:
+            if cma_fft is not None:
                 cma_fft.close()
-            if cma_filt:
+            if cma_filt is not None:
                 cma_filt.close()
             dma0.mmio.write(0x30, 0x04)
             if trig:
