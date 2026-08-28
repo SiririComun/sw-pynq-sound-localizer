@@ -1,16 +1,16 @@
 """
-pynq_localizer.kinematics: High-Precision Acoustic Kinematics & Frequency Ridge Tracking Engine.
-Provides sub-Hertz pitch tracking (20 Hz - 20 kHz), smoothed RMS envelope extraction,
-sliding STFT frequency trajectories, temperature-compensated sound speed, Doppler velocity, and gravity metrics.
+pynq_localizer.kinematics: High-Precision Acoustic Kinematics & Spectral Physics Analytics.
+Provides angular frequency parameter mapping (omega +- Delta omega), physical inverse-distance
+acoustic law regression (1/r and 1/r^2), sub-Hertz pitch tracking, and multi-source filter metrics.
 """
 
-from typing import Tuple, Optional, Union, Dict
+from typing import Tuple, Optional, Union, Dict, List
 import numpy as np
 
 
 class KinematicAnalytics:
     """
-    High-performance DSP engine for acoustic kinematics and trajectory tracking.
+    High-performance DSP and physical acoustics analytics engine.
     """
 
     # =========================================================================
@@ -20,9 +20,9 @@ class KinematicAnalytics:
     @staticmethod
     def speed_of_sound(temperature_c: float = 20.0) -> float:
         """
-        Calculates the temperature-compensated speed of sound in air.
+        Calculates temperature-compensated speed of sound in air:
         c(T) = 331.3 * sqrt(1 + T_c / 273.15) [m/s]
-        :param temperature_c: Ambient air temperature in Celsius (default: 20.0°C).
+        :param temperature_c: Ambient temperature in Celsius (default: 20.0°C).
         :return: Sound velocity c in m/s (e.g. 343.2 m/s at 20°C).
         """
         return float(331.3 * np.sqrt(1.0 + (float(temperature_c) / 273.15)))
@@ -37,13 +37,6 @@ class KinematicAnalytics:
         """
         Calculates instantaneous radial velocity v(t) from observed Doppler frequency:
         v(t) = c(T) * ((f_observed - f_source) / f_source)
-        Positive v => Source approaching observer.
-        Negative v => Source receding from observer.
-
-        :param f_observed: Measured dominant frequency in Hz (scalar or numpy array).
-        :param f_source: Rest / emitted fundamental frequency in Hz.
-        :param temperature_c: Ambient temperature in Celsius.
-        :return: Radial velocity in meters per second (m/s).
         """
         c = cls.speed_of_sound(temperature_c)
         f_obs = np.asarray(f_observed, dtype=np.float64)
@@ -61,17 +54,10 @@ class KinematicAnalytics:
         """
         Calculates gravitational acceleration g from the linear frequency slope of a falling source:
         g = - (c(T) / f_0) * (df / dt)
-
-        :param time_sec: 1D time axis array in seconds during the free-fall interval.
-        :param f_observed: 1D measured frequency array in Hz during free-fall.
-        :param f_source: Rest fundamental frequency of the dropping speaker in Hz.
-        :param temperature_c: Ambient temperature in Celsius.
-        :return: Dictionary containing experimental g, slope (df/dt), R^2 coefficient, and sound speed.
         """
         t = np.asarray(time_sec, dtype=np.float64)
         f = np.asarray(f_observed, dtype=np.float64)
 
-        # Filter out NaN/invalid values
         valid_mask = np.isfinite(t) & np.isfinite(f)
         t_clean = t[valid_mask]
         f_clean = f[valid_mask]
@@ -79,10 +65,8 @@ class KinematicAnalytics:
         if len(t_clean) < 5:
             raise ValueError("Insufficient valid data points to perform linear regression for gravity measurement.")
 
-        # 1st-degree polynomial linear regression: f(t) = slope * t + intercept
         slope, intercept = np.polyfit(t_clean, f_clean, 1)
 
-        # Compute R^2 goodness-of-fit
         f_pred = slope * t_clean + intercept
         ss_res = np.sum((f_clean - f_pred) ** 2)
         ss_tot = np.sum((f_clean - np.mean(f_clean)) ** 2)
@@ -101,7 +85,186 @@ class KinematicAnalytics:
         }
 
     # =========================================================================
-    # 2. Amplitude Envelope & Energy Downsampling
+    # 2. Spectral Mask Parameter Mapping: (omega +- Delta omega) -> (k_start, k_stop)
+    # =========================================================================
+
+    @staticmethod
+    def calculate_filter_bins(
+        omega_0: Optional[float] = None,
+        delta_omega: Optional[float] = None,
+        f_center_hz: Optional[float] = None,
+        delta_f_hz: Optional[float] = None,
+        fs: float = 50_000.0,
+        fft_len: int = 1024
+    ) -> Dict[str, Union[int, float]]:
+        """
+        Translates continuous frequency parameters (in rad/s or Hz) to discrete hardware FFT bins.
+
+        :param omega_0: Center angular frequency in rad/s (optional if f_center_hz is provided).
+        :param delta_omega: Half-bandwidth in rad/s (optional if delta_f_hz is provided).
+        :param f_center_hz: Center frequency in Hz.
+        :param delta_f_hz: Half-bandwidth in Hz.
+        :param fs: Sampling rate in Hz (default: 50,000 Hz).
+        :param fft_len: FFT transform length N (default: 1024).
+        :return: Dictionary containing discrete bins (k_start, k_stop) and physical frequency bounds.
+        """
+        if omega_0 is not None:
+            f0 = float(omega_0) / (2.0 * np.pi)
+        elif f_center_hz is not None:
+            f0 = float(f_center_hz)
+        else:
+            raise ValueError("Must provide either omega_0 (rad/s) or f_center_hz (Hz).")
+
+        if delta_omega is not None:
+            df_half = float(delta_omega) / (2.0 * np.pi)
+        elif delta_f_hz is not None:
+            df_half = float(delta_f_hz)
+        else:
+            df_half = 50.0  # Default 50 Hz half-band
+
+        f_start = max(0.0, f0 - df_half)
+        f_stop = min(fs / 2.0, f0 + df_half)
+
+        bin_res = fs / float(fft_len)
+        k_start = int(round(f_start / bin_res))
+        k_stop = int(round(f_stop / bin_res))
+
+        k_max = fft_len // 2
+        k_start = max(0, min(k_max, k_start))
+        k_stop = max(0, min(k_max, k_stop))
+
+        if k_start == k_stop:
+            k_stop = min(k_max, k_start + 1)
+
+        return {
+            "k_start": k_start,
+            "k_stop": k_stop,
+            "f_center_hz": f0,
+            "delta_f_hz": df_half,
+            "omega_0_rad_s": f0 * 2.0 * np.pi,
+            "delta_omega_rad_s": df_half * 2.0 * np.pi,
+            "f_start_hz": k_start * bin_res,
+            "f_stop_hz": k_stop * bin_res,
+            "bin_resolution_hz": bin_res,
+            "fft_len": fft_len,
+            "fs_hz": fs
+        }
+
+    # =========================================================================
+    # 3. Acoustic Distance Law Regression (1/r and 1/r^2)
+    # =========================================================================
+
+    @classmethod
+    def fit_inverse_distance_law(
+        cls,
+        distances_m: Union[List[float], np.ndarray],
+        voltages_rms: Union[List[float], np.ndarray]
+    ) -> Dict[str, float]:
+        """
+        Validates the physical spherical spreading law:
+          • Acoustic Pressure Voltage: V_RMS(r) = A * r^(-n)  (Ideal n = 1.0)
+          • Acoustic Intensity:        I(r) ~ V_RMS^2 ~ r^(-2n) (Ideal 2n = 2.0)
+
+        Performs log-log linear regression: ln(V_RMS) = -n * ln(r) + ln(A)
+
+        :param distances_m: Array of calibrated measurement distances in meters (r > 0).
+        :param voltages_rms: Measured RMS voltages at each distance.
+        :return: Dictionary containing exponent n, power exponent 2n, R^2 fit, and percentage error.
+        """
+        r = np.asarray(distances_m, dtype=np.float64)
+        v = np.asarray(voltages_rms, dtype=np.float64)
+
+        valid = (r > 0) & (v > 0) & np.isfinite(r) & np.isfinite(v)
+        r_clean = r[valid]
+        v_clean = v[valid]
+
+        if len(r_clean) < 3:
+            raise ValueError("At least 3 valid distance points are required to fit the inverse-distance law.")
+
+        ln_r = np.log(r_clean)
+        ln_v = np.log(v_clean)
+
+        # 1st-degree polynomial: ln(v) = slope * ln(r) + intercept
+        slope, intercept = np.polyfit(ln_r, ln_v, 1)
+
+        ln_v_pred = slope * ln_r + intercept
+        ss_res = np.sum((ln_v - ln_v_pred) ** 2)
+        ss_tot = np.sum((ln_v - np.mean(ln_v)) ** 2)
+        r_squared = 1.0 - (ss_res / (ss_tot + 1e-12))
+
+        # In physics: V ~ r^(-n), so slope = -n => n = -slope
+        measured_n = -slope
+        scale_a = float(np.exp(intercept))
+
+        return {
+            "measured_exponent_n": float(measured_n),
+            "intensity_exponent_2n": float(measured_n * 2.0),
+            "amplitude_coefficient_A": scale_a,
+            "r_squared": float(r_squared),
+            "ideal_pressure_exponent": 1.0,
+            "ideal_intensity_exponent": 2.0,
+            "error_pct_from_ideal_1_over_r": float(abs(measured_n - 1.0) * 100.0)
+        }
+
+    # =========================================================================
+    # 4. Multi-Source Isolation & Filter Rejection Metrics
+    # =========================================================================
+
+    @classmethod
+    def calculate_filter_isolation_metrics(
+        cls,
+        raw_signal: np.ndarray,
+        filtered_signal: np.ndarray,
+        fs: float,
+        target_band_hz: Tuple[float, float],
+        interferer_band_hz: Tuple[float, float]
+    ) -> Dict[str, float]:
+        """
+        Quantifies the isolation and stopband rejection of the hardware filter when
+        two distinct sources emit simultaneously.
+
+        :param raw_signal: 1D time-domain raw audio array before filtering.
+        :param filtered_signal: 1D time-domain audio array after hardware spectral mask + IFFT.
+        :param fs: Sampling rate in Hz.
+        :param target_band_hz: (f_min, f_max) tuple for the desired source (e.g. (950, 1050)).
+        :param interferer_band_hz: (f_min, f_max) tuple for the interferer (e.g. (2400, 2600)).
+        :return: Rejection ratio, passband insertion loss, and Signal-to-Interference Ratio (SIR).
+        """
+        # Compute FFT power spectrum of raw and filtered signals
+        n = min(len(raw_signal), len(filtered_signal))
+        w = np.hanning(n)
+
+        fft_raw = np.abs(np.fft.rfft((raw_signal[:n] - np.mean(raw_signal[:n])) * w)) ** 2
+        fft_filt = np.abs(np.fft.rfft((filtered_signal[:n] - np.mean(filtered_signal[:n])) * w)) ** 2
+        freqs = np.fft.rfftfreq(n, d=1.0 / fs)
+
+        mask_target = (freqs >= target_band_hz[0]) & (freqs <= target_band_hz[1])
+        mask_interferer = (freqs >= interferer_band_hz[0]) & (freqs <= interferer_band_hz[1])
+
+        # Energies
+        p_target_raw = np.sum(fft_raw[mask_target])
+        p_target_filt = np.sum(fft_filt[mask_target])
+        p_interf_raw = np.sum(fft_raw[mask_interferer])
+        p_interf_filt = np.sum(fft_filt[mask_interferer])
+
+        # Stopband rejection of interferer
+        stopband_rejection_db = 10.0 * np.log10(max(p_interf_raw, 1e-12) / max(p_interf_filt, 1e-12))
+
+        # Passband transmission fidelity (Target = 0.0 dB)
+        insertion_loss_db = 10.0 * np.log10(max(p_target_filt, 1e-12) / max(p_target_raw, 1e-12))
+
+        # Signal to Interference Ratio (SIR) after filtering
+        sir_after_db = 10.0 * np.log10(max(p_target_filt, 1e-12) / max(p_interf_filt, 1e-12))
+
+        return {
+            "stopband_rejection_db": float(stopband_rejection_db),
+            "insertion_loss_db": float(insertion_loss_db),
+            "sir_after_filtering_db": float(sir_after_db),
+            "amplitude_preservation_ratio": float(np.sqrt(p_target_filt / max(p_target_raw, 1e-12)))
+        }
+
+    # =========================================================================
+    # 5. Amplitude Envelope & STFT Tracking
     # =========================================================================
 
     @staticmethod
@@ -116,7 +279,7 @@ class KinematicAnalytics:
 
     @staticmethod
     def hilbert_transform(signal: np.ndarray) -> np.ndarray:
-        """Computes analytic signal z[n] = x[n] + j*H{x[n]} using pure NumPy FFT."""
+        """Computes analytic signal z[n] = x[n] + j*H{x[n]} using NumPy FFT."""
         x = np.asarray(signal, dtype=np.float64)
         n = len(x)
         if n == 0:
@@ -150,14 +313,7 @@ class KinematicAnalytics:
         step_ms: float = 10.0,
         method: str = "rms"
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Downsamples continuous physical audio into a smoothed A(t) time series.
-        :param signal: 1D raw voltage array.
-        :param fs: Sampling frequency in Hz (e.g. 50,000 Hz).
-        :param step_ms: Averaging hop step in milliseconds (default: 10.0 ms).
-        :param method: 'rms' or 'peak'.
-        :return: (time_axis_sec, amplitude_array).
-        """
+        """Downsamples continuous physical audio into a smoothed A(t) time series."""
         x = np.asarray(signal, dtype=np.float64)
         x_ac = x - np.mean(x)
         n_samples = len(x_ac)
@@ -179,10 +335,6 @@ class KinematicAnalytics:
 
         return time_out, amp_out
 
-    # =========================================================================
-    # 3. Sub-Hertz Parabolic Pitch Tracking & STFT Trajectories
-    # =========================================================================
-
     @staticmethod
     def track_sub_hertz_pitch(
         freqs: np.ndarray,
@@ -191,17 +343,7 @@ class KinematicAnalytics:
         max_freq_hz: float = 20000.0,
         interpolate: bool = True
     ) -> Tuple[float, float]:
-        """
-        Extracts dominant fundamental frequency f0 with sub-Hertz accuracy (±0.5 Hz)
-        using 3-point parabolic peak interpolation.
-
-        :param freqs: 1D frequency axis array in Hz.
-        :param mags: 1D magnitude array (dB or linear).
-        :param min_freq_hz: Lower search cutoff (default: 20.0 Hz).
-        :param max_freq_hz: Upper search cutoff (default: 20,000.0 Hz).
-        :param interpolate: Enable quadratic interpolation on discrete peak.
-        :return: (peak_freq_hz, peak_magnitude).
-        """
+        """Extracts dominant fundamental frequency f0 with sub-Hertz accuracy."""
         valid_mask = (freqs >= min_freq_hz) & (freqs <= max_freq_hz)
         valid_indices = np.where(valid_mask)[0]
 
@@ -211,7 +353,6 @@ class KinematicAnalytics:
 
         k = int(valid_indices[np.argmax(mags[valid_indices])])
 
-        # Boundary guard
         if not interpolate or k <= 0 or k >= len(mags) - 1:
             return float(freqs[k]), float(mags[k])
 
@@ -223,7 +364,6 @@ class KinematicAnalytics:
         if abs(denom) < 1e-12:
             return float(freqs[k]), float(beta)
 
-        # Parabolic peak offset
         delta = 0.5 * (alpha - gamma) / denom
         delta = max(-0.5, min(0.5, delta))
 
@@ -245,20 +385,7 @@ class KinematicAnalytics:
         energy_thresh: float = 0.015,
         window_type: str = "blackmanharris"
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Extracts synchronized Amplitude A(t) and Dominant Frequency f0(t) trajectories
-        across the full 20 Hz - 20 kHz band with noise squelch gating.
-
-        :param signal: 1D raw voltage audio array.
-        :param fs: Sampling frequency in Hz.
-        :param window_ms: STFT analysis window duration in ms (default: 20.0 ms).
-        :param hop_ms: Telemetry hop step in ms (default: 10.0 ms).
-        :param min_freq_hz: Minimum frequency threshold (default: 20.0 Hz).
-        :param max_freq_hz: Maximum frequency threshold (default: 20,000.0 Hz).
-        :param energy_thresh: RMS voltage threshold below which f0 is squelched to NaN.
-        :param window_type: 'blackmanharris', 'hann', or 'hamming'.
-        :return: (time_axis_sec, amplitude_trajectory, frequency_trajectory).
-        """
+        """Extracts synchronized Amplitude A(t) and Pitch f0(t) trajectories."""
         x = np.asarray(signal, dtype=np.float64)
         x_ac = x - np.mean(x)
         n_samples = len(x_ac)
@@ -266,7 +393,6 @@ class KinematicAnalytics:
         win_len = max(16, int((float(window_ms) / 1000.0) * fs))
         hop_len = max(1, int((float(hop_ms) / 1000.0) * fs))
 
-        # Generate window
         if window_type.lower() == "blackmanharris":
             n = np.arange(win_len)
             w = (0.35875 - 0.48829 * np.cos(2.0 * np.pi * n / (win_len - 1)) +
@@ -292,7 +418,6 @@ class KinematicAnalytics:
             rms_val = np.sqrt(np.mean(chunk ** 2))
             amp_traj[i] = rms_val
 
-            # Energy squelch gate: suppress noise when speaker is silent
             if rms_val >= energy_thresh:
                 windowed = chunk * w
                 fft_mag = np.abs(np.fft.rfft(windowed)) / (win_len / 2.0)
