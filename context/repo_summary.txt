@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/v1.6.0-overlay-integration @ db25fc2
+• Repository State    : feat/v1.6.0-overlay-integration @ 8ee0cb8
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.6.0
 • Package Version     : v1.0.0
 ==============================================================================
@@ -12,16 +12,17 @@ Git Context & Branch Topology:
 Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (3 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/v1.6.0-overlay-integration                db25fc2 [origin/feat/v1.6.0-overlay-integration] fix(packaging): isolate notebook discovery to package namespace to prevent cross-package collisions
+* feat/v1.6.0-overlay-integration                8ee0cb8 [origin/feat/v1.6.0-overlay-integration] fix(packaging): embed isolated notebooks_data inside package namespace
   main                                           ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/v1.6.0-overlay-integration db25fc2 fix(packaging): isolate notebook discovery to package namespace to prevent cross-package collisions
+  remotes/origin/feat/v1.6.0-overlay-integration 8ee0cb8 fix(packaging): embed isolated notebooks_data inside package namespace
   remotes/origin/main                            ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
 Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* db25fc2  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : fix(packaging): isolate notebook discovery to package namespace to prevent cross-package collisions (SiririComun)
+* 8ee0cb8  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : fix(packaging): embed isolated notebooks_data inside package namespace (SiririComun)
+* db25fc2  - 2026-08-28 : fix(packaging): isolate notebook discovery to package namespace to prevent cross-package collisions (SiririComun)
 * f44a74d  - 2026-08-28 : docs(notebook): update getting-started notebook with spectral filtering and 1/r verification (SiririComun)
 * 2e5bc95  - 2026-08-28 : test(physics): add strict validation suite for spectral masking, IFFT fidelity, and 1/r law (SiririComun)
 * 806618e  - 2026-08-28 : feat(dsp): add frequency bandpass mapping, 1/r acoustic distance fit, and isolation metrics (SiririComun)
@@ -35,7 +36,6 @@ Multi-Branch Git Commit Graph:
 * 1cd138d  - 2026-08-23 : fix(array): align kinematics_dashboard signature with multi-tab dashboard (SiririComun)
 * 5214663  - 2026-08-23 : fix(dashboard): resolve streaming lag via decoupled multi-threading, add 3-tab UI, and instant stop (SiririComun)
 * 60dca63  - 2026-08-23 : feat(dashboard): implement real-time 10-second rolling KinematicsDashboard for A(t) and f0(t) (SiririComun)
-* 5827263  - 2026-08-23 : feat(kinematics): implement KinematicAnalytics DSP engine with sub-Hertz STFT ridge tracker (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -1966,29 +1966,35 @@ from pathlib import Path
 def copy_notebooks(target_dir: str = None):
     """
     Copies pynq_sound_localizer example notebooks into the Jupyter root folder.
-    Guaranteed to be isolated and agnostic to any other libraries on the board.
     """
     pkg_dir = Path(__file__).resolve().parent
 
-    # 1. Primary source: inside installed package namespace
-    src_notebooks = pkg_dir / "notebooks_data"
+    # Candidate sources in priority order:
+    candidates = [
+        pkg_dir / "notebooks_data",
+        pkg_dir.parent / "notebooks",
+    ]
 
-    # 2. Secondary source: git root only if running in development mode (setup.py present)
-    if not src_notebooks.exists() or not any(src_notebooks.glob("*.ipynb")):
-        repo_root = pkg_dir.parent
-        if (repo_root / "setup.py").exists():
-            src_notebooks = repo_root / "notebooks"
+    src_notebooks = None
+    for cand in candidates:
+        if cand.exists() and any(cand.glob("*.ipynb")):
+            src_notebooks = cand
+            break
 
     if target_dir is None:
         pynq_jupyter_root = Path("/home/xilinx/jupyter_notebooks")
-        dest_dir = pynq_jupyter_root / "pynq_sound_localizer" if pynq_jupyter_root.exists() else Path.cwd() / "pynq_sound_localizer_notebooks"
+        dest_dir = (
+            pynq_jupyter_root / "pynq_sound_localizer"
+            if pynq_jupyter_root.exists()
+            else Path.cwd() / "pynq_sound_localizer_notebooks"
+        )
     else:
         dest_dir = Path(target_dir)
 
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     copied_files = []
-    if src_notebooks.exists():
+    if src_notebooks is not None:
         for item in src_notebooks.glob("*.ipynb"):
             dest_file = dest_dir / item.name
             shutil.copy2(item, dest_file)
@@ -2046,7 +2052,10 @@ setup(
         "ipywidgets>=8.0.0",
     ],
     package_data={
-        "pynq_localizer": ["notebooks_data/*.ipynb", "hardware.json", "../hardware.json"],
+        "pynq_localizer": [
+            "notebooks_data/*.ipynb",
+            "hardware.json",
+        ],
     },
     include_package_data=True,
     entry_points={
