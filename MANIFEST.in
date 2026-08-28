@@ -1,5 +1,5 @@
 include hardware.json
 include README.md
 include LICENSE
-recursive-include pynq_localizer/notebooks_data *.ipynb
+recursive-include pynq_localizer/notebooks *.ipynb
 recursive-include notebooks *.ipynb

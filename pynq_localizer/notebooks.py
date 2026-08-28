@@ -6,20 +6,9 @@ from pathlib import Path
 def copy_notebooks(target_dir: str = None):
     """
     Copies pynq_sound_localizer example notebooks into the Jupyter root folder.
+    Strictly isolated to pynq_localizer.notebooks subpackage.
     """
-    pkg_dir = Path(__file__).resolve().parent
-
-    # Candidate sources in priority order:
-    candidates = [
-        pkg_dir / "notebooks_data",
-        pkg_dir.parent / "notebooks",
-    ]
-
-    src_notebooks = None
-    for cand in candidates:
-        if cand.exists() and any(cand.glob("*.ipynb")):
-            src_notebooks = cand
-            break
+    pkg_notebooks_dir = Path(__file__).resolve().parent / "notebooks"
 
     if target_dir is None:
         pynq_jupyter_root = Path("/home/xilinx/jupyter_notebooks")
@@ -34,8 +23,8 @@ def copy_notebooks(target_dir: str = None):
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     copied_files = []
-    if src_notebooks is not None:
-        for item in src_notebooks.glob("*.ipynb"):
+    if pkg_notebooks_dir.exists():
+        for item in pkg_notebooks_dir.glob("*.ipynb"):
             dest_file = dest_dir / item.name
             shutil.copy2(item, dest_file)
             copied_files.append(item.name)
