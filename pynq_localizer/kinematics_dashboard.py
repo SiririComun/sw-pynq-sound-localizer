@@ -300,7 +300,9 @@ class KinematicsDashboard:
     # Thread 1: Fast Producer (Drains Hardware DMA & Computes DSP at 100 Hz)
     # =========================================================================
     def _dsp_worker(self):
-        dma = self.overlay.axi_dma_0
+        dma0 = self.overlay.axi_dma_0
+        dma1 = getattr(self.overlay, "axi_dma_1", None)
+        dma2 = getattr(self.overlay, "axi_dma_2", None)
         trig = self.trigger
 
         if hasattr(self.overlay, "xadc_wiz_0"):
@@ -308,99 +310,118 @@ class KinematicsDashboard:
             self.overlay.xadc_wiz_0.mmio.write(0x320, 0x0000)
             self.overlay.xadc_wiz_0.mmio.write(0x324, 0x0202)
 
-        chunk_pts = 1024
+        chunk_pts = 2048
         if trig:
             trig.set_decimation(10)
             trig.set_packet_size(chunk_pts)
             trig.set_mode("Auto")
 
-        dma.mmio.write(0x30, 0x04)
+        dma0.mmio.write(0x30, 0x04)
+        if dma1:
+            dma1.mmio.write(0x30, 0x04)
+        if dma2:
+            dma2.mmio.write(0x30, 0x04)
         time.sleep(0.002)
-        dma.recvchannel.start()
 
-        cma_buf = allocate(shape=(chunk_pts,), dtype="u2")
-        dma_armed = False
+        dma0.recvchannel.start()
+        if dma1:
+            dma1.recvchannel.start()
+        if dma2:
+            dma2.recvchannel.start()
+
+        cma_raw = allocate(shape=(chunk_pts,), dtype="u2")
+        cma_fft = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma1 else None
+        cma_filt = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma2 else None
 
         try:
             while self._is_running:
-                if not dma_armed:
-                    dma.recvchannel.transfer(cma_buf)
-                    if trig:
-                        trig.arm()
-                    dma_armed = True
+                dma0.recvchannel.transfer(cma_raw)
+                if dma1 and cma_fft:
+                    dma1.recvchannel.transfer(cma_fft)
+                if dma2 and cma_filt:
+                    dma2.recvchannel.transfer(cma_filt)
 
-                if dma.recvchannel.idle:
-                    dma_armed = False
-                    raw = np.array(cma_buf)
+                if trig:
+                    trig.arm()
 
-                    raw_a0 = raw[0::2]
-                    raw_a1 = raw[1::2]
-
-                    v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
-                    v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
-
-                    x_ac_a0 = v_a0 - np.mean(v_a0)
-                    x_ac_a1 = v_a1 - np.mean(v_a1)
-
-                    amp_a0 = float(np.sqrt(np.mean(x_ac_a0 ** 2)))
-                    amp_a1 = float(np.sqrt(np.mean(x_ac_a1 ** 2)))
-                    squelch = float(self.squelch_slider.value)
-                    smooth_taps = int(self.smooth_dd.value)
-
-                    f_min = float(self.f_min_input.value)
-                    f_max = float(self.f_max_input.value)
-
-                    # 1. Channel 1 (A0) Pitch Tracking (2048-point STFT)
-                    if amp_a0 >= squelch and len(x_ac_a0) >= 128:
-                        pad_len = self.win_len - len(x_ac_a0)
-                        p0 = np.pad(x_ac_a0, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a0[:self.win_len]
-                        mag_db0 = 20.0 * np.log10(np.maximum((np.abs(np.fft.rfft(p0 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4), 1e-6))
-                        raw_f0_a0, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db0, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
-
-                        # Moving Median Filter
-                        self._hist_f0_a0.append(raw_f0_a0)
-                        recent_pts = list(self._hist_f0_a0)[-smooth_taps:]
-                        f0_a0 = float(np.median(recent_pts))
-                    else:
-                        f0_a0 = np.nan
-                        self._hist_f0_a0.clear()
-
-                    # 2. Channel 2 (A1) Pitch Tracking (2048-point STFT)
-                    if amp_a1 >= squelch and len(x_ac_a1) >= 128:
-                        pad_len = self.win_len - len(x_ac_a1)
-                        p1 = np.pad(x_ac_a1, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a1[:self.win_len]
-                        mag_db1 = 20.0 * np.log10(np.maximum((np.abs(np.fft.rfft(p1 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4), 1e-6))
-                        raw_f0_a1, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db1, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
-
-                        # Moving Median Filter
-                        self._hist_f0_a1.append(raw_f0_a1)
-                        recent_pts = list(self._hist_f0_a1)[-smooth_taps:]
-                        f0_a1 = float(np.median(recent_pts))
-                    else:
-                        f0_a1 = np.nan
-                        self._hist_f0_a1.clear()
-
-                    self._cur_amp_a0 = amp_a0
-                    self._cur_f0_a0 = f0_a0
-                    self._cur_amp_a1 = amp_a1
-                    self._cur_f0_a1 = f0_a1
-
-                    with self._buf_lock:
-                        self.buf_amp_a0[:-1] = self.buf_amp_a0[1:]
-                        self.buf_amp_a0[-1] = amp_a0
-                        self.buf_freq_a0[:-1] = self.buf_freq_a0[1:]
-                        self.buf_freq_a0[-1] = f0_a0
-
-                        self.buf_amp_a1[:-1] = self.buf_amp_a1[1:]
-                        self.buf_amp_a1[-1] = amp_a1
-                        self.buf_freq_a1[:-1] = self.buf_freq_a1[1:]
-                        self.buf_freq_a1[-1] = f0_a1
-                else:
+                t0 = time.time()
+                while not dma0.recvchannel.idle:
+                    if not self._is_running or (time.time() - t0 > 0.5):
+                        break
                     time.sleep(0.001)
 
+                if not self._is_running:
+                    break
+
+                raw = np.array(cma_raw)
+                raw_a0 = raw[0::2]
+                raw_a1 = raw[1::2]
+
+                v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
+                v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
+
+                x_ac_a0 = v_a0 - np.mean(v_a0)
+                x_ac_a1 = v_a1 - np.mean(v_a1)
+
+                amp_a0 = float(np.sqrt(np.mean(x_ac_a0 ** 2)))
+                amp_a1 = float(np.sqrt(np.mean(x_ac_a1 ** 2)))
+                squelch = float(self.squelch_slider.value)
+                smooth_taps = int(self.smooth_dd.value)
+
+                f_min = float(self.f_min_input.value)
+                f_max = float(self.f_max_input.value)
+
+                # Channel 1 (A0) Pitch Tracking
+                if amp_a0 >= squelch and len(x_ac_a0) >= 128:
+                    pad_len = self.win_len - len(x_ac_a0)
+                    p0 = np.pad(x_ac_a0, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a0[:self.win_len]
+                    mag_db0 = 20.0 * np.log10(np.maximum((np.abs(np.fft.rfft(p0 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4), 1e-6))
+                    raw_f0_a0, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db0, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
+
+                    self._hist_f0_a0.append(raw_f0_a0)
+                    recent_pts = list(self._hist_f0_a0)[-smooth_taps:]
+                    f0_a0 = float(np.median(recent_pts))
+                else:
+                    f0_a0 = np.nan
+                    self._hist_f0_a0.clear()
+
+                # Channel 2 (A1) Pitch Tracking
+                if amp_a1 >= squelch and len(x_ac_a1) >= 128:
+                    pad_len = self.win_len - len(x_ac_a1)
+                    p1 = np.pad(x_ac_a1, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a1[:self.win_len]
+                    mag_db1 = 20.0 * np.log10(np.maximum((np.abs(np.fft.rfft(p1 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4), 1e-6))
+                    raw_f0_a1, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db1, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
+
+                    self._hist_f0_a1.append(raw_f0_a1)
+                    recent_pts = list(self._hist_f0_a1)[-smooth_taps:]
+                    f0_a1 = float(np.median(recent_pts))
+                else:
+                    f0_a1 = np.nan
+                    self._hist_f0_a1.clear()
+
+                self._cur_amp_a0 = amp_a0
+                self._cur_f0_a0 = f0_a0
+                self._cur_amp_a1 = amp_a1
+                self._cur_f0_a1 = f0_a1
+
+                with self._buf_lock:
+                    self.buf_amp_a0[:-1] = self.buf_amp_a0[1:]
+                    self.buf_amp_a0[-1] = amp_a0
+                    self.buf_freq_a0[:-1] = self.buf_freq_a0[1:]
+                    self.buf_freq_a0[-1] = f0_a0
+
+                    self.buf_amp_a1[:-1] = self.buf_amp_a1[1:]
+                    self.buf_amp_a1[-1] = amp_a1
+                    self.buf_freq_a1[:-1] = self.buf_freq_a1[1:]
+                    self.buf_freq_a1[-1] = f0_a1
+
         finally:
-            cma_buf.close()
-            dma.mmio.write(0x30, 0x04)
+            cma_raw.close()
+            if cma_fft:
+                cma_fft.close()
+            if cma_filt:
+                cma_filt.close()
+            dma0.mmio.write(0x30, 0x04)
             if trig:
                 trig.disarm()
 

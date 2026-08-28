@@ -212,80 +212,100 @@ class MicrophoneArrayOverlay(Overlay):
           1. Raw Stereo Time (A0 & A1 via axi_dma_0)
           2. Masked Magnitude Spectrum (axi_dma_1)
           3. Filtered & Reconstructed Time (axi_dma_2)
+        Uses a 2-frame lock-step flush to clear pipelined FFT/IFFT latency.
 
         :return: (v_raw_a0, v_raw_a1, v_filtered, freq_axis_hz, mags_db)
         """
         self._init_xadc_simultaneous()
 
-        # 1. Reset and arm DMA 0 (Raw Time)
+        pkt_size = self.packet_size
+        fft_pts = self.fft_len
+
+        buf_flush = allocate(shape=(pkt_size,), dtype="u2")
+
+        # 1. Reset and start all 3 DMAs
         self.axi_dma_0.mmio.write(0x30, 0x04)
-        # 2. Reset and arm DMA 1 (Spectrum Magnitude)
         if hasattr(self, "axi_dma_1"):
             self.axi_dma_1.mmio.write(0x30, 0x04)
-        # 3. Reset and arm DMA 2 (Filtered Time)
         if hasattr(self, "axi_dma_2"):
             self.axi_dma_2.mmio.write(0x30, 0x04)
 
-        time.sleep(0.002)
+        time.sleep(0.003)
 
         self.axi_dma_0.recvchannel.start()
-        self.axi_dma_0.recvchannel.transfer(self._buf_time_raw)
-
         if hasattr(self, "axi_dma_1"):
             self.axi_dma_1.recvchannel.start()
-            self.axi_dma_1.recvchannel.transfer(self._buf_fft_mag)
-
         if hasattr(self, "axi_dma_2"):
             self.axi_dma_2.recvchannel.start()
+
+        # 2. Issue transfers for Frame 1
+        self.axi_dma_0.recvchannel.transfer(self._buf_time_raw)
+        if hasattr(self, "axi_dma_1"):
+            self.axi_dma_1.recvchannel.transfer(self._buf_fft_mag)
+        if hasattr(self, "axi_dma_2"):
             self.axi_dma_2.recvchannel.transfer(self._buf_time_filtered)
 
-        # Trigger synchronized acquisition
+        # Trigger acquisition
+        self.trigger.set_mode("Auto")
         self.trigger.arm()
 
+        # Wait for Frame 1 Raw DMA 0
         start = time.time()
-        while time.time() - start < timeout:
-            dma0_done = self.axi_dma_0.recvchannel.idle
-            dma1_done = self.axi_dma_1.recvchannel.idle if hasattr(self, "axi_dma_1") else True
-            dma2_done = self.axi_dma_2.recvchannel.idle if hasattr(self, "axi_dma_2") else True
+        while not self.axi_dma_0.recvchannel.idle:
+            if time.time() - start > timeout:
+                buf_flush.close()
+                raise TimeoutError("Raw DMA 0 capture timed out.")
+            time.sleep(0.001)
 
-            if dma0_done and dma1_done and dma2_done:
-                # 1. Process Raw Time
-                raw = np.array(self._buf_time_raw)
-                raw_a0 = raw[0::2]
-                raw_a1 = raw[1::2]
-                v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
-                v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
+        # 3. Queue flush Frame 2 on DMA 0 to push FFT/IFFT tail
+        self.axi_dma_0.recvchannel.transfer(buf_flush)
+        self.trigger.arm()
 
-                # 2. Process Spectrum
-                if hasattr(self, "axi_dma_1"):
-                    raw_mag = np.array(self._buf_fft_mag, dtype=np.float64)
-                    linear_mag = raw_mag / 32768.0
-                    mags_db = 20.0 * np.log10(np.maximum(linear_mag, 1e-6))
-                    df = self.fs_per_ch / float(self.fft_len)
-                    freq_axis = np.arange(len(mags_db)) * df
-                else:
-                    freq_axis = np.array([])
-                    mags_db = np.array([])
+        # Wait for FFT (DMA 1) and IFFT (DMA 2)
+        while not (
+            (not hasattr(self, "axi_dma_1") or self.axi_dma_1.recvchannel.idle) and
+            (not hasattr(self, "axi_dma_2") or self.axi_dma_2.recvchannel.idle)
+        ):
+            if time.time() - start > timeout:
+                buf_flush.close()
+                raise TimeoutError("Multi-DMA capture timed out waiting for FFT/IFFT tail.")
+            time.sleep(0.001)
 
-                # 3. Process Filtered IFFT Time
-                if hasattr(self, "axi_dma_2"):
-                    raw_filt = np.array(self._buf_time_filtered)
-                    v_filt = (raw_filt >> 4) * (3.3 / 4095.0)
-                else:
-                    v_filt = np.copy(v_a0)
+        buf_flush.close()
 
-                # Crop startup transients
-                if crop_startup_samples > 0 and len(v_a0) > (2 * crop_startup_samples):
-                    v_a0 = v_a0[crop_startup_samples:-crop_startup_samples]
-                    v_a1 = v_a1[crop_startup_samples:-crop_startup_samples]
-                    if len(v_filt) > (2 * crop_startup_samples):
-                        v_filt = v_filt[crop_startup_samples:-crop_startup_samples]
+        # 4. Process Raw Time
+        raw = np.array(self._buf_time_raw)
+        raw_a0 = raw[0::2]
+        raw_a1 = raw[1::2]
+        v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
+        v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
 
-                return v_a0, v_a1, v_filt, freq_axis, mags_db
+        # 5. Process Spectrum
+        if hasattr(self, "axi_dma_1"):
+            raw_mag = np.array(self._buf_fft_mag, dtype=np.float64)
+            linear_mag = raw_mag / 32768.0
+            mags_db = 20.0 * np.log10(np.maximum(linear_mag, 1e-6))
+            df = self.fs_per_ch / float(self.fft_len)
+            freq_axis = np.arange(len(mags_db)) * df
+        else:
+            freq_axis = np.array([])
+            mags_db = np.array([])
 
-            time.sleep(0.002)
+        # 6. Process Filtered IFFT Time
+        if hasattr(self, "axi_dma_2"):
+            raw_filt = np.array(self._buf_time_filtered)
+            v_filt = (raw_filt >> 4) * (3.3 / 4095.0)
+        else:
+            v_filt = np.copy(v_a0)
 
-        raise TimeoutError(f"Multi-DMA capture timed out after {timeout}s.")
+        # Crop startup transients
+        if crop_startup_samples > 0 and len(v_a0) > (2 * crop_startup_samples):
+            v_a0 = v_a0[crop_startup_samples:-crop_startup_samples]
+            v_a1 = v_a1[crop_startup_samples:-crop_startup_samples]
+            if len(v_filt) > (2 * crop_startup_samples):
+                v_filt = v_filt[crop_startup_samples:-crop_startup_samples]
+
+        return v_a0, v_a1, v_filt, freq_axis, mags_db
 
     # =========================================================================
     # 3. Continuous Multi-Second Flight Recorder

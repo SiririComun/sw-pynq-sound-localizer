@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/v1.6.0-overlay-integration @ fbf000b
+• Repository State    : feat/v1.6.0-overlay-integration @ 052727e
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.6.0
 • Package Version     : v1.0.0
 ==============================================================================
@@ -12,16 +12,17 @@ Git Context & Branch Topology:
 Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/v1.6.0-overlay-integration                fbf000b [origin/feat/v1.6.0-overlay-integration] chore(context): update repository summary with Cog
+* feat/v1.6.0-overlay-integration                052727e [origin/feat/v1.6.0-overlay-integration] fix(init): remove conflicting notebooks import to enable clean package import
   main                                           ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/v1.6.0-overlay-integration fbf000b chore(context): update repository summary with Cog
+  remotes/origin/feat/v1.6.0-overlay-integration 052727e fix(init): remove conflicting notebooks import to enable clean package import
   remotes/origin/main                            ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
 Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* fbf000b  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : chore(context): update repository summary with Cog (SiririComun)
+* 052727e  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : fix(init): remove conflicting notebooks import to enable clean package import (SiririComun)
+* fbf000b  - 2026-08-28 : chore(context): update repository summary with Cog (SiririComun)
 * afdaa76  - 2026-08-28 : fix(packaging): structure pynq_localizer.notebooks as subpackage for isolated bundling (SiririComun)
 * 40df672  - 2026-08-28 : fix(packaging): add MANIFEST.in to guarantee .ipynb wheel inclusion (SiririComun)
 * 8ee0cb8  - 2026-08-28 : fix(packaging): embed isolated notebooks_data inside package namespace (SiririComun)
@@ -35,7 +36,6 @@ Multi-Branch Git Commit Graph:
 * ab1de60  (origin/main, main) - 2026-08-27 : feat(context): integrate Cog v1.0.0 context engine and scaffold configuration (SiririComun)
 * 61f9c70  (tag: v1.0.0) - 2026-08-23 : docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook (SiririComun)
 * ccfa0f7  - 2026-08-23 : feat(dashboard): add moving median DSP filter, 2048-pt STFT resolution, and clean NaN CSV export (SiririComun)
-* 8f98eb7  - 2026-08-23 : feat(dashboard): add 10-second CSV export button and full [f_min, f_max] frequency zoom (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -425,80 +425,100 @@ class MicrophoneArrayOverlay(Overlay):
           1. Raw Stereo Time (A0 & A1 via axi_dma_0)
           2. Masked Magnitude Spectrum (axi_dma_1)
           3. Filtered & Reconstructed Time (axi_dma_2)
+        Uses a 2-frame lock-step flush to clear pipelined FFT/IFFT latency.
 
         :return: (v_raw_a0, v_raw_a1, v_filtered, freq_axis_hz, mags_db)
         """
         self._init_xadc_simultaneous()
 
-        # 1. Reset and arm DMA 0 (Raw Time)
+        pkt_size = self.packet_size
+        fft_pts = self.fft_len
+
+        buf_flush = allocate(shape=(pkt_size,), dtype="u2")
+
+        # 1. Reset and start all 3 DMAs
         self.axi_dma_0.mmio.write(0x30, 0x04)
-        # 2. Reset and arm DMA 1 (Spectrum Magnitude)
         if hasattr(self, "axi_dma_1"):
             self.axi_dma_1.mmio.write(0x30, 0x04)
-        # 3. Reset and arm DMA 2 (Filtered Time)
         if hasattr(self, "axi_dma_2"):
             self.axi_dma_2.mmio.write(0x30, 0x04)
 
-        time.sleep(0.002)
+        time.sleep(0.003)
 
         self.axi_dma_0.recvchannel.start()
-        self.axi_dma_0.recvchannel.transfer(self._buf_time_raw)
-
         if hasattr(self, "axi_dma_1"):
             self.axi_dma_1.recvchannel.start()
-            self.axi_dma_1.recvchannel.transfer(self._buf_fft_mag)
-
         if hasattr(self, "axi_dma_2"):
             self.axi_dma_2.recvchannel.start()
+
+        # 2. Issue transfers for Frame 1
+        self.axi_dma_0.recvchannel.transfer(self._buf_time_raw)
+        if hasattr(self, "axi_dma_1"):
+            self.axi_dma_1.recvchannel.transfer(self._buf_fft_mag)
+        if hasattr(self, "axi_dma_2"):
             self.axi_dma_2.recvchannel.transfer(self._buf_time_filtered)
 
-        # Trigger synchronized acquisition
+        # Trigger acquisition
+        self.trigger.set_mode("Auto")
         self.trigger.arm()
 
+        # Wait for Frame 1 Raw DMA 0
         start = time.time()
-        while time.time() - start < timeout:
-            dma0_done = self.axi_dma_0.recvchannel.idle
-            dma1_done = self.axi_dma_1.recvchannel.idle if hasattr(self, "axi_dma_1") else True
-            dma2_done = self.axi_dma_2.recvchannel.idle if hasattr(self, "axi_dma_2") else True
+        while not self.axi_dma_0.recvchannel.idle:
+            if time.time() - start > timeout:
+                buf_flush.close()
+                raise TimeoutError("Raw DMA 0 capture timed out.")
+            time.sleep(0.001)
 
-            if dma0_done and dma1_done and dma2_done:
-                # 1. Process Raw Time
-                raw = np.array(self._buf_time_raw)
-                raw_a0 = raw[0::2]
-                raw_a1 = raw[1::2]
-                v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
-                v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
+        # 3. Queue flush Frame 2 on DMA 0 to push FFT/IFFT tail
+        self.axi_dma_0.recvchannel.transfer(buf_flush)
+        self.trigger.arm()
 
-                # 2. Process Spectrum
-                if hasattr(self, "axi_dma_1"):
-                    raw_mag = np.array(self._buf_fft_mag, dtype=np.float64)
-                    linear_mag = raw_mag / 32768.0
-                    mags_db = 20.0 * np.log10(np.maximum(linear_mag, 1e-6))
-                    df = self.fs_per_ch / float(self.fft_len)
-                    freq_axis = np.arange(len(mags_db)) * df
-                else:
-                    freq_axis = np.array([])
-                    mags_db = np.array([])
+        # Wait for FFT (DMA 1) and IFFT (DMA 2)
+        while not (
+            (not hasattr(self, "axi_dma_1") or self.axi_dma_1.recvchannel.idle) and
+            (not hasattr(self, "axi_dma_2") or self.axi_dma_2.recvchannel.idle)
+        ):
+            if time.time() - start > timeout:
+                buf_flush.close()
+                raise TimeoutError("Multi-DMA capture timed out waiting for FFT/IFFT tail.")
+            time.sleep(0.001)
 
-                # 3. Process Filtered IFFT Time
-                if hasattr(self, "axi_dma_2"):
-                    raw_filt = np.array(self._buf_time_filtered)
-                    v_filt = (raw_filt >> 4) * (3.3 / 4095.0)
-                else:
-                    v_filt = np.copy(v_a0)
+        buf_flush.close()
 
-                # Crop startup transients
-                if crop_startup_samples > 0 and len(v_a0) > (2 * crop_startup_samples):
-                    v_a0 = v_a0[crop_startup_samples:-crop_startup_samples]
-                    v_a1 = v_a1[crop_startup_samples:-crop_startup_samples]
-                    if len(v_filt) > (2 * crop_startup_samples):
-                        v_filt = v_filt[crop_startup_samples:-crop_startup_samples]
+        # 4. Process Raw Time
+        raw = np.array(self._buf_time_raw)
+        raw_a0 = raw[0::2]
+        raw_a1 = raw[1::2]
+        v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
+        v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
 
-                return v_a0, v_a1, v_filt, freq_axis, mags_db
+        # 5. Process Spectrum
+        if hasattr(self, "axi_dma_1"):
+            raw_mag = np.array(self._buf_fft_mag, dtype=np.float64)
+            linear_mag = raw_mag / 32768.0
+            mags_db = 20.0 * np.log10(np.maximum(linear_mag, 1e-6))
+            df = self.fs_per_ch / float(self.fft_len)
+            freq_axis = np.arange(len(mags_db)) * df
+        else:
+            freq_axis = np.array([])
+            mags_db = np.array([])
 
-            time.sleep(0.002)
+        # 6. Process Filtered IFFT Time
+        if hasattr(self, "axi_dma_2"):
+            raw_filt = np.array(self._buf_time_filtered)
+            v_filt = (raw_filt >> 4) * (3.3 / 4095.0)
+        else:
+            v_filt = np.copy(v_a0)
 
-        raise TimeoutError(f"Multi-DMA capture timed out after {timeout}s.")
+        # Crop startup transients
+        if crop_startup_samples > 0 and len(v_a0) > (2 * crop_startup_samples):
+            v_a0 = v_a0[crop_startup_samples:-crop_startup_samples]
+            v_a1 = v_a1[crop_startup_samples:-crop_startup_samples]
+            if len(v_filt) > (2 * crop_startup_samples):
+                v_filt = v_filt[crop_startup_samples:-crop_startup_samples]
+
+        return v_a0, v_a1, v_filt, freq_axis, mags_db
 
     # =========================================================================
     # 3. Continuous Multi-Second Flight Recorder
@@ -1648,7 +1668,9 @@ class KinematicsDashboard:
     # Thread 1: Fast Producer (Drains Hardware DMA & Computes DSP at 100 Hz)
     # =========================================================================
     def _dsp_worker(self):
-        dma = self.overlay.axi_dma_0
+        dma0 = self.overlay.axi_dma_0
+        dma1 = getattr(self.overlay, "axi_dma_1", None)
+        dma2 = getattr(self.overlay, "axi_dma_2", None)
         trig = self.trigger
 
         if hasattr(self.overlay, "xadc_wiz_0"):
@@ -1656,99 +1678,118 @@ class KinematicsDashboard:
             self.overlay.xadc_wiz_0.mmio.write(0x320, 0x0000)
             self.overlay.xadc_wiz_0.mmio.write(0x324, 0x0202)
 
-        chunk_pts = 1024
+        chunk_pts = 2048
         if trig:
             trig.set_decimation(10)
             trig.set_packet_size(chunk_pts)
             trig.set_mode("Auto")
 
-        dma.mmio.write(0x30, 0x04)
+        dma0.mmio.write(0x30, 0x04)
+        if dma1:
+            dma1.mmio.write(0x30, 0x04)
+        if dma2:
+            dma2.mmio.write(0x30, 0x04)
         time.sleep(0.002)
-        dma.recvchannel.start()
 
-        cma_buf = allocate(shape=(chunk_pts,), dtype="u2")
-        dma_armed = False
+        dma0.recvchannel.start()
+        if dma1:
+            dma1.recvchannel.start()
+        if dma2:
+            dma2.recvchannel.start()
+
+        cma_raw = allocate(shape=(chunk_pts,), dtype="u2")
+        cma_fft = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma1 else None
+        cma_filt = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma2 else None
 
         try:
             while self._is_running:
-                if not dma_armed:
-                    dma.recvchannel.transfer(cma_buf)
-                    if trig:
-                        trig.arm()
-                    dma_armed = True
+                dma0.recvchannel.transfer(cma_raw)
+                if dma1 and cma_fft:
+                    dma1.recvchannel.transfer(cma_fft)
+                if dma2 and cma_filt:
+                    dma2.recvchannel.transfer(cma_filt)
 
-                if dma.recvchannel.idle:
-                    dma_armed = False
-                    raw = np.array(cma_buf)
+                if trig:
+                    trig.arm()
 
-                    raw_a0 = raw[0::2]
-                    raw_a1 = raw[1::2]
-
-                    v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
-                    v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
-
-                    x_ac_a0 = v_a0 - np.mean(v_a0)
-                    x_ac_a1 = v_a1 - np.mean(v_a1)
-
-                    amp_a0 = float(np.sqrt(np.mean(x_ac_a0 ** 2)))
-                    amp_a1 = float(np.sqrt(np.mean(x_ac_a1 ** 2)))
-                    squelch = float(self.squelch_slider.value)
-                    smooth_taps = int(self.smooth_dd.value)
-
-                    f_min = float(self.f_min_input.value)
-                    f_max = float(self.f_max_input.value)
-
-                    # 1. Channel 1 (A0) Pitch Tracking (2048-point STFT)
-                    if amp_a0 >= squelch and len(x_ac_a0) >= 128:
-                        pad_len = self.win_len - len(x_ac_a0)
-                        p0 = np.pad(x_ac_a0, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a0[:self.win_len]
-                        mag_db0 = 20.0 * np.log10(np.maximum((np.abs(np.fft.rfft(p0 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4), 1e-6))
-                        raw_f0_a0, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db0, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
-
-                        # Moving Median Filter
-                        self._hist_f0_a0.append(raw_f0_a0)
-                        recent_pts = list(self._hist_f0_a0)[-smooth_taps:]
-                        f0_a0 = float(np.median(recent_pts))
-                    else:
-                        f0_a0 = np.nan
-                        self._hist_f0_a0.clear()
-
-                    # 2. Channel 2 (A1) Pitch Tracking (2048-point STFT)
-                    if amp_a1 >= squelch and len(x_ac_a1) >= 128:
-                        pad_len = self.win_len - len(x_ac_a1)
-                        p1 = np.pad(x_ac_a1, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a1[:self.win_len]
-                        mag_db1 = 20.0 * np.log10(np.maximum((np.abs(np.fft.rfft(p1 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4), 1e-6))
-                        raw_f0_a1, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db1, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
-
-                        # Moving Median Filter
-                        self._hist_f0_a1.append(raw_f0_a1)
-                        recent_pts = list(self._hist_f0_a1)[-smooth_taps:]
-                        f0_a1 = float(np.median(recent_pts))
-                    else:
-                        f0_a1 = np.nan
-                        self._hist_f0_a1.clear()
-
-                    self._cur_amp_a0 = amp_a0
-                    self._cur_f0_a0 = f0_a0
-                    self._cur_amp_a1 = amp_a1
-                    self._cur_f0_a1 = f0_a1
-
-                    with self._buf_lock:
-                        self.buf_amp_a0[:-1] = self.buf_amp_a0[1:]
-                        self.buf_amp_a0[-1] = amp_a0
-                        self.buf_freq_a0[:-1] = self.buf_freq_a0[1:]
-                        self.buf_freq_a0[-1] = f0_a0
-
-                        self.buf_amp_a1[:-1] = self.buf_amp_a1[1:]
-                        self.buf_amp_a1[-1] = amp_a1
-                        self.buf_freq_a1[:-1] = self.buf_freq_a1[1:]
-                        self.buf_freq_a1[-1] = f0_a1
-                else:
+                t0 = time.time()
+                while not dma0.recvchannel.idle:
+                    if not self._is_running or (time.time() - t0 > 0.5):
+                        break
                     time.sleep(0.001)
 
+                if not self._is_running:
+                    break
+
+                raw = np.array(cma_raw)
+                raw_a0 = raw[0::2]
+                raw_a1 = raw[1::2]
+
+                v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
+                v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
+
+                x_ac_a0 = v_a0 - np.mean(v_a0)
+                x_ac_a1 = v_a1 - np.mean(v_a1)
+
+                amp_a0 = float(np.sqrt(np.mean(x_ac_a0 ** 2)))
+                amp_a1 = float(np.sqrt(np.mean(x_ac_a1 ** 2)))
+                squelch = float(self.squelch_slider.value)
+                smooth_taps = int(self.smooth_dd.value)
+
+                f_min = float(self.f_min_input.value)
+                f_max = float(self.f_max_input.value)
+
+                # Channel 1 (A0) Pitch Tracking
+                if amp_a0 >= squelch and len(x_ac_a0) >= 128:
+                    pad_len = self.win_len - len(x_ac_a0)
+                    p0 = np.pad(x_ac_a0, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a0[:self.win_len]
+                    mag_db0 = 20.0 * np.log10(np.maximum((np.abs(np.fft.rfft(p0 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4), 1e-6))
+                    raw_f0_a0, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db0, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
+
+                    self._hist_f0_a0.append(raw_f0_a0)
+                    recent_pts = list(self._hist_f0_a0)[-smooth_taps:]
+                    f0_a0 = float(np.median(recent_pts))
+                else:
+                    f0_a0 = np.nan
+                    self._hist_f0_a0.clear()
+
+                # Channel 2 (A1) Pitch Tracking
+                if amp_a1 >= squelch and len(x_ac_a1) >= 128:
+                    pad_len = self.win_len - len(x_ac_a1)
+                    p1 = np.pad(x_ac_a1, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a1[:self.win_len]
+                    mag_db1 = 20.0 * np.log10(np.maximum((np.abs(np.fft.rfft(p1 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4), 1e-6))
+                    raw_f0_a1, _ = KinematicAnalytics.track_sub_hertz_pitch(self.freq_axis, mag_db1, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True)
+
+                    self._hist_f0_a1.append(raw_f0_a1)
+                    recent_pts = list(self._hist_f0_a1)[-smooth_taps:]
+                    f0_a1 = float(np.median(recent_pts))
+                else:
+                    f0_a1 = np.nan
+                    self._hist_f0_a1.clear()
+
+                self._cur_amp_a0 = amp_a0
+                self._cur_f0_a0 = f0_a0
+                self._cur_amp_a1 = amp_a1
+                self._cur_f0_a1 = f0_a1
+
+                with self._buf_lock:
+                    self.buf_amp_a0[:-1] = self.buf_amp_a0[1:]
+                    self.buf_amp_a0[-1] = amp_a0
+                    self.buf_freq_a0[:-1] = self.buf_freq_a0[1:]
+                    self.buf_freq_a0[-1] = f0_a0
+
+                    self.buf_amp_a1[:-1] = self.buf_amp_a1[1:]
+                    self.buf_amp_a1[-1] = amp_a1
+                    self.buf_freq_a1[:-1] = self.buf_freq_a1[1:]
+                    self.buf_freq_a1[-1] = f0_a1
+
         finally:
-            cma_buf.close()
-            dma.mmio.write(0x30, 0x04)
+            cma_raw.close()
+            if cma_fft:
+                cma_fft.close()
+            if cma_filt:
+                cma_filt.close()
+            dma0.mmio.write(0x30, 0x04)
             if trig:
                 trig.disarm()
 
