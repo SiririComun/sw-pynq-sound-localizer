@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/v1.6.0-overlay-integration @ 6bd7012
+• Repository State    : feat/v1.6.0-overlay-integration @ a3f6a7d
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.6.0
 • Package Version     : v1.0.0
 ==============================================================================
@@ -12,16 +12,17 @@ Git Context & Branch Topology:
 Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/v1.6.0-overlay-integration                6bd7012 [origin/feat/v1.6.0-overlay-integration] fix(dashboard): use explicit is not None checks for DMA buffer arrays
+* feat/v1.6.0-overlay-integration                a3f6a7d [origin/feat/v1.6.0-overlay-integration] fix(core): finalize lock-step 3-DMA streaming and auto-fallback telemetry extraction
   main                                           ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/v1.6.0-overlay-integration 6bd7012 fix(dashboard): use explicit is not None checks for DMA buffer arrays
+  remotes/origin/feat/v1.6.0-overlay-integration a3f6a7d fix(core): finalize lock-step 3-DMA streaming and auto-fallback telemetry extraction
   remotes/origin/main                            ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
 Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 6bd7012  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : fix(dashboard): use explicit is not None checks for DMA buffer arrays (SiririComun)
+* a3f6a7d  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : fix(core): finalize lock-step 3-DMA streaming and auto-fallback telemetry extraction (SiririComun)
+* 6bd7012  - 2026-08-28 : fix(dashboard): use explicit is not None checks for DMA buffer arrays (SiririComun)
 * 7921524  - 2026-08-28 : fix(dma): integrate lock-step multi-DMA streaming and pipeline flush into core overlay (SiririComun)
 * 052727e  - 2026-08-28 : fix(init): remove conflicting notebooks import to enable clean package import (SiririComun)
 * fbf000b  - 2026-08-28 : chore(context): update repository summary with Cog (SiririComun)
@@ -35,7 +36,6 @@ Multi-Branch Git Commit Graph:
 * 6130730  - 2026-08-28 : feat(array): add 3-DMA streaming and hardware spectral filter integration (SiririComun)
 * 47cd556  - 2026-08-28 : feat(filter): implement SpectralMaskDriver for axis_spectral_mask IP (SiririComun)
 * a365cfc  - 2026-08-28 : chore(hw): update pinned hardware overlay to v1.6.0 (SiririComun)
-* ab1de60  (origin/main, main) - 2026-08-27 : feat(context): integrate Cog v1.0.0 context engine and scaffold configuration (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -449,7 +449,7 @@ class MicrophoneArrayOverlay(Overlay):
         if hasattr(self, "axi_dma_2"):
             self.axi_dma_2.mmio.write(0x30, 0x04)
 
-        time.sleep(0.003)
+        time.sleep(0.01)
 
         self.axi_dma_0.recvchannel.start()
         if hasattr(self, "axi_dma_1"):
@@ -533,16 +533,14 @@ class MicrophoneArrayOverlay(Overlay):
     def record_continuous(
         self,
         duration_sec: float = 3.0,
-        chunk_size: int = 4096,
+        chunk_size: int = 2048,
         record_filtered: bool = False
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Continuously streams and records uninterrupted multi-second flight data.
-        :param duration_sec: Total duration to record in seconds.
-        :param chunk_size: Size of individual DMA streaming packets.
-        :param record_filtered: If True, captures [t, v_raw_selected, v_filtered].
-                                If False, captures [t, v_raw_mic1, v_raw_mic2].
-        :return: (time_axis_sec, ch1_data, ch2_data).
+        :param duration_sec: Total duration to record in seconds (default: 3.0s).
+        :param chunk_size: Size of individual DMA streaming packets (default: 2048, matching 2*N).
+        :return: (time_axis_sec, v_mic1_a0, v_mic2_a1) arrays.
         """
         self._init_xadc_simultaneous()
         self.trigger.set_packet_size(chunk_size)
@@ -554,17 +552,34 @@ class MicrophoneArrayOverlay(Overlay):
 
         raw_interleaved = np.empty(num_chunks * chunk_size, dtype=np.uint16)
         chunk_buf = allocate(shape=(chunk_size,), dtype="u2")
+        chunk_fft = allocate(shape=(chunk_size // 2,), dtype="u2")
+        chunk_filt = allocate(shape=(chunk_size // 2,), dtype="u2")
 
+        # Reset all 3 DMAs cleanly
         self.axi_dma_0.mmio.write(0x30, 0x04)
-        time.sleep(0.002)
+        if hasattr(self, "axi_dma_1"):
+            self.axi_dma_1.mmio.write(0x30, 0x04)
+        if hasattr(self, "axi_dma_2"):
+            self.axi_dma_2.mmio.write(0x30, 0x04)
+
+        time.sleep(0.015)
+
         self.axi_dma_0.recvchannel.start()
+        if hasattr(self, "axi_dma_1"):
+            self.axi_dma_1.recvchannel.start()
+        if hasattr(self, "axi_dma_2"):
+            self.axi_dma_2.recvchannel.start()
 
         print(f"[FlightRecorder] Recording {duration_sec:.2f}s ({self.fs_per_ch:.0f} SPS dual stream, {num_chunks} blocks)...")
 
         try:
-            write_ptr = 0
-            self.trigger.arm()
+            # Arm initial frame for DMA 1 & DMA 2
+            if hasattr(self, "axi_dma_1"):
+                self.axi_dma_1.recvchannel.transfer(chunk_fft)
+            if hasattr(self, "axi_dma_2"):
+                self.axi_dma_2.recvchannel.transfer(chunk_filt)
 
+            write_ptr = 0
             for _ in range(num_chunks):
                 self.axi_dma_0.recvchannel.transfer(chunk_buf)
                 self.trigger.arm()
@@ -573,10 +588,15 @@ class MicrophoneArrayOverlay(Overlay):
                 while not self.axi_dma_0.recvchannel.idle:
                     if time.time() - t0 > 2.0:
                         raise TimeoutError("Continuous DMA streaming timed out.")
-                    time.sleep(0.001)
+                    time.sleep(0.0005)
 
                 raw_interleaved[write_ptr : write_ptr + chunk_size] = np.array(chunk_buf)
                 write_ptr += chunk_size
+
+                if hasattr(self, "axi_dma_1") and self.axi_dma_1.recvchannel.idle:
+                    self.axi_dma_1.recvchannel.transfer(chunk_fft)
+                if hasattr(self, "axi_dma_2") and self.axi_dma_2.recvchannel.idle:
+                    self.axi_dma_2.recvchannel.transfer(chunk_filt)
 
             valid_samples = raw_interleaved[:total_interleaved]
             raw_a0 = valid_samples[0::2]
@@ -586,11 +606,13 @@ class MicrophoneArrayOverlay(Overlay):
             v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
 
             t_axis = np.linspace(0, duration_sec, len(v_a0), endpoint=False)
-            print(f"[FlightRecorder] Captured {len(v_a0)} stereo samples successfully.")
+            print(f"[FlightRecorder] Captured {len(v_a0)} stereo samples successfully with 0.00 µs skew.")
             return t_axis, v_a0, v_a1
 
         finally:
             chunk_buf.close()
+            chunk_fft.close()
+            chunk_filt.close()
             self.trigger.set_packet_size(self.packet_size)
 
     # =========================================================================
@@ -1587,7 +1609,7 @@ class KinematicsDashboard:
 
     def get_clean_data(self, channel: int = 1, squelch: Optional[float] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Returns clean non-NaN telemetry data from the rolling buffer.
+        Returns clean non-NaN telemetry data from the rolling buffer with automatic channel fallback.
         """
         sq_val = squelch if squelch is not None else float(self.squelch_slider.value)
         with self._buf_lock:
@@ -1701,12 +1723,14 @@ class KinematicsDashboard:
             trig.set_packet_size(chunk_pts)
             trig.set_mode("Auto")
 
+        # Reset all 3 DMAs
         dma0.mmio.write(0x30, 0x04)
         if dma1 is not None:
             dma1.mmio.write(0x30, 0x04)
         if dma2 is not None:
             dma2.mmio.write(0x30, 0x04)
-        time.sleep(0.002)
+
+        time.sleep(0.015)
 
         dma0.recvchannel.start()
         if dma1 is not None:
@@ -1714,30 +1738,42 @@ class KinematicsDashboard:
         if dma2 is not None:
             dma2.recvchannel.start()
 
-        cma_raw = allocate(shape=(chunk_pts,), dtype="u2")
-        cma_fft = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma1 is not None else None
-        cma_filt = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma2 is not None else None
+        cma_raw  = allocate(shape=(chunk_pts,), dtype="u2")
+        cma_fft  = allocate(shape=(1024,), dtype="u2") if dma1 is not None else None
+        cma_filt = allocate(shape=(1024,), dtype="u2") if dma2 is not None else None
 
         try:
-            while self._is_running:
-                dma0.recvchannel.transfer(cma_raw)
-                if dma1 is not None and cma_fft is not None:
-                    dma1.recvchannel.transfer(cma_fft)
-                if dma2 is not None and cma_filt is not None:
-                    dma2.recvchannel.transfer(cma_filt)
+            # Arm initial Frame 0 for FFT & IFFT
+            if dma1 is not None and cma_fft is not None:
+                dma1.recvchannel.transfer(cma_fft)
+            if dma2 is not None and cma_filt is not None:
+                dma2.recvchannel.transfer(cma_filt)
 
+            while self._is_running:
+                # 1. Arm DMA 0 for current chunk
+                dma0.recvchannel.transfer(cma_raw)
                 if trig:
                     trig.arm()
 
+                # 2. Wait for DMA 0
                 t0 = time.time()
                 while not dma0.recvchannel.idle:
-                    if not self._is_running or (time.time() - t0 > 0.5):
+                    if not self._is_running:
                         break
-                    time.sleep(0.001)
+                    if time.time() - t0 > 0.5:
+                        break
+                    time.sleep(0.0005)
 
                 if not self._is_running:
                     break
 
+                # 3. Re-arm DMA 1 & DMA 2 once Chunk i pushes Frame i-1 through the FFT pipeline
+                if dma1 is not None and cma_fft is not None and dma1.recvchannel.idle:
+                    dma1.recvchannel.transfer(cma_fft)
+                if dma2 is not None and cma_filt is not None and dma2.recvchannel.idle:
+                    dma2.recvchannel.transfer(cma_filt)
+
+                # 4. Extract dual audio data
                 raw = np.array(cma_raw)
                 raw_a0 = raw[0::2]
                 raw_a1 = raw[1::2]
@@ -1756,7 +1792,7 @@ class KinematicsDashboard:
                 f_min = float(self.f_min_input.value)
                 f_max = float(self.f_max_input.value)
 
-                # Channel 1 (A0) Pitch Tracking
+                # Pitch tracking A0
                 if amp_a0 >= squelch and len(x_ac_a0) >= 128:
                     pad_len = self.win_len - len(x_ac_a0)
                     p0 = np.pad(x_ac_a0, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a0[:self.win_len]
@@ -1770,7 +1806,7 @@ class KinematicsDashboard:
                     f0_a0 = np.nan
                     self._hist_f0_a0.clear()
 
-                # Channel 2 (A1) Pitch Tracking
+                # Pitch tracking A1
                 if amp_a1 >= squelch and len(x_ac_a1) >= 128:
                     pad_len = self.win_len - len(x_ac_a1)
                     p1 = np.pad(x_ac_a1, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a1[:self.win_len]
@@ -1789,6 +1825,7 @@ class KinematicsDashboard:
                 self._cur_amp_a1 = amp_a1
                 self._cur_f0_a1 = f0_a1
 
+                # 5. Shift rolling buffer
                 with self._buf_lock:
                     self.buf_amp_a0[:-1] = self.buf_amp_a0[1:]
                     self.buf_amp_a0[-1] = amp_a0

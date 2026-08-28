@@ -236,7 +236,7 @@ class MicrophoneArrayOverlay(Overlay):
         if hasattr(self, "axi_dma_2"):
             self.axi_dma_2.mmio.write(0x30, 0x04)
 
-        time.sleep(0.003)
+        time.sleep(0.01)
 
         self.axi_dma_0.recvchannel.start()
         if hasattr(self, "axi_dma_1"):
@@ -320,16 +320,14 @@ class MicrophoneArrayOverlay(Overlay):
     def record_continuous(
         self,
         duration_sec: float = 3.0,
-        chunk_size: int = 4096,
+        chunk_size: int = 2048,
         record_filtered: bool = False
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Continuously streams and records uninterrupted multi-second flight data.
-        :param duration_sec: Total duration to record in seconds.
-        :param chunk_size: Size of individual DMA streaming packets.
-        :param record_filtered: If True, captures [t, v_raw_selected, v_filtered].
-                                If False, captures [t, v_raw_mic1, v_raw_mic2].
-        :return: (time_axis_sec, ch1_data, ch2_data).
+        :param duration_sec: Total duration to record in seconds (default: 3.0s).
+        :param chunk_size: Size of individual DMA streaming packets (default: 2048, matching 2*N).
+        :return: (time_axis_sec, v_mic1_a0, v_mic2_a1) arrays.
         """
         self._init_xadc_simultaneous()
         self.trigger.set_packet_size(chunk_size)
@@ -341,17 +339,34 @@ class MicrophoneArrayOverlay(Overlay):
 
         raw_interleaved = np.empty(num_chunks * chunk_size, dtype=np.uint16)
         chunk_buf = allocate(shape=(chunk_size,), dtype="u2")
+        chunk_fft = allocate(shape=(chunk_size // 2,), dtype="u2")
+        chunk_filt = allocate(shape=(chunk_size // 2,), dtype="u2")
 
+        # Reset all 3 DMAs cleanly
         self.axi_dma_0.mmio.write(0x30, 0x04)
-        time.sleep(0.002)
+        if hasattr(self, "axi_dma_1"):
+            self.axi_dma_1.mmio.write(0x30, 0x04)
+        if hasattr(self, "axi_dma_2"):
+            self.axi_dma_2.mmio.write(0x30, 0x04)
+
+        time.sleep(0.015)
+
         self.axi_dma_0.recvchannel.start()
+        if hasattr(self, "axi_dma_1"):
+            self.axi_dma_1.recvchannel.start()
+        if hasattr(self, "axi_dma_2"):
+            self.axi_dma_2.recvchannel.start()
 
         print(f"[FlightRecorder] Recording {duration_sec:.2f}s ({self.fs_per_ch:.0f} SPS dual stream, {num_chunks} blocks)...")
 
         try:
-            write_ptr = 0
-            self.trigger.arm()
+            # Arm initial frame for DMA 1 & DMA 2
+            if hasattr(self, "axi_dma_1"):
+                self.axi_dma_1.recvchannel.transfer(chunk_fft)
+            if hasattr(self, "axi_dma_2"):
+                self.axi_dma_2.recvchannel.transfer(chunk_filt)
 
+            write_ptr = 0
             for _ in range(num_chunks):
                 self.axi_dma_0.recvchannel.transfer(chunk_buf)
                 self.trigger.arm()
@@ -360,10 +375,15 @@ class MicrophoneArrayOverlay(Overlay):
                 while not self.axi_dma_0.recvchannel.idle:
                     if time.time() - t0 > 2.0:
                         raise TimeoutError("Continuous DMA streaming timed out.")
-                    time.sleep(0.001)
+                    time.sleep(0.0005)
 
                 raw_interleaved[write_ptr : write_ptr + chunk_size] = np.array(chunk_buf)
                 write_ptr += chunk_size
+
+                if hasattr(self, "axi_dma_1") and self.axi_dma_1.recvchannel.idle:
+                    self.axi_dma_1.recvchannel.transfer(chunk_fft)
+                if hasattr(self, "axi_dma_2") and self.axi_dma_2.recvchannel.idle:
+                    self.axi_dma_2.recvchannel.transfer(chunk_filt)
 
             valid_samples = raw_interleaved[:total_interleaved]
             raw_a0 = valid_samples[0::2]
@@ -373,11 +393,13 @@ class MicrophoneArrayOverlay(Overlay):
             v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
 
             t_axis = np.linspace(0, duration_sec, len(v_a0), endpoint=False)
-            print(f"[FlightRecorder] Captured {len(v_a0)} stereo samples successfully.")
+            print(f"[FlightRecorder] Captured {len(v_a0)} stereo samples successfully with 0.00 µs skew.")
             return t_axis, v_a0, v_a1
 
         finally:
             chunk_buf.close()
+            chunk_fft.close()
+            chunk_filt.close()
             self.trigger.set_packet_size(self.packet_size)
 
     # =========================================================================

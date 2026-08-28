@@ -213,7 +213,7 @@ class KinematicsDashboard:
 
     def get_clean_data(self, channel: int = 1, squelch: Optional[float] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Returns clean non-NaN telemetry data from the rolling buffer.
+        Returns clean non-NaN telemetry data from the rolling buffer with automatic channel fallback.
         """
         sq_val = squelch if squelch is not None else float(self.squelch_slider.value)
         with self._buf_lock:
@@ -327,12 +327,14 @@ class KinematicsDashboard:
             trig.set_packet_size(chunk_pts)
             trig.set_mode("Auto")
 
+        # Reset all 3 DMAs
         dma0.mmio.write(0x30, 0x04)
         if dma1 is not None:
             dma1.mmio.write(0x30, 0x04)
         if dma2 is not None:
             dma2.mmio.write(0x30, 0x04)
-        time.sleep(0.002)
+
+        time.sleep(0.015)
 
         dma0.recvchannel.start()
         if dma1 is not None:
@@ -340,30 +342,42 @@ class KinematicsDashboard:
         if dma2 is not None:
             dma2.recvchannel.start()
 
-        cma_raw = allocate(shape=(chunk_pts,), dtype="u2")
-        cma_fft = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma1 is not None else None
-        cma_filt = allocate(shape=(chunk_pts // 2,), dtype="u2") if dma2 is not None else None
+        cma_raw  = allocate(shape=(chunk_pts,), dtype="u2")
+        cma_fft  = allocate(shape=(1024,), dtype="u2") if dma1 is not None else None
+        cma_filt = allocate(shape=(1024,), dtype="u2") if dma2 is not None else None
 
         try:
-            while self._is_running:
-                dma0.recvchannel.transfer(cma_raw)
-                if dma1 is not None and cma_fft is not None:
-                    dma1.recvchannel.transfer(cma_fft)
-                if dma2 is not None and cma_filt is not None:
-                    dma2.recvchannel.transfer(cma_filt)
+            # Arm initial Frame 0 for FFT & IFFT
+            if dma1 is not None and cma_fft is not None:
+                dma1.recvchannel.transfer(cma_fft)
+            if dma2 is not None and cma_filt is not None:
+                dma2.recvchannel.transfer(cma_filt)
 
+            while self._is_running:
+                # 1. Arm DMA 0 for current chunk
+                dma0.recvchannel.transfer(cma_raw)
                 if trig:
                     trig.arm()
 
+                # 2. Wait for DMA 0
                 t0 = time.time()
                 while not dma0.recvchannel.idle:
-                    if not self._is_running or (time.time() - t0 > 0.5):
+                    if not self._is_running:
                         break
-                    time.sleep(0.001)
+                    if time.time() - t0 > 0.5:
+                        break
+                    time.sleep(0.0005)
 
                 if not self._is_running:
                     break
 
+                # 3. Re-arm DMA 1 & DMA 2 once Chunk i pushes Frame i-1 through the FFT pipeline
+                if dma1 is not None and cma_fft is not None and dma1.recvchannel.idle:
+                    dma1.recvchannel.transfer(cma_fft)
+                if dma2 is not None and cma_filt is not None and dma2.recvchannel.idle:
+                    dma2.recvchannel.transfer(cma_filt)
+
+                # 4. Extract dual audio data
                 raw = np.array(cma_raw)
                 raw_a0 = raw[0::2]
                 raw_a1 = raw[1::2]
@@ -382,7 +396,7 @@ class KinematicsDashboard:
                 f_min = float(self.f_min_input.value)
                 f_max = float(self.f_max_input.value)
 
-                # Channel 1 (A0) Pitch Tracking
+                # Pitch tracking A0
                 if amp_a0 >= squelch and len(x_ac_a0) >= 128:
                     pad_len = self.win_len - len(x_ac_a0)
                     p0 = np.pad(x_ac_a0, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a0[:self.win_len]
@@ -396,7 +410,7 @@ class KinematicsDashboard:
                     f0_a0 = np.nan
                     self._hist_f0_a0.clear()
 
-                # Channel 2 (A1) Pitch Tracking
+                # Pitch tracking A1
                 if amp_a1 >= squelch and len(x_ac_a1) >= 128:
                     pad_len = self.win_len - len(x_ac_a1)
                     p1 = np.pad(x_ac_a1, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a1[:self.win_len]
@@ -415,6 +429,7 @@ class KinematicsDashboard:
                 self._cur_amp_a1 = amp_a1
                 self._cur_f0_a1 = f0_a1
 
+                # 5. Shift rolling buffer
                 with self._buf_lock:
                     self.buf_amp_a0[:-1] = self.buf_amp_a0[1:]
                     self.buf_amp_a0[-1] = amp_a0
