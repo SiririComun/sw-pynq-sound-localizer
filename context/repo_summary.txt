@@ -1,25 +1,27 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : main @ 61f9c70
-• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.0
+• Repository State    : feat/v1.6.0-overlay-integration @ ab1de60
+• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.6.0
 • Package Version     : v1.0.0
 ==============================================================================
 
 Git Context & Branch Topology:
 
 ```log
-Current Branch: main | Working Tree: Dirty (3 modified/untracked files)
+Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (4 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* main                61f9c70 [origin/main] docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook
-  remotes/origin/main 61f9c70 docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook
+* feat/v1.6.0-overlay-integration ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
+  main                            ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
+  remotes/origin/main             ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
 Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 61f9c70  (HEAD -> main, tag: v1.0.0, origin/main) - 2026-08-23 : docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook (SiririComun)
+* ab1de60  (HEAD -> feat/v1.6.0-overlay-integration, origin/main, main) - 2026-08-27 : feat(context): integrate Cog v1.0.0 context engine and scaffold configuration (SiririComun)
+* 61f9c70  (tag: v1.0.0) - 2026-08-23 : docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook (SiririComun)
 * ccfa0f7  - 2026-08-23 : feat(dashboard): add moving median DSP filter, 2048-pt STFT resolution, and clean NaN CSV export (SiririComun)
 * 8f98eb7  - 2026-08-23 : feat(dashboard): add 10-second CSV export button and full [f_min, f_max] frequency zoom (SiririComun)
 * 1cd138d  - 2026-08-23 : fix(array): align kinematics_dashboard signature with multi-tab dashboard (SiririComun)
@@ -177,105 +179,6 @@ ol.play_audio(channel=1)
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-```
-
-generate_sw_summary.sh: (context/generate_sw_summary.sh)
-
-```bash
-#!/usr/bin/env bash
-# ==============================================================================
-# Script: context/generate_sw_summary.sh
-# Target: sw-pynq-sound-localizer
-# Purpose: Dump Git history, structure, SW files, and notebook JSON into context/sw_summary.txt
-# ==============================================================================
-
-# Dynamically resolve paths
-CONTEXT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${CONTEXT_DIR}/.." && pwd)"
-OUTPUT_FILE="${CONTEXT_DIR}/sw_summary.txt"
-
-echo "Generating concise SW summary into: ${OUTPUT_FILE}..."
-> "${OUTPUT_FILE}"
-
-cd "${REPO_ROOT}" || exit 1
-
-# 1. Header, Branch Status & Git History
-cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
-Git Context & Branch Info:
-
-```log
-LOG_EOF
-
-if command -v git &> /dev/null && git rev-parse --is-inside-work-tree &> /dev/null; then
-    echo "Current Branch: $(git branch --show-current)" >> "${OUTPUT_FILE}"
-    echo "Branch Tracking Status:" >> "${OUTPUT_FILE}"
-    git branch -vv >> "${OUTPUT_FILE}"
-    echo "" >> "${OUTPUT_FILE}"
-    echo "Git Commit Graph & History:" >> "${OUTPUT_FILE}"
-    git log --graph --pretty=format:"%h %d - %cd : %s (%an)" --date=short -n 15 >> "${OUTPUT_FILE}"
-fi
-
-cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
-```
-
-Files structure:
-
-```log
-LOG_EOF
-
-# 2. Directory Tree
-if command -v tree &> /dev/null; then
-    tree -a -I '.git|__pycache__|*.egg-info|.pytest_cache|venv|env|dist|build|.ipynb_checkpoints' >> "${OUTPUT_FILE}"
-fi
-
-cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
-```
-
-LOG_EOF
-
-# 3. Exact list of targeted files and their markdown syntax
-TARGET_FILES=(
-    ".github/workflows/pypi.yml:yaml"
-    "hardware.json:json"
-    "setup.py:python"
-    "requirements.txt:text"
-    "pynq_localizer/__init__.py:python"
-    "pynq_localizer/loader.py:python"
-    "pynq_localizer/hw_trigger.py:python"
-    "pynq_localizer/array.py:python"
-    "pynq_localizer/kinematics.py:python"
-    "pynq_localizer/kinematics_dashboard.py:python"
-    "pynq_localizer/doa.py:python"
-    "pynq_localizer/radar_dashboard.py:python"
-    "pynq_localizer/notebooks.py:python"
-    "notebooks/01_zero_skew_verification.ipynb:json"
-    "notebooks/02_realtime_kinematics_telemetry.ipynb:json"
-    "notebooks/03_doppler_velocity_tracking.ipynb:json"
-    "notebooks/04_acoustic_free_fall_gravity.ipynb:json"
-    "notebooks/05_doa_polar_radar.ipynb:json"
-    "context/generate_sw_summary.sh:bash"
-)
-
-# 4. Append each file
-for item in "${TARGET_FILES[@]}"; do
-    filepath="${item%%:*}"
-    syntax="${item##*:}"
-    filename=$(basename "$filepath")
-
-    if [ -f "$filepath" ]; then
-        echo "Adding: ${filepath}"
-        {
-            echo "${filename}:"
-            echo ""
-            echo "\`\`\`${syntax}"
-            cat "${filepath}"
-            echo "\`\`\`"
-            echo ""
-        } >> "${OUTPUT_FILE}"
-    fi
-done
-
-echo "Done! SW context generated in: ${OUTPUT_FILE}"
 ```
 
 __init__.py: (pynq_localizer/__init__.py)
@@ -1740,7 +1643,7 @@ class HardwareLoader:
         """
         config = cls.get_hardware_config()
         repo = config.get("repo", "SiririComun/hw-xadc-dma-overlays")
-        target_version = version or config.get("version", "v1.5.0")
+        target_version = version or config.get("version", "v1.6.0")
 
         board_name = cls.get_board_name()
         bit_filename = f"{board_name}.bit"
@@ -1775,11 +1678,17 @@ class HardwareLoader:
         return local_bit
 
     @classmethod
-    def load_overlay(cls, version: str = None, download_dir: str = None) -> Overlay:
-        """Helper to load Overlay directly."""
-        bit_path = cls.get_overlay_path(version, download_dir)
-        print(f"[HardwareLoader] Loading overlay: {bit_path}")
-        return Overlay(str(bit_path))
+    def get_hardware_config(cls) -> dict:
+        """Load hardware pinning configuration from hardware.json."""
+        config_path = cls.get_project_root() / "hardware.json"
+        if not config_path.exists():
+            return {
+                "repo": "SiririComun/hw-xadc-dma-overlays",
+                "version": "v1.6.0",
+                "overlay_name": "pynq_z2"
+            }
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
 ```
 
 notebooks.py: (pynq_localizer/notebooks.py)

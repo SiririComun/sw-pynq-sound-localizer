@@ -67,7 +67,7 @@ class HardwareLoader:
         """
         config = cls.get_hardware_config()
         repo = config.get("repo", "SiririComun/hw-xadc-dma-overlays")
-        target_version = version or config.get("version", "v1.5.0")
+        target_version = version or config.get("version", "v1.6.0")
 
         board_name = cls.get_board_name()
         bit_filename = f"{board_name}.bit"
@@ -102,8 +102,14 @@ class HardwareLoader:
         return local_bit
 
     @classmethod
-    def load_overlay(cls, version: str = None, download_dir: str = None) -> Overlay:
-        """Helper to load Overlay directly."""
-        bit_path = cls.get_overlay_path(version, download_dir)
-        print(f"[HardwareLoader] Loading overlay: {bit_path}")
-        return Overlay(str(bit_path))
+    def get_hardware_config(cls) -> dict:
+        """Load hardware pinning configuration from hardware.json."""
+        config_path = cls.get_project_root() / "hardware.json"
+        if not config_path.exists():
+            return {
+                "repo": "SiririComun/hw-xadc-dma-overlays",
+                "version": "v1.6.0",
+                "overlay_name": "pynq_z2"
+            }
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
