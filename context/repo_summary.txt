@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/v1.6.0-overlay-integration @ 7921524
+• Repository State    : feat/v1.6.0-overlay-integration @ 6bd7012
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.6.0
 • Package Version     : v1.0.0
 ==============================================================================
@@ -9,19 +9,20 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (1 modified/untracked files)
+Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/v1.6.0-overlay-integration                7921524 [origin/feat/v1.6.0-overlay-integration] fix(dma): integrate lock-step multi-DMA streaming and pipeline flush into core overlay
+* feat/v1.6.0-overlay-integration                6bd7012 [origin/feat/v1.6.0-overlay-integration] fix(dashboard): use explicit is not None checks for DMA buffer arrays
   main                                           ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/v1.6.0-overlay-integration 7921524 fix(dma): integrate lock-step multi-DMA streaming and pipeline flush into core overlay
+  remotes/origin/feat/v1.6.0-overlay-integration 6bd7012 fix(dashboard): use explicit is not None checks for DMA buffer arrays
   remotes/origin/main                            ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
 Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 7921524  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : fix(dma): integrate lock-step multi-DMA streaming and pipeline flush into core overlay (SiririComun)
+* 6bd7012  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : fix(dashboard): use explicit is not None checks for DMA buffer arrays (SiririComun)
+* 7921524  - 2026-08-28 : fix(dma): integrate lock-step multi-DMA streaming and pipeline flush into core overlay (SiririComun)
 * 052727e  - 2026-08-28 : fix(init): remove conflicting notebooks import to enable clean package import (SiririComun)
 * fbf000b  - 2026-08-28 : chore(context): update repository summary with Cog (SiririComun)
 * afdaa76  - 2026-08-28 : fix(packaging): structure pynq_localizer.notebooks as subpackage for isolated bundling (SiririComun)
@@ -35,7 +36,6 @@ Multi-Branch Git Commit Graph:
 * 47cd556  - 2026-08-28 : feat(filter): implement SpectralMaskDriver for axis_spectral_mask IP (SiririComun)
 * a365cfc  - 2026-08-28 : chore(hw): update pinned hardware overlay to v1.6.0 (SiririComun)
 * ab1de60  (origin/main, main) - 2026-08-27 : feat(context): integrate Cog v1.0.0 context engine and scaffold configuration (SiririComun)
-* 61f9c70  (tag: v1.0.0) - 2026-08-23 : docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -222,6 +222,7 @@ import time
 from pathlib import Path
 from typing import Union, Optional, Tuple, Dict
 import numpy as np
+
 try:
     from pynq import Overlay, allocate
 except ImportError:
@@ -237,7 +238,7 @@ class MicrophoneArrayOverlay(Overlay):
     Core Hardware Overlay Driver for Dual-Microphone Acoustic Kinematics & Sound Localization on PYNQ-Z2.
     Controls 3 concurrent DMA engines:
       • axi_dma_0: Raw Time-Domain Interleaved Stereo (A0 & A1)
-      • axi_dma_1: Frequency-Domain Magnitude Spectrum (N/2 bins)
+      • axi_dma_1: Frequency-Domain Magnitude Spectrum (N bins)
       • axi_dma_2: Filtered & Reconstructed Time-Domain Audio (IFFT output)
     """
 
@@ -273,9 +274,14 @@ class MicrophoneArrayOverlay(Overlay):
         self.fs_per_ch = 50_000.0  # Default 50 kSPS (M=10)
 
         # Persistent CMA buffer pool for concurrent 3-DMA streaming
-        self._buf_time_raw = allocate(shape=(self.packet_size,), dtype="u2")
-        self._buf_fft_mag = allocate(shape=(self.fft_len // 2,), dtype="u2")
-        self._buf_time_filtered = allocate(shape=(self.packet_size // 2,), dtype="u2")
+        if allocate is not None:
+            self._buf_time_raw = allocate(shape=(self.packet_size,), dtype="u2")
+            self._buf_fft_mag = allocate(shape=(self.fft_len,), dtype="u2")  # Full N = 1024 points
+            self._buf_time_filtered = allocate(shape=(self.fft_len,), dtype="u2")
+        else:
+            self._buf_time_raw = None
+            self._buf_fft_mag = None
+            self._buf_time_filtered = None
 
         # Hardware Controllers
         self.trigger = HardwareTrigger(self)
@@ -337,6 +343,9 @@ class MicrophoneArrayOverlay(Overlay):
 
     def _realloc_buffers(self, pkt_size: int, n_fft: int):
         """Safely resizes DMA CMA buffers."""
+        if allocate is None:
+            return
+
         if self._buf_time_raw is None or len(self._buf_time_raw) != pkt_size:
             if self._buf_time_raw is not None:
                 try:
@@ -345,22 +354,21 @@ class MicrophoneArrayOverlay(Overlay):
                     pass
             self._buf_time_raw = allocate(shape=(pkt_size,), dtype="u2")
 
-        if self._buf_fft_mag is None or len(self._buf_fft_mag) != (n_fft // 2):
+        if self._buf_fft_mag is None or len(self._buf_fft_mag) != n_fft:
             if self._buf_fft_mag is not None:
                 try:
                     self._buf_fft_mag.close()
                 except Exception:
                     pass
-            self._buf_fft_mag = allocate(shape=(n_fft // 2,), dtype="u2")
+            self._buf_fft_mag = allocate(shape=(n_fft,), dtype="u2")
 
-        filtered_pts = pkt_size // 2
-        if self._buf_time_filtered is None or len(self._buf_time_filtered) != filtered_pts:
+        if self._buf_time_filtered is None or len(self._buf_time_filtered) != n_fft:
             if self._buf_time_filtered is not None:
                 try:
                     self._buf_time_filtered.close()
                 except Exception:
                     pass
-            self._buf_time_filtered = allocate(shape=(filtered_pts,), dtype="u2")
+            self._buf_time_filtered = allocate(shape=(n_fft,), dtype="u2")
 
     def _init_xadc_simultaneous(self):
         """Initializes XADC into simultaneous dual-channel parallel sequencer mode (0.00 µs skew)."""
@@ -432,11 +440,9 @@ class MicrophoneArrayOverlay(Overlay):
         self._init_xadc_simultaneous()
 
         pkt_size = self.packet_size
-        fft_pts = self.fft_len
-
         buf_flush = allocate(shape=(pkt_size,), dtype="u2")
 
-        # 1. Reset and start all 3 DMAs
+        # 1. Reset and start all 3 DMAs cleanly
         self.axi_dma_0.mmio.write(0x30, 0x04)
         if hasattr(self, "axi_dma_1"):
             self.axi_dma_1.mmio.write(0x30, 0x04)
@@ -470,7 +476,7 @@ class MicrophoneArrayOverlay(Overlay):
                 raise TimeoutError("Raw DMA 0 capture timed out.")
             time.sleep(0.001)
 
-        # 3. Queue flush Frame 2 on DMA 0 to push FFT/IFFT tail
+        # 3. Queue flush Frame 2 on DMA 0 so broadcaster pushes FFT/IFFT tail
         self.axi_dma_0.recvchannel.transfer(buf_flush)
         self.trigger.arm()
 
@@ -1579,18 +1585,29 @@ class KinematicsDashboard:
             self.fig_mic2.update_yaxes(range=[f_min, f_max], row=2, col=1)
             self.fig_dual.update_yaxes(range=[f_min, f_max], row=2, col=1)
 
-    def get_clean_data(self, channel: int = 1) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def get_clean_data(self, channel: int = 1, squelch: Optional[float] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Returns clean, sanitized, non-NaN arrays for direct post-processing in Jupyter cells.
-        :param channel: 1 for Mic 1 (A0), 2 for Mic 2 (A1).
-        :return: (time_clean_sec, amp_clean_v, freq_clean_hz).
+        Returns clean non-NaN telemetry data from the rolling buffer.
         """
+        sq_val = squelch if squelch is not None else float(self.squelch_slider.value)
         with self._buf_lock:
             t = np.copy(self.t_axis)
             amp = np.copy(self.buf_amp_a0 if channel == 1 else self.buf_amp_a1)
             freq = np.copy(self.buf_freq_a0 if channel == 1 else self.buf_freq_a1)
 
-        valid_mask = np.isfinite(freq) & (amp >= float(self.squelch_slider.value))
+        valid_mask = np.isfinite(freq) & (amp >= sq_val)
+
+        # Auto-fallback: If requested channel has 0 points, check if other channel captured sound
+        if np.sum(valid_mask) == 0:
+            other_ch = 2 if channel == 1 else 1
+            with self._buf_lock:
+                amp_other = np.copy(self.buf_amp_a1 if channel == 1 else self.buf_amp_a0)
+                freq_other = np.copy(self.buf_freq_a1 if channel == 1 else self.buf_freq_a0)
+            mask_other = np.isfinite(freq_other) & (amp_other >= sq_val)
+            if np.sum(mask_other) > 0:
+                print(f"ℹ️ Channel {channel} had 0 points, but Channel {other_ch} captured {np.sum(mask_other)} motion points! Returning Channel {other_ch} data.")
+                return t[mask_other], amp_other[mask_other], freq_other[mask_other]
+
         return t[valid_mask], amp[valid_mask], freq[valid_mask]
 
     def export_csv(self, filename: Optional[str] = None, clean_silence: bool = True) -> str:

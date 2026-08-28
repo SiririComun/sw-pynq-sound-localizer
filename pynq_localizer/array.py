@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import Union, Optional, Tuple, Dict
 import numpy as np
+
 try:
     from pynq import Overlay, allocate
 except ImportError:
@@ -24,7 +25,7 @@ class MicrophoneArrayOverlay(Overlay):
     Core Hardware Overlay Driver for Dual-Microphone Acoustic Kinematics & Sound Localization on PYNQ-Z2.
     Controls 3 concurrent DMA engines:
       • axi_dma_0: Raw Time-Domain Interleaved Stereo (A0 & A1)
-      • axi_dma_1: Frequency-Domain Magnitude Spectrum (N/2 bins)
+      • axi_dma_1: Frequency-Domain Magnitude Spectrum (N bins)
       • axi_dma_2: Filtered & Reconstructed Time-Domain Audio (IFFT output)
     """
 
@@ -60,9 +61,14 @@ class MicrophoneArrayOverlay(Overlay):
         self.fs_per_ch = 50_000.0  # Default 50 kSPS (M=10)
 
         # Persistent CMA buffer pool for concurrent 3-DMA streaming
-        self._buf_time_raw = allocate(shape=(self.packet_size,), dtype="u2")
-        self._buf_fft_mag = allocate(shape=(self.fft_len // 2,), dtype="u2")
-        self._buf_time_filtered = allocate(shape=(self.packet_size // 2,), dtype="u2")
+        if allocate is not None:
+            self._buf_time_raw = allocate(shape=(self.packet_size,), dtype="u2")
+            self._buf_fft_mag = allocate(shape=(self.fft_len,), dtype="u2")  # Full N = 1024 points
+            self._buf_time_filtered = allocate(shape=(self.fft_len,), dtype="u2")
+        else:
+            self._buf_time_raw = None
+            self._buf_fft_mag = None
+            self._buf_time_filtered = None
 
         # Hardware Controllers
         self.trigger = HardwareTrigger(self)
@@ -124,6 +130,9 @@ class MicrophoneArrayOverlay(Overlay):
 
     def _realloc_buffers(self, pkt_size: int, n_fft: int):
         """Safely resizes DMA CMA buffers."""
+        if allocate is None:
+            return
+
         if self._buf_time_raw is None or len(self._buf_time_raw) != pkt_size:
             if self._buf_time_raw is not None:
                 try:
@@ -132,22 +141,21 @@ class MicrophoneArrayOverlay(Overlay):
                     pass
             self._buf_time_raw = allocate(shape=(pkt_size,), dtype="u2")
 
-        if self._buf_fft_mag is None or len(self._buf_fft_mag) != (n_fft // 2):
+        if self._buf_fft_mag is None or len(self._buf_fft_mag) != n_fft:
             if self._buf_fft_mag is not None:
                 try:
                     self._buf_fft_mag.close()
                 except Exception:
                     pass
-            self._buf_fft_mag = allocate(shape=(n_fft // 2,), dtype="u2")
+            self._buf_fft_mag = allocate(shape=(n_fft,), dtype="u2")
 
-        filtered_pts = pkt_size // 2
-        if self._buf_time_filtered is None or len(self._buf_time_filtered) != filtered_pts:
+        if self._buf_time_filtered is None or len(self._buf_time_filtered) != n_fft:
             if self._buf_time_filtered is not None:
                 try:
                     self._buf_time_filtered.close()
                 except Exception:
                     pass
-            self._buf_time_filtered = allocate(shape=(filtered_pts,), dtype="u2")
+            self._buf_time_filtered = allocate(shape=(n_fft,), dtype="u2")
 
     def _init_xadc_simultaneous(self):
         """Initializes XADC into simultaneous dual-channel parallel sequencer mode (0.00 µs skew)."""
@@ -219,11 +227,9 @@ class MicrophoneArrayOverlay(Overlay):
         self._init_xadc_simultaneous()
 
         pkt_size = self.packet_size
-        fft_pts = self.fft_len
-
         buf_flush = allocate(shape=(pkt_size,), dtype="u2")
 
-        # 1. Reset and start all 3 DMAs
+        # 1. Reset and start all 3 DMAs cleanly
         self.axi_dma_0.mmio.write(0x30, 0x04)
         if hasattr(self, "axi_dma_1"):
             self.axi_dma_1.mmio.write(0x30, 0x04)
@@ -257,7 +263,7 @@ class MicrophoneArrayOverlay(Overlay):
                 raise TimeoutError("Raw DMA 0 capture timed out.")
             time.sleep(0.001)
 
-        # 3. Queue flush Frame 2 on DMA 0 to push FFT/IFFT tail
+        # 3. Queue flush Frame 2 on DMA 0 so broadcaster pushes FFT/IFFT tail
         self.axi_dma_0.recvchannel.transfer(buf_flush)
         self.trigger.arm()
 

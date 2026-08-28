@@ -211,18 +211,29 @@ class KinematicsDashboard:
             self.fig_mic2.update_yaxes(range=[f_min, f_max], row=2, col=1)
             self.fig_dual.update_yaxes(range=[f_min, f_max], row=2, col=1)
 
-    def get_clean_data(self, channel: int = 1) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def get_clean_data(self, channel: int = 1, squelch: Optional[float] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Returns clean, sanitized, non-NaN arrays for direct post-processing in Jupyter cells.
-        :param channel: 1 for Mic 1 (A0), 2 for Mic 2 (A1).
-        :return: (time_clean_sec, amp_clean_v, freq_clean_hz).
+        Returns clean non-NaN telemetry data from the rolling buffer.
         """
+        sq_val = squelch if squelch is not None else float(self.squelch_slider.value)
         with self._buf_lock:
             t = np.copy(self.t_axis)
             amp = np.copy(self.buf_amp_a0 if channel == 1 else self.buf_amp_a1)
             freq = np.copy(self.buf_freq_a0 if channel == 1 else self.buf_freq_a1)
 
-        valid_mask = np.isfinite(freq) & (amp >= float(self.squelch_slider.value))
+        valid_mask = np.isfinite(freq) & (amp >= sq_val)
+
+        # Auto-fallback: If requested channel has 0 points, check if other channel captured sound
+        if np.sum(valid_mask) == 0:
+            other_ch = 2 if channel == 1 else 1
+            with self._buf_lock:
+                amp_other = np.copy(self.buf_amp_a1 if channel == 1 else self.buf_amp_a0)
+                freq_other = np.copy(self.buf_freq_a1 if channel == 1 else self.buf_freq_a0)
+            mask_other = np.isfinite(freq_other) & (amp_other >= sq_val)
+            if np.sum(mask_other) > 0:
+                print(f"ℹ️ Channel {channel} had 0 points, but Channel {other_ch} captured {np.sum(mask_other)} motion points! Returning Channel {other_ch} data.")
+                return t[mask_other], amp_other[mask_other], freq_other[mask_other]
+
         return t[valid_mask], amp[valid_mask], freq[valid_mask]
 
     def export_csv(self, filename: Optional[str] = None, clean_silence: bool = True) -> str:
