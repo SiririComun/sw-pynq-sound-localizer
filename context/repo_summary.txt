@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/v1.6.0-overlay-integration @ a82abb9
+• Repository State    : feat/v1.6.0-overlay-integration @ ae732b9
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.6.0
 • Package Version     : v1.0.0
 ==============================================================================
@@ -9,19 +9,20 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (6 modified/untracked files)
+Current Branch: feat/v1.6.0-overlay-integration | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/v1.6.0-overlay-integration                a82abb9 [origin/feat/v1.6.0-overlay-integration] fix(core): finalize pipelined 3-DMA streaming and lock-step flight recorder
+* feat/v1.6.0-overlay-integration                ae732b9 [origin/feat/v1.6.0-overlay-integration] docs(notebooks): add dedicated experiments for physical 1/r decay and dual-source isolation
   main                                           ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/v1.6.0-overlay-integration a82abb9 fix(core): finalize pipelined 3-DMA streaming and lock-step flight recorder
+  remotes/origin/feat/v1.6.0-overlay-integration ae732b9 docs(notebooks): add dedicated experiments for physical 1/r decay and dual-source isolation
   remotes/origin/main                            ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
 Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* a82abb9  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : fix(core): finalize pipelined 3-DMA streaming and lock-step flight recorder (SiririComun)
+* ae732b9  (HEAD -> feat/v1.6.0-overlay-integration, origin/feat/v1.6.0-overlay-integration) - 2026-08-28 : docs(notebooks): add dedicated experiments for physical 1/r decay and dual-source isolation (SiririComun)
+* a82abb9  - 2026-08-28 : fix(core): finalize pipelined 3-DMA streaming and lock-step flight recorder (SiririComun)
 * a3f6a7d  - 2026-08-28 : fix(core): finalize lock-step 3-DMA streaming and auto-fallback telemetry extraction (SiririComun)
 * 6bd7012  - 2026-08-28 : fix(dashboard): use explicit is not None checks for DMA buffer arrays (SiririComun)
 * 7921524  - 2026-08-28 : fix(dma): integrate lock-step multi-DMA streaming and pipeline flush into core overlay (SiririComun)
@@ -35,7 +36,6 @@ Multi-Branch Git Commit Graph:
 * 2e5bc95  - 2026-08-28 : test(physics): add strict validation suite for spectral masking, IFFT fidelity, and 1/r law (SiririComun)
 * 806618e  - 2026-08-28 : feat(dsp): add frequency bandpass mapping, 1/r acoustic distance fit, and isolation metrics (SiririComun)
 * 6130730  - 2026-08-28 : feat(array): add 3-DMA streaming and hardware spectral filter integration (SiririComun)
-* 47cd556  - 2026-08-28 : feat(filter): implement SpectralMaskDriver for axis_spectral_mask IP (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -3014,5 +3014,196 @@ fig_b.show()
 ol.filter.bypass()
 ol.close()
 print("\n🔒 Experiment 2 Complete. Hardware cleanly released.")
+
+```
+
+04_multi_frequency_amplitude_benchmark.ipynb: (notebooks/04_multi_frequency_amplitude_benchmark.ipynb)
+
+```python
+# %% [markdown] Cell 1
+# Multi-Frequency Filtered Amplitude & Physical Linearity Benchmark
+# This intensive test notebook validates:
+# 1. **Frequency Invariance of the $1/r$ Law:** Proving that acoustic pressure voltage follows $V_{\text{RMS}}(r) \propto r^{-1.0}$ and intensity $I(r) \propto r^{-2.0}$ across multiple distinct audio frequencies ($500\,\text{Hz}, 1000\,\text{Hz}, 2000\,\text{Hz}, 4000\,\text{Hz}$).
+# 2. **Transfer Function Flatness $H(f)$:** Verifying that the hardware mask + IFFT pipeline maintains a calibrated $1:1$ amplitude transmission ratio across the entire audio spectrum.
+# 3. **Linear Dynamic Range Verification:** Ensuring measurements remain between the electronic noise floor ($>0.03\,\text{V}$) and op-amp rail clipping ($<1.0\,\text{V}$).
+
+# %% [markdown] Cell 2
+## 1. Load Hardware Overlay
+
+# %% [code] Cell 3
+import time
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from pynq_localizer import MicrophoneArrayOverlay, KinematicAnalytics
+
+# Load overlay with Full-Audio profile (50 kSPS, N=1024)
+ol = MicrophoneArrayOverlay()
+ol.set_profile("audio", packet_size=2048, fft_len=1024)
+
+print(f"✅ Overlay Loaded: {ol.current_profile} profile ({ol.fs_per_ch:.0f} SPS/ch, N={ol.fft_len})")
+print(f"   Speed of sound at 20°C: {KinematicAnalytics.speed_of_sound(20.0):.2f} m/s")
+print(f"   Filter State: {ol.filter}")
+
+# %% [markdown] Cell 4
+## 2. Linear Range Check & Signal Level Monitor
+# Run this cell while playing your tone at the closest distance ($30\,\text{cm}$). Ensure the measured voltage stays within **$0.10\,\text{V} - 0.70\,\text{V}$** (safely below the $1.16\,\text{V}$ clipping ceiling).
+
+# %% [code] Cell 5
+# Capture single test frame
+v_raw_a0, v_raw_a1, v_filt, freqs, mags = ol.capture_all()
+
+rms_a0 = np.sqrt(np.mean((v_raw_a0 - np.mean(v_raw_a0)) ** 2))
+v_peak = np.max(np.abs(v_raw_a0 - np.mean(v_raw_a0)))
+
+print("===========================================================")
+print("  🎛️ ANALOG SIGNAL LEVEL & CLIPPING MONITOR")
+print("===========================================================")
+print(f"  • Measured AC RMS Voltage  : {rms_a0:.4f} V")
+print(f"  • Measured AC Peak Voltage : {v_peak:.4f} V  (Max Safe Limit = 1.20 V)")
+
+if rms_a0 > 0.80 or v_peak > 1.20:
+    print("  ⚠️ WARNING: Signal is near saturation clipping! LOWER your speaker volume.")
+elif rms_a0 < 0.04:
+    print("  ⚠️ WARNING: Signal is near electronic noise floor. RAISE your speaker volume slightly.")
+else:
+    print("  ✅ PERFECT: Signal is in the ideal linear dynamic range ($0.05V - 0.70V$).")
+print("===========================================================")
+
+# %% [markdown] Cell 6
+## 3. Multi-Frequency Distance Sweep Matrix ($f_0 \times r$)
+# We test 4 distinct frequencies across the audio spectrum:
+# - **$f_1 = 500\,\text{Hz}$** (Mid-Bass, $\lambda = 68.6\,\text{cm}$)
+# - **$f_2 = 1000\,\text{Hz}$** (Mid-Range, $\lambda = 34.3\,\text{cm}$)
+# - **$f_3 = 2000\,\text{Hz}$** (Upper-Mid, $\lambda = 17.2\,\text{cm}$)
+# - **$f_4 = 4000\,\text{Hz}$** (Treble, $\lambda = 8.6\,\text{cm}$)
+# Across calibrated distances: $r \in [0.30\,\text{m}, 0.50\,\text{m}, 0.75\,\text{m}, 1.00\,\text{m}, 1.50\,\text{m}]$.
+
+# %% [code] Cell 7
+test_freqs_hz = [500.0, 1000.0, 2000.0, 4000.0]
+distances_m = [0.30, 0.50, 0.75, 1.00, 1.50]
+
+# Data matrix: dict mapping frequency -> list of measured V_RMS
+sweep_dataset = {}
+regression_results = {}
+
+print("===========================================================")
+print("  🚀 STARTING INTENSIVE MULTI-FREQUENCY DISTANCE SWEEP")
+print("===========================================================")
+
+for f0 in test_freqs_hz:
+    print(f"\n>>> FREQUENCY TEST BAND: {f0:.0f} Hz <<<")
+    # Set hardware bandpass around f0 with +-100 Hz bandwidth
+    ol.filter.set_bandpass(center_hz=f0, delta_hz=100.0)
+    print(f"    Hardware Filter: {ol.filter}")
+    
+    v_list = []
+    for r in distances_m:
+        input(f"    👉 Play {f0:.0f} Hz tone at r = {r:.2f} m and press [ENTER]...")
+        v_raw_a0, _, v_filt, _, _ = ol.capture_all()
+        
+        v_filt_ac = v_filt - np.mean(v_filt)
+        rms_val = float(np.sqrt(np.mean(v_filt_ac ** 2)))
+        v_list.append(rms_val)
+        print(f"       • r = {r:.2f} m -> Filtered V_RMS = {rms_val:.4f} V")
+        
+    sweep_dataset[f0] = np.array(v_list)
+    
+    # Fit inverse-distance law for this frequency
+    fit = KinematicAnalytics.fit_inverse_distance_law(np.array(distances_m), np.array(v_list))
+    regression_results[f0] = fit
+
+ol.filter.bypass()
+print("\n✅ Multi-Frequency Sweep Finished Successfully!")
+
+# %% [markdown] Cell 8
+## 4. Multi-Frequency $1/r$ Law Comparison & Statistical Validation
+# Compare the measured physical decay exponents $n(f)$ across all test frequencies.
+
+# %% [code] Cell 9
+print("========================================================================================")
+print("  📊 MULTI-FREQUENCY ACOUSTIC INVERSE-DISTANCE DECAY SUMMARY")
+print("========================================================================================")
+print(" Frequency (Hz) | Measured Exponent (n) | Intensity (2n) | Goodness of Fit (R²) | Error %")
+print("----------------+-----------------------+----------------+----------------------+--------")
+
+for f0 in test_freqs_hz:
+    res = regression_results[f0]
+    print(f"   {f0:4.0f} Hz      |        {res['measured_exponent_n']:.3f}          |     {res['intensity_exponent_2n']:.3f}      |        {res['r_squared']:.4f}        |  {res['error_pct_from_ideal_1_over_r']:.2f}%")
+print("========================================================================================")
+
+# Multi-Curve Overlay Plots
+colors = ["#00FFCC", "#FFA500", "#FF007F", "#00AAFF"]
+r_arr = np.array(distances_m)
+r_dense = np.linspace(min(r_arr) * 0.9, max(r_arr) * 1.1, 200)
+
+# Plot 1: Linear Scale Comparison
+fig_multi_lin = go.Figure()
+for i, f0 in enumerate(test_freqs_hz):
+    v_vals = sweep_dataset[f0]
+    res = regression_results[f0]
+    v_fit = res['amplitude_coefficient_A'] * (r_dense ** (-res['measured_exponent_n']))
+    fig_multi_lin.add_trace(go.Scatter(x=r_arr, y=v_vals, mode='markers', name=f"{f0:.0f} Hz (Data)", marker=dict(size=9, color=colors[i])))
+    fig_multi_lin.add_trace(go.Scatter(x=r_dense, y=v_fit, mode='lines', name=f"{f0:.0f} Hz (n={res['measured_exponent_n']:.2f})", line=dict(color=colors[i], width=1.8)))
+
+fig_multi_lin.update_layout(template='plotly_dark', title='<b>Multi-Frequency Acoustic Distance Decay: V_RMS vs. Distance r</b>', xaxis_title='Distance r (meters)', yaxis_title='Filtered V_RMS (Volts)', height=480)
+fig_multi_lin.show()
+
+# Plot 2: Log-Log Linearized Slopes
+fig_multi_log = go.Figure()
+for i, f0 in enumerate(test_freqs_hz):
+    v_vals = sweep_dataset[f0]
+    res = regression_results[f0]
+    ln_fit = np.log(res['amplitude_coefficient_A']) - res['measured_exponent_n'] * np.log(r_dense)
+    fig_multi_log.add_trace(go.Scatter(x=np.log(r_arr), y=np.log(v_vals), mode='markers', name=f"{f0:.0f} Hz ln(V)", marker=dict(size=9, color=colors[i])))
+    fig_multi_log.add_trace(go.Scatter(x=np.log(r_dense), y=ln_fit, mode='lines', name=f"{f0:.0f} Hz Slope={-res['measured_exponent_n']:.3f}", line=dict(color=colors[i], width=1.8)))
+
+fig_multi_log.update_layout(template='plotly_dark', title='<b>Multi-Frequency Log-Log Slopes: ln(V_RMS) vs. ln(r) (Ideal Slope = -1.000)</b>', xaxis_title='ln(r)', yaxis_title='ln(V_RMS)', height=480)
+fig_multi_log.show()
+
+# %% [markdown] Cell 10
+## 5. Transfer Function Flatness Sweep $H(f)$
+# At a fixed distance ($r = 0.50\,\text{m}$), we sweep 8 audio frequencies to verify that the hardware filter transfer ratio:
+# $$H(f) = \frac{V_{\text{filt, RMS}}}{V_{\text{raw, RMS}}} \approx 1.00 \pm 0.02$$
+# maintains a flat amplitude transmission with $< 2\%$ error.
+
+# %% [code] Cell 11
+sweep_freqs = [250.0, 500.0, 750.0, 1000.0, 1500.0, 2000.0, 3000.0, 5000.0]
+fixed_r = 0.50  # 50 cm fixed distance
+
+raw_rms_list = []
+filt_rms_list = []
+h_ratios = []
+
+print(f"Keep speaker at fixed distance r = {fixed_r:.2f} m.")
+print("===========================================================")
+
+for f in sweep_freqs:
+    input(f"👉 Play {f:4.0f} Hz tone at {fixed_r}m and press [ENTER]...")
+    ol.filter.set_bandpass(center_hz=f, delta_hz=100.0)
+    
+    v_raw, _, v_filt, _, _ = ol.capture_all()
+    
+    r_rms = np.sqrt(np.mean((v_raw - np.mean(v_raw)) ** 2))
+    f_rms = np.sqrt(np.mean((v_filt - np.mean(v_filt)) ** 2))
+    ratio = f_rms / max(r_rms, 1e-6)
+    
+    raw_rms_list.append(r_rms)
+    filt_rms_list.append(f_rms)
+    h_ratios.append(ratio)
+    
+    print(f"   f = {f:4.0f} Hz | Raw RMS = {r_rms:.4f}V | Filtered RMS = {f_rms:.4f}V | H(f) = {ratio:.3f}")
+
+ol.filter.bypass()
+
+# Plot Transfer Function Flatness
+fig_h = go.Figure()
+fig_h.add_trace(go.Scatter(x=sweep_freqs, y=h_ratios, mode='lines+markers', name='Measured H(f)', marker=dict(size=10, color='#00FFCC'), line=dict(color='#00FFCC', width=2)))
+fig_h.add_hline(y=1.00, line_dash="dash", line_color="#FFA500", annotation_text="Ideal 1:1 Flat Ratio")
+fig_h.update_layout(template='plotly_dark', title='<b>Hardware Filter Passband Flatness: H(f) = V_filt / V_raw</b>', xaxis_title='Frequency (Hz)', yaxis_title='Transfer Ratio H(f)', yaxis_range=[0.85, 1.15], height=400)
+fig_h.show()
+
+ol.close()
+print("\n🔒 Multi-Frequency Benchmark Complete. Hardware cleanly released.")
 
 ```
