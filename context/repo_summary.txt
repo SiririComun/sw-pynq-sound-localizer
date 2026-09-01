@@ -1,21 +1,21 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/fft-quadruple-telemetry-engine @ 1a62a0c
-• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1-rc1
+• Repository State    : feat/fft-quadruple-telemetry-engine @ eff4385
+• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1-rc2
 • Package Version     : v1.0.0
 ==============================================================================
 
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (4 modified/untracked files)
+Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/fft-quadruple-telemetry-engine                1a62a0c [origin/feat/fft-quadruple-telemetry-engine: ahead 2] feat(dsp): implement extract_quadruple and compute_phase_velocity in KinematicAnalytics
+* feat/fft-quadruple-telemetry-engine                eff4385 [origin/feat/fft-quadruple-telemetry-engine] docs(context): update repository summary and Cog configuration with quadruple test suite
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/fft-quadruple-telemetry-engine f11adc8 docs(context): update repository summary with v1.5.1-rc1 hardware pinning
+  remotes/origin/feat/fft-quadruple-telemetry-engine eff4385 docs(context): update repository summary and Cog configuration with quadruple test suite
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
@@ -23,9 +23,12 @@ Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 1a62a0c  (HEAD -> feat/fft-quadruple-telemetry-engine) - 2026-09-01 : feat(dsp): implement extract_quadruple and compute_phase_velocity in KinematicAnalytics (SiririComun)
+* eff4385  (HEAD -> feat/fft-quadruple-telemetry-engine, origin/feat/fft-quadruple-telemetry-engine) - 2026-09-01 : docs(context): update repository summary and Cog configuration with quadruple test suite (SiririComun)
+* 6c7c838  - 2026-09-01 : test(dsp): add unit test suite for quadruple extraction, pitch accuracy, and phase velocity (SiririComun)
+* 926a678  - 2026-09-01 : feat(dsp): implement exact analytical sinc ratio pitch tracking and quadruple extraction (SiririComun)
+* 1a62a0c  - 2026-09-01 : feat(dsp): implement extract_quadruple and compute_phase_velocity in KinematicAnalytics (SiririComun)
 * 2977a8c  - 2026-09-01 : feat(driver): integrate lock-step spectral polar frame capture into MicrophoneArrayOverlay (SiririComun)
-* f11adc8  (origin/feat/fft-quadruple-telemetry-engine) - 2026-09-01 : docs(context): update repository summary with v1.5.1-rc1 hardware pinning (SiririComun)
+* f11adc8  - 2026-09-01 : docs(context): update repository summary with v1.5.1-rc1 hardware pinning (SiririComun)
 * bc657ce  - 2026-09-01 : chore(hw): pin hardware overlay to v1.5.1-rc1 with 32-bit polar CORDIC stream (SiririComun)
 | * 4172361  (origin/feat/v1.6.0-overlay-integration, feat/v1.6.0-overlay-integration) - 2026-08-30 : docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook (SiririComun)
 | * ae732b9  - 2026-08-28 : docs(notebooks): add dedicated experiments for physical 1/r decay and dual-source isolation (SiririComun)
@@ -35,9 +38,6 @@ Multi-Branch Git Commit Graph:
 | * 7921524  - 2026-08-28 : fix(dma): integrate lock-step multi-DMA streaming and pipeline flush into core overlay (SiririComun)
 | * 052727e  - 2026-08-28 : fix(init): remove conflicting notebooks import to enable clean package import (SiririComun)
 | * fbf000b  - 2026-08-28 : chore(context): update repository summary with Cog (SiririComun)
-| * afdaa76  - 2026-08-28 : fix(packaging): structure pynq_localizer.notebooks as subpackage for isolated bundling (SiririComun)
-| * 40df672  - 2026-08-28 : fix(packaging): add MANIFEST.in to guarantee .ipynb wheel inclusion (SiririComun)
-| * 8ee0cb8  - 2026-08-28 : fix(packaging): embed isolated notebooks_data inside package namespace (SiririComun)
 ```
 
 LICENSE: (LICENSE)
