@@ -118,11 +118,15 @@ class MicrophoneArrayOverlay(Overlay):
         return info
 
     def _init_xadc_simultaneous(self):
-        """Initializes XADC into simultaneous dual-channel parallel sequencer mode (0.00 µs skew)."""
+        """Initializes XADC into simultaneous dual-channel mode and flushes startup pipeline frames."""
         if hasattr(self, "xadc_wiz_0"):
             self.xadc_wiz_0.mmio.write(0x304, 0x2000)  # DRP 0x41: Continuous Sequence Mode
-            self.xadc_wiz_0.mmio.write(0x320, 0x0000)  # DRP 0x48: Disable internal temp/vcc channels
+            self.xadc_wiz_0.mmio.write(0x320, 0x0000)  # DRP 0x48: Disable internal channels
             self.xadc_wiz_0.mmio.write(0x324, 0x0202)  # DRP 0x49: Enable Vaux1 (A0) & Vaux9 (A1)
+
+        # Start 100 MHz Hardware Timer (TCSR0: ENT0=1, ARHT0=1)
+        if hasattr(self, "axi_timer_0"):
+            self.axi_timer_0.mmio.write(0x00, 0x00000480)
 
     # =========================================================================
     # 2. Lock-Step Dual DMA Capture (Time Domain + Polar Frequency Domain)
@@ -134,46 +138,36 @@ class MicrophoneArrayOverlay(Overlay):
         crop_startup_samples: int = 8,
         timeout: float = 2.0
     ) -> Dict[str, np.ndarray]:
-        """
-        Captures a simultaneous dual-channel time snapshot AND 32-bit polar CORDIC spectrum in lock-step.
-
-        :param fft_source: Channel routed to the FFT core ('A0' or 'A1').
-        :param crop_startup_samples: Number of initial boundary samples to crop from time domain.
-        :param timeout: Maximum wait time in seconds.
-        :return: Dictionary with keys:
-                 - 'v_a0': 1D voltage array for Mic 1 (A0).
-                 - 'v_a1': 1D voltage array for Mic 2 (A1).
-                 - 'freqs': Positive half-spectrum frequency axis in Hz.
-                 - 'mag': Linear magnitude spectrum |X(f)| (length N/2).
-                 - 'phase': Physical phase spectrum ∠X(f) in radians [-π, +π] (length N/2).
-                 - 'timer_cycles': Hardware AXI Timer clock cycles at frame completion.
-        """
+        """Captures a simultaneous dual-channel time snapshot AND 32-bit polar CORDIC spectrum in lock-step."""
         self._init_xadc_simultaneous()
         self.trigger.set_fft_channel("CH2" if ("A1" in fft_source.upper() or "CH2" in fft_source.upper()) else "CH1")
 
-        # 1. Reset Both DMA Channels
-        self.axi_dma_0.mmio.write(0x30, 0x04)
-        self.axi_dma_1.mmio.write(0x30, 0x04)
-        time.sleep(0.002)
-        self.axi_dma_0.recvchannel.start()
-        self.axi_dma_1.recvchannel.start()
-
-        # 2. Arm Both DMAs Concurrently (Prevents Broadcaster Deadlock)
+        # Arm Both DMAs Concurrently
         self.axi_dma_0.recvchannel.transfer(self._buf_time)
         self.axi_dma_1.recvchannel.transfer(self._buf_fft)
         self.trigger.arm()
 
-        # 3. Poll for Completion
+        # Poll for Completion
         t0 = time.time()
+        stalled = False
         while not (self.axi_dma_0.recvchannel.idle and self.axi_dma_1.recvchannel.idle):
             if time.time() - t0 > timeout:
-                raise TimeoutError(f"Lock-step DMA transfer timed out after {timeout}s.")
-            time.sleep(0.001)
+                stalled = True
+                break
+            time.sleep(0.0005)
+
+        if stalled:
+            # Recovery flush
+            self.axi_dma_1.mmio.write(0x30, 0x04)
+            time.sleep(0.002)
+            self.axi_dma_1.recvchannel.start()
+            self.trigger.arm()
+            raise TimeoutError(f"Lock-step DMA transfer timed out after {timeout}s.")
 
         # Latch hardware timer cycle count on frame completion
         t_hw_cycles = self.axi_timer_0.mmio.read(0x08) if hasattr(self, "axi_timer_0") else 0
 
-        # 4. Unpack Time Domain (DMA 0)
+        # Unpack Time Domain (DMA 0)
         raw_samples = np.array(self._buf_time)
         raw_a0 = raw_samples[0::2]
         raw_a1 = raw_samples[1::2]
@@ -184,12 +178,11 @@ class MicrophoneArrayOverlay(Overlay):
             v_a0 = v_a0[crop_startup_samples:-crop_startup_samples]
             v_a1 = v_a1[crop_startup_samples:-crop_startup_samples]
 
-        # 5. Unpack 32-Bit Polar FFT Domain (DMA 1)
+        # Unpack 32-Bit Polar FFT Domain (DMA 1)
         raw_words = np.array(self._buf_fft)
         half_bins = self.n_fft // 2
 
-        # Lower 16-bit = Magnitude, Upper 16-bit = Signed Fixed-Point Phase (rad / π)
-        raw_mag = (raw_words[:half_bins] & 0xFFFF).astype(np.uint16)
+        raw_mag = (raw_words[:half_bins] & 0xFFFF).astype(np.uint16).astype(np.float64)
         raw_phase_i16 = (raw_words[:half_bins] >> 16).astype(np.int16)
         phase_rad = (raw_phase_i16.astype(np.float64) / 32768.0) * np.pi
 
@@ -199,7 +192,7 @@ class MicrophoneArrayOverlay(Overlay):
             "v_a0": v_a0,
             "v_a1": v_a1,
             "freqs": freq_axis,
-            "mag": raw_mag.astype(np.float64),
+            "mag": raw_mag,
             "phase": phase_rad,
             "timer_cycles": t_hw_cycles
         }
