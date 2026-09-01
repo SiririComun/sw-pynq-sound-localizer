@@ -35,7 +35,7 @@ class MicrophoneArrayOverlay(Overlay):
     ):
         """
         Initializes the dual-microphone hardware overlay.
-        Auto-fetches the pinned v1.5.1-rc1 bitstream if bitfile_name is None.
+        Auto-fetches the pinned v1.5.1-rc2 bitstream if bitfile_name is None.
         """
         if bitfile_name is None:
             resolved_bit = str(HardwareLoader.get_overlay_path(version=version))
@@ -59,8 +59,11 @@ class MicrophoneArrayOverlay(Overlay):
         # Apply default Full-Audio profile (M=10, 50 kSPS per channel, N=2048)
         self.set_profile("audio", n_fft=self.n_fft)
 
+        # One-time startup priming & pipeline synchronization
+        self._prime_hardware()
+
     # =========================================================================
-    # 1. Operating Profile Configuration
+    # 1. Operating Profile Configuration & Hardware Priming
     # =========================================================================
 
     def set_profile(
@@ -118,15 +121,39 @@ class MicrophoneArrayOverlay(Overlay):
         return info
 
     def _init_xadc_simultaneous(self):
-        """Initializes XADC into simultaneous dual-channel mode and flushes startup pipeline frames."""
+        """Initializes XADC continuous dual-channel mode and 100 MHz timer once."""
         if hasattr(self, "xadc_wiz_0"):
             self.xadc_wiz_0.mmio.write(0x304, 0x2000)  # DRP 0x41: Continuous Sequence Mode
-            self.xadc_wiz_0.mmio.write(0x320, 0x0000)  # DRP 0x48: Disable internal channels
+            self.xadc_wiz_0.mmio.write(0x320, 0x0000)  # DRP 0x48: Disable internal temp/vcc channels
             self.xadc_wiz_0.mmio.write(0x324, 0x0202)  # DRP 0x49: Enable Vaux1 (A0) & Vaux9 (A1)
 
-        # Start 100 MHz Hardware Timer (TCSR0: ENT0=1, ARHT0=1)
         if hasattr(self, "axi_timer_0"):
-            self.axi_timer_0.mmio.write(0x00, 0x00000480)
+            self.axi_timer_0.mmio.write(0x00, 0x00000480)  # Enable 100 MHz Hardware Timer (ENT0=1, ARHT0=1)
+
+    def _prime_hardware(self):
+        """Flushes startup boundary pipeline frames into steady state."""
+        self._init_xadc_simultaneous()
+        
+        self.axi_dma_0.mmio.write(0x30, 0x04)
+        self.axi_dma_1.mmio.write(0x30, 0x04)
+        time.sleep(0.005)
+        self.axi_dma_0.recvchannel.start()
+        self.axi_dma_1.recvchannel.start()
+
+        for _ in range(10):
+            self.axi_dma_0.recvchannel.transfer(self._buf_time)
+            self.axi_dma_1.recvchannel.transfer(self._buf_fft)
+            self.trigger.arm()
+            t0 = time.time()
+            while not (self.axi_dma_0.recvchannel.idle and self.axi_dma_1.recvchannel.idle):
+                if time.time() - t0 > 0.08:
+                    self.axi_dma_1.mmio.write(0x30, 0x04)
+                    time.sleep(0.002)
+                    self.axi_dma_1.recvchannel.start()
+                    self.trigger.set_fft_config(self.n_fft, forward=True)
+                    self.trigger.arm()
+                    break
+                time.sleep(0.0005)
 
     # =========================================================================
     # 2. Lock-Step Dual DMA Capture (Time Domain + Polar Frequency Domain)
@@ -136,10 +163,22 @@ class MicrophoneArrayOverlay(Overlay):
         self,
         fft_source: str = "A0",
         crop_startup_samples: int = 8,
-        timeout: float = 2.0
+        timeout: float = 0.5
     ) -> Dict[str, np.ndarray]:
-        """Captures a simultaneous dual-channel time snapshot AND 32-bit polar CORDIC spectrum in lock-step."""
-        self._init_xadc_simultaneous()
+        """
+        Captures a simultaneous dual-channel time snapshot AND 32-bit polar CORDIC spectrum in lock-step.
+
+        :param fft_source: Channel routed to the FFT core ('A0' or 'A1').
+        :param crop_startup_samples: Number of initial boundary samples to crop from time domain.
+        :param timeout: Maximum wait time in seconds.
+        :return: Dictionary with keys:
+                 - 'v_a0': 1D voltage array for Mic 1 (A0).
+                 - 'v_a1': 1D voltage array for Mic 2 (A1).
+                 - 'freqs': Positive half-spectrum frequency axis in Hz.
+                 - 'mag': Linear magnitude spectrum |X(f)| (length N/2).
+                 - 'phase': Physical phase spectrum ∠X(f) in radians [-π, +π] (length N/2).
+                 - 'timer_cycles': Hardware AXI Timer clock cycles at frame completion.
+        """
         self.trigger.set_fft_channel("CH2" if ("A1" in fft_source.upper() or "CH2" in fft_source.upper()) else "CH1")
 
         # Arm Both DMAs Concurrently
@@ -149,20 +188,14 @@ class MicrophoneArrayOverlay(Overlay):
 
         # Poll for Completion
         t0 = time.time()
-        stalled = False
         while not (self.axi_dma_0.recvchannel.idle and self.axi_dma_1.recvchannel.idle):
             if time.time() - t0 > timeout:
-                stalled = True
-                break
+                self.axi_dma_1.mmio.write(0x30, 0x04)
+                time.sleep(0.002)
+                self.axi_dma_1.recvchannel.start()
+                self.trigger.arm()
+                raise TimeoutError(f"Lock-step DMA transfer timed out after {timeout}s.")
             time.sleep(0.0005)
-
-        if stalled:
-            # Recovery flush
-            self.axi_dma_1.mmio.write(0x30, 0x04)
-            time.sleep(0.002)
-            self.axi_dma_1.recvchannel.start()
-            self.trigger.arm()
-            raise TimeoutError(f"Lock-step DMA transfer timed out after {timeout}s.")
 
         # Latch hardware timer cycle count on frame completion
         t_hw_cycles = self.axi_timer_0.mmio.read(0x08) if hasattr(self, "axi_timer_0") else 0
@@ -203,7 +236,7 @@ class MicrophoneArrayOverlay(Overlay):
         timeout: float = 2.0
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Captures a single synchronous dual-channel audio frame from A0 (Mic 1) and A1 (Mic 2).
+        Legacy wrapper: Captures a single synchronous dual-channel audio frame from A0 and A1.
         :return: (voltages_mic1_a0, voltages_mic2_a1) arrays.
         """
         res = self.capture_spectral_frame(crop_startup_samples=crop_startup_samples, timeout=timeout)
@@ -252,12 +285,10 @@ class MicrophoneArrayOverlay(Overlay):
             self.trigger.arm()
 
             for _ in range(num_chunks):
-                # Lock-step DMA transfers prevent broadcaster stalls during continuous recording
                 self.axi_dma_0.recvchannel.transfer(chunk_buf)
                 self.axi_dma_1.recvchannel.transfer(dummy_fft_buf)
                 self.trigger.arm()
 
-                # Wait for DMA chunk completion
                 t0 = time.time()
                 while not (self.axi_dma_0.recvchannel.idle and self.axi_dma_1.recvchannel.idle):
                     if time.time() - t0 > 2.0:
@@ -282,7 +313,6 @@ class MicrophoneArrayOverlay(Overlay):
         finally:
             chunk_buf.close()
             dummy_fft_buf.close()
-            # Restore default snapshot configuration
             self.trigger.set_packet_size(self.packet_size)
 
     # =========================================================================
