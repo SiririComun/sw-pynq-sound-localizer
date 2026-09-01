@@ -1,36 +1,42 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : main @ 61f9c70
-• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.0
+• Repository State    : feat/fft-quadruple-telemetry-engine @ ab1de60
+• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1-rc1
 • Package Version     : v1.0.0
 ==============================================================================
 
 Git Context & Branch Topology:
 
 ```log
-Current Branch: main | Working Tree: Dirty (3 modified/untracked files)
+Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (3 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* main                61f9c70 [origin/main] docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook
-  remotes/origin/main 61f9c70 docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook
+* feat/fft-quadruple-telemetry-engine            ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
+  feat/v1.6.0-overlay-integration                4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
+  main                                           ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
+  remotes/origin/feat/v1.6.0-overlay-integration 4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
+  remotes/origin/main                            ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
 Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 61f9c70  (HEAD -> main, tag: v1.0.0, origin/main) - 2026-08-23 : docs(readme): prepare v1.0.0 release with real-time kinematics dashboard and getting-started notebook (SiririComun)
-* ccfa0f7  - 2026-08-23 : feat(dashboard): add moving median DSP filter, 2048-pt STFT resolution, and clean NaN CSV export (SiririComun)
-* 8f98eb7  - 2026-08-23 : feat(dashboard): add 10-second CSV export button and full [f_min, f_max] frequency zoom (SiririComun)
-* 1cd138d  - 2026-08-23 : fix(array): align kinematics_dashboard signature with multi-tab dashboard (SiririComun)
-* 5214663  - 2026-08-23 : fix(dashboard): resolve streaming lag via decoupled multi-threading, add 3-tab UI, and instant stop (SiririComun)
-* 60dca63  - 2026-08-23 : feat(dashboard): implement real-time 10-second rolling KinematicsDashboard for A(t) and f0(t) (SiririComun)
-* 5827263  - 2026-08-23 : feat(kinematics): implement KinematicAnalytics DSP engine with sub-Hertz STFT ridge tracker (SiririComun)
-* 540c19a  - 2026-08-23 : feat(array): implement MicrophoneArrayOverlay with zero-skew capture and continuous flight recorder (SiririComun)
-* cf73d1d  - 2026-08-23 : feat(hw): implement HardwareLoader and HardwareTrigger driver for v1.5.0 overlay (SiririComun)
-* a290edb  - 2026-08-23 : chore(context): add automated context generator script and initial summary (SiririComun)
-* 04e00e6  - 2026-08-23 : chore(packaging): configure setup.py, requirements, and hardware.json pinning (SiririComun)
-* 364f033  - 2026-08-23 : chore(repo): initialize repository structure and gitignore (SiririComun)
+* 4172361  (origin/feat/v1.6.0-overlay-integration, feat/v1.6.0-overlay-integration) - 2026-08-30 : docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook (SiririComun)
+* ae732b9  - 2026-08-28 : docs(notebooks): add dedicated experiments for physical 1/r decay and dual-source isolation (SiririComun)
+* a82abb9  - 2026-08-28 : fix(core): finalize pipelined 3-DMA streaming and lock-step flight recorder (SiririComun)
+* a3f6a7d  - 2026-08-28 : fix(core): finalize lock-step 3-DMA streaming and auto-fallback telemetry extraction (SiririComun)
+* 6bd7012  - 2026-08-28 : fix(dashboard): use explicit is not None checks for DMA buffer arrays (SiririComun)
+* 7921524  - 2026-08-28 : fix(dma): integrate lock-step multi-DMA streaming and pipeline flush into core overlay (SiririComun)
+* 052727e  - 2026-08-28 : fix(init): remove conflicting notebooks import to enable clean package import (SiririComun)
+* fbf000b  - 2026-08-28 : chore(context): update repository summary with Cog (SiririComun)
+* afdaa76  - 2026-08-28 : fix(packaging): structure pynq_localizer.notebooks as subpackage for isolated bundling (SiririComun)
+* 40df672  - 2026-08-28 : fix(packaging): add MANIFEST.in to guarantee .ipynb wheel inclusion (SiririComun)
+* 8ee0cb8  - 2026-08-28 : fix(packaging): embed isolated notebooks_data inside package namespace (SiririComun)
+* db25fc2  - 2026-08-28 : fix(packaging): isolate notebook discovery to package namespace to prevent cross-package collisions (SiririComun)
+* f44a74d  - 2026-08-28 : docs(notebook): update getting-started notebook with spectral filtering and 1/r verification (SiririComun)
+* 2e5bc95  - 2026-08-28 : test(physics): add strict validation suite for spectral masking, IFFT fidelity, and 1/r law (SiririComun)
+* 806618e  - 2026-08-28 : feat(dsp): add frequency bandpass mapping, 1/r acoustic distance fit, and isolation metrics (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -177,105 +183,6 @@ ol.play_audio(channel=1)
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-```
-
-generate_sw_summary.sh: (context/generate_sw_summary.sh)
-
-```bash
-#!/usr/bin/env bash
-# ==============================================================================
-# Script: context/generate_sw_summary.sh
-# Target: sw-pynq-sound-localizer
-# Purpose: Dump Git history, structure, SW files, and notebook JSON into context/sw_summary.txt
-# ==============================================================================
-
-# Dynamically resolve paths
-CONTEXT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${CONTEXT_DIR}/.." && pwd)"
-OUTPUT_FILE="${CONTEXT_DIR}/sw_summary.txt"
-
-echo "Generating concise SW summary into: ${OUTPUT_FILE}..."
-> "${OUTPUT_FILE}"
-
-cd "${REPO_ROOT}" || exit 1
-
-# 1. Header, Branch Status & Git History
-cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
-Git Context & Branch Info:
-
-```log
-LOG_EOF
-
-if command -v git &> /dev/null && git rev-parse --is-inside-work-tree &> /dev/null; then
-    echo "Current Branch: $(git branch --show-current)" >> "${OUTPUT_FILE}"
-    echo "Branch Tracking Status:" >> "${OUTPUT_FILE}"
-    git branch -vv >> "${OUTPUT_FILE}"
-    echo "" >> "${OUTPUT_FILE}"
-    echo "Git Commit Graph & History:" >> "${OUTPUT_FILE}"
-    git log --graph --pretty=format:"%h %d - %cd : %s (%an)" --date=short -n 15 >> "${OUTPUT_FILE}"
-fi
-
-cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
-```
-
-Files structure:
-
-```log
-LOG_EOF
-
-# 2. Directory Tree
-if command -v tree &> /dev/null; then
-    tree -a -I '.git|__pycache__|*.egg-info|.pytest_cache|venv|env|dist|build|.ipynb_checkpoints' >> "${OUTPUT_FILE}"
-fi
-
-cat << 'LOG_EOF' >> "${OUTPUT_FILE}"
-```
-
-LOG_EOF
-
-# 3. Exact list of targeted files and their markdown syntax
-TARGET_FILES=(
-    ".github/workflows/pypi.yml:yaml"
-    "hardware.json:json"
-    "setup.py:python"
-    "requirements.txt:text"
-    "pynq_localizer/__init__.py:python"
-    "pynq_localizer/loader.py:python"
-    "pynq_localizer/hw_trigger.py:python"
-    "pynq_localizer/array.py:python"
-    "pynq_localizer/kinematics.py:python"
-    "pynq_localizer/kinematics_dashboard.py:python"
-    "pynq_localizer/doa.py:python"
-    "pynq_localizer/radar_dashboard.py:python"
-    "pynq_localizer/notebooks.py:python"
-    "notebooks/01_zero_skew_verification.ipynb:json"
-    "notebooks/02_realtime_kinematics_telemetry.ipynb:json"
-    "notebooks/03_doppler_velocity_tracking.ipynb:json"
-    "notebooks/04_acoustic_free_fall_gravity.ipynb:json"
-    "notebooks/05_doa_polar_radar.ipynb:json"
-    "context/generate_sw_summary.sh:bash"
-)
-
-# 4. Append each file
-for item in "${TARGET_FILES[@]}"; do
-    filepath="${item%%:*}"
-    syntax="${item##*:}"
-    filename=$(basename "$filepath")
-
-    if [ -f "$filepath" ]; then
-        echo "Adding: ${filepath}"
-        {
-            echo "${filename}:"
-            echo ""
-            echo "\`\`\`${syntax}"
-            cat "${filepath}"
-            echo "\`\`\`"
-            echo ""
-        } >> "${OUTPUT_FILE}"
-    fi
-done
-
-echo "Done! SW context generated in: ${OUTPUT_FILE}"
 ```
 
 __init__.py: (pynq_localizer/__init__.py)
