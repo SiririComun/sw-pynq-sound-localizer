@@ -1,11 +1,11 @@
 """
 pynq_localizer.kinematics: High-Precision Acoustic Kinematics & Frequency Ridge Tracking Engine.
 Provides sub-Hertz pitch tracking (20 Hz - 20 kHz), spectral quadruple extraction (f, A, φ, t),
-phase velocity verification, smoothed RMS envelope extraction, sliding STFT frequency trajectories,
-temperature-compensated sound speed, Doppler velocity, and gravity metrics.
+multi-source tracking, phase velocity verification, smoothed RMS envelope extraction,
+sliding STFT frequency trajectories, temperature-compensated sound speed, Doppler velocity, and gravity metrics.
 """
 
-from typing import Tuple, Optional, Union, Dict, List
+from typing import Tuple, Optional, Union, Dict, List, Any
 import numpy as np
 
 class KinematicAnalytics:
@@ -130,7 +130,7 @@ class KinematicAnalytics:
         :param enbw: Equivalent Noise Bandwidth window correction factor.
         :param raw_scale_factor: ADC linear voltage scaling factor.
         :return: Structured telemetry dictionary containing:
-                 - 'frequency_hz': Parabolic interpolated peak frequency (sub-Hertz).
+                 - 'frequency_hz': Exact analytical sinc peak frequency (sub-Hertz).
                  - 'amplitude_v': Parseval in-band RMS voltage envelope.
                  - 'phase_rad': Dominant tone phase in radians [-π, +π].
                  - 'phase_deg': Dominant tone phase in degrees [-180°, +180°].
@@ -160,27 +160,26 @@ class KinematicAnalytics:
                 "is_valid": False
             }
 
-        # 2. In-band Peak Search
         band_mags = mags[band_indices]
         local_k = int(np.argmax(band_mags))
         k0 = int(band_indices[local_k])
 
-        # 3. Sub-Hertz Parabolic Pitch Interpolation on Log-Magnitude
+        # 2. Sub-Hertz Analytical Sinc Pitch Interpolation
         f0, delta = cls.track_sub_hertz_pitch(
             freqs, mags, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True, return_delta=True
         )
 
-        # 4. In-Band Parseval RMS Energy Integration
+        # 3. In-Band Parseval RMS Energy Integration
         n_points = len(freqs) * 2  # Full FFT size N
         band_energy = float(np.sum(band_mags ** 2))
         v_rms = (np.sqrt(2.0 * band_energy) / (n_points * enbw)) * raw_scale_factor
 
-        # 5. Fractional-bin Phase Alignment Correction
+        # 4. Fractional-bin Phase Alignment Correction
         raw_phi = float(phases[k0]) if (0 <= k0 < len(phases)) else 0.0
         phi_corrected = raw_phi + (np.pi * delta * (n_points - 1.0) / n_points)
         phi_wrapped = float((phi_corrected + np.pi) % (2.0 * np.pi) - np.pi)
 
-        # 6. Sub-Microsecond Hardware Timestamp
+        # 5. Sub-Microsecond Hardware Timestamp
         t_sec = float(timer_cycles) / clock_freq_hz
 
         return {
@@ -307,12 +306,7 @@ class KinematicAnalytics:
 
     @staticmethod
     def compute_rms_amplitude(signal: np.ndarray, remove_dc: bool = True) -> float:
-        """
-        Computes root-mean-square (RMS) physical voltage of a signal slice.
-        :param signal: 1D voltage array.
-        :param remove_dc: Remove mean DC offset before RMS calculation.
-        :return: RMS amplitude in Volts.
-        """
+        """Computes root-mean-square (RMS) physical voltage of a signal slice."""
         x = np.asarray(signal, dtype=np.float64)
         if len(x) == 0:
             return 0.0
@@ -322,11 +316,7 @@ class KinematicAnalytics:
 
     @staticmethod
     def hilbert_transform(signal: np.ndarray) -> np.ndarray:
-        """
-        Computes analytic signal z[n] = x[n] + j*H{x[n]} using pure NumPy FFT.
-        :param signal: 1D real signal.
-        :return: 1D complex analytic signal.
-        """
+        """Computes analytic signal z[n] = x[n] + j*H{x[n]} using pure NumPy FFT."""
         x = np.asarray(signal, dtype=np.float64)
         n = len(x)
         if n == 0:
@@ -346,12 +336,7 @@ class KinematicAnalytics:
 
     @classmethod
     def extract_analytic_envelope(cls, signal: np.ndarray, remove_dc: bool = True) -> np.ndarray:
-        """
-        Extracts physical instantaneous amplitude envelope A(t) = |z(t)|.
-        :param signal: 1D real signal.
-        :param remove_dc: Subtract mean before Hilbert transform.
-        :return: 1D envelope array in Volts.
-        """
+        """Extracts physical instantaneous amplitude envelope A(t) = |z(t)|."""
         x = np.asarray(signal, dtype=np.float64)
         if remove_dc:
             x = x - np.mean(x)
@@ -365,14 +350,7 @@ class KinematicAnalytics:
         step_ms: float = 10.0,
         method: str = "rms"
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Downsamples continuous physical audio into a smoothed A(t) time series.
-        :param signal: 1D raw voltage array.
-        :param fs: Sampling frequency in Hz (e.g. 50,000 Hz).
-        :param step_ms: Averaging hop step in milliseconds (default: 10.0 ms).
-        :param method: 'rms' or 'peak'.
-        :return: (time_axis_sec, amplitude_array).
-        """
+        """Downsamples continuous physical audio into a smoothed A(t) time series."""
         x = np.asarray(signal, dtype=np.float64)
         x_ac = x - np.mean(x)
         n_samples = len(x_ac)
@@ -406,20 +384,7 @@ class KinematicAnalytics:
         energy_thresh: float = 0.015,
         window_type: str = "blackmanharris"
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Extracts synchronized Amplitude A(t) and Dominant Frequency f0(t) trajectories
-        across the full 20 Hz - 20 kHz band with noise squelch gating.
-
-        :param signal: 1D raw voltage audio array.
-        :param fs: Sampling frequency in Hz.
-        :param window_ms: STFT analysis window duration in ms (default: 20.0 ms).
-        :param hop_ms: Telemetry hop step in ms (default: 10.0 ms).
-        :param min_freq_hz: Minimum frequency threshold (default: 20.0 Hz).
-        :param max_freq_hz: Maximum frequency threshold (default: 20,000.0 Hz).
-        :param energy_thresh: RMS voltage threshold below which f0 is squelched to NaN.
-        :param window_type: 'blackmanharris', 'hann', or 'hamming'.
-        :return: (time_axis_sec, amplitude_trajectory, frequency_trajectory).
-        """
+        """Extracts synchronized Amplitude A(t) and Dominant Frequency f0(t) trajectories."""
         x = np.asarray(signal, dtype=np.float64)
         x_ac = x - np.mean(x)
         n_samples = len(x_ac)
@@ -467,3 +432,103 @@ class KinematicAnalytics:
                 freq_traj[i] = f0
 
         return times_sec, amp_traj, freq_traj
+
+
+class MultiSourceTracker:
+    """
+    Multi-Band Spectral Tracker for simultaneous independent tracking of multiple acoustic sources.
+    Extracts independent quadruples (f_i, A_i, phi_i, t) for an arbitrary list of frequency bands.
+    """
+
+    def __init__(
+        self,
+        source_bands: Dict[str, Tuple[float, float]],
+        clock_freq_hz: float = 100_000_000.0,
+        enbw: float = 1.0,
+        noise_gate_v: float = 0.005
+    ):
+        """
+        :param source_bands: Dictionary mapping source names to (f_min, f_max) tuples in Hz.
+                             Example: {'Speaker_1000': (850.0, 1150.0), 'Speaker_2000': (1850.0, 2150.0)}
+        :param clock_freq_hz: System AXI clock frequency for timestamp decoding (default: 100 MHz).
+        :param enbw: Equivalent Noise Bandwidth window correction factor.
+        :param noise_gate_v: Minimum RMS amplitude in Volts to classify tone as active.
+        """
+        self.source_bands = source_bands
+        self.clock_freq_hz = float(clock_freq_hz)
+        self.enbw = float(enbw)
+        self.noise_gate_v = float(noise_gate_v)
+
+        # Rolling history buffer per source: {src_name: {'t': [], 'f': [], 'amp': [], 'phi': []}}
+        self.history: Dict[str, Dict[str, List[float]]] = {
+            src_name: {"t": [], "f": [], "amp": [], "phi": []}
+            for src_name in self.source_bands.keys()
+        }
+
+    def process_spectral_frame(
+        self,
+        freq_axis: np.ndarray,
+        magnitude: np.ndarray,
+        phase_rad: np.ndarray,
+        timer_cycles: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Processes a single polar FFT frame and extracts independent quadruples for all defined sources.
+
+        :param freq_axis: 1D positive half-spectrum frequency axis in Hz.
+        :param magnitude: 1D magnitude spectrum |X(f)|.
+        :param phase_rad: 1D phase spectrum ∠X(f) in radians.
+        :param timer_cycles: Hardware timer cycle count.
+        :return: Dictionary containing per-source quadruple records and global frame timestamp.
+        """
+        t_sec = float(timer_cycles) / self.clock_freq_hz if self.clock_freq_hz > 0 else 0.0
+        frame_results = {}
+
+        for src_name, (f_min, f_max) in self.source_bands.items():
+            quad = KinematicAnalytics.extract_quadruple(
+                freq_axis=freq_axis,
+                magnitude=magnitude,
+                phase_rad=phase_rad,
+                f_min=f_min,
+                f_max=f_max,
+                timer_cycles=timer_cycles,
+                clock_freq_hz=self.clock_freq_hz,
+                enbw=self.enbw
+            )
+
+            # Check noise gate
+            is_active = bool(quad["amplitude_v"] >= self.noise_gate_v and quad["is_valid"])
+            quad["is_active"] = is_active
+            quad["source_name"] = src_name
+            quad["band_limits"] = (float(f_min), float(f_max))
+
+            frame_results[src_name] = quad
+
+            # Update rolling history
+            self.history[src_name]["t"].append(t_sec)
+            self.history[src_name]["f"].append(quad["frequency_hz"] if is_active else np.nan)
+            self.history[src_name]["amp"].append(quad["amplitude_v"])
+            self.history[src_name]["phi"].append(quad["phase_rad"] if is_active else np.nan)
+
+        return {
+            "timestamp_sec": t_sec,
+            "sources": frame_results
+        }
+
+    def get_source_trajectory(self, source_name: str) -> Dict[str, np.ndarray]:
+        """Returns the complete recorded time series for a specific source."""
+        if source_name not in self.history:
+            raise KeyError(f"Source '{source_name}' not found in tracker.")
+        
+        hist = self.history[source_name]
+        return {
+            "t": np.array(hist["t"]),
+            "f": np.array(hist["f"]),
+            "amp": np.array(hist["amp"]),
+            "phi": np.array(hist["phi"])
+        }
+
+    def reset_history(self):
+        """Clears all accumulated history buffers."""
+        for src_name in self.history:
+            self.history[src_name] = {"t": [], "f": [], "amp": [], "phi": []}
