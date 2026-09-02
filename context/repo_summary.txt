@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/fft-quadruple-telemetry-engine @ 2431cb5
+• Repository State    : feat/fft-quadruple-telemetry-engine @ f931ce3
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1-rc2
 • Package Version     : v1.0.0
 ==============================================================================
@@ -9,13 +9,13 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (4 modified/untracked files)
+Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (3 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/fft-quadruple-telemetry-engine                2431cb5 [origin/feat/fft-quadruple-telemetry-engine: ahead 2] feat(dsp): add coherent harmonic leakage cancellation and SIR metrics to MultiSourceTracker
+* feat/fft-quadruple-telemetry-engine                f931ce3 [origin/feat/fft-quadruple-telemetry-engine] docs(context): update repository summary and Cog configuration with multi-source test suite
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/fft-quadruple-telemetry-engine 5580740 feat(driver): integrate auto-priming warmup and timer initialization into MicrophoneArrayOverlay
+  remotes/origin/feat/fft-quadruple-telemetry-engine f931ce3 docs(context): update repository summary and Cog configuration with multi-source test suite
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
@@ -23,9 +23,12 @@ Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 2431cb5  (HEAD -> feat/fft-quadruple-telemetry-engine) - 2026-09-02 : feat(dsp): add coherent harmonic leakage cancellation and SIR metrics to MultiSourceTracker (SiririComun)
+* f931ce3  (HEAD -> feat/fft-quadruple-telemetry-engine, origin/feat/fft-quadruple-telemetry-engine) - 2026-09-02 : docs(context): update repository summary and Cog configuration with multi-source test suite (SiririComun)
+* 15b5445  - 2026-09-02 : test(dsp): add unit test suite for multi-source tracking and harmonic leakage rejection (SiririComun)
+* 0752a19  - 2026-09-02 : feat(dsp): implement multi-source harmonic cancellation and SIR estimation in MultiSourceTracker (SiririComun)
+* 2431cb5  - 2026-09-02 : feat(dsp): add coherent harmonic leakage cancellation and SIR metrics to MultiSourceTracker (SiririComun)
 * 4968f10  - 2026-09-02 : feat(dsp): implement MultiSourceTracker multi-band spectral extraction engine (SiririComun)
-* 5580740  (origin/feat/fft-quadruple-telemetry-engine) - 2026-09-01 : feat(driver): integrate auto-priming warmup and timer initialization into MicrophoneArrayOverlay (SiririComun)
+* 5580740  - 2026-09-01 : feat(driver): integrate auto-priming warmup and timer initialization into MicrophoneArrayOverlay (SiririComun)
 * b9c2116  - 2026-09-01 : fix(driver): add timer auto-init and non-blocking recovery flush to capture_spectral_frame (SiririComun)
 * 37e1605  - 2026-09-01 : chore(hw): pin hardware overlay to v1.5.1-rc2 with FFT status FIFO drain fix (SiririComun)
 * eff4385  - 2026-09-01 : docs(context): update repository summary and Cog configuration with quadruple test suite (SiririComun)
@@ -35,9 +38,6 @@ Multi-Branch Git Commit Graph:
 * 2977a8c  - 2026-09-01 : feat(driver): integrate lock-step spectral polar frame capture into MicrophoneArrayOverlay (SiririComun)
 * f11adc8  - 2026-09-01 : docs(context): update repository summary with v1.5.1-rc1 hardware pinning (SiririComun)
 * bc657ce  - 2026-09-01 : chore(hw): pin hardware overlay to v1.5.1-rc1 with 32-bit polar CORDIC stream (SiririComun)
-| * 4172361  (origin/feat/v1.6.0-overlay-integration, feat/v1.6.0-overlay-integration) - 2026-08-30 : docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook (SiririComun)
-| * ae732b9  - 2026-08-28 : docs(notebooks): add dedicated experiments for physical 1/r decay and dual-source isolation (SiririComun)
-| * a82abb9  - 2026-08-28 : fix(core): finalize pipelined 3-DMA streaming and lock-step flight recorder (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -193,7 +193,12 @@ __init__.py: (pynq_localizer/__init__.py)
 pynq_sound_localizer: FPGA-Accelerated Acoustic Kinematics, Doppler Tracking & Sound Localization.
 """
 
-from pynq_localizer.kinematics import KinematicAnalytics, MultiSourceTracker
+from pynq_localizer.kinematics import (
+    KinematicAnalytics,
+    MultiSourceTracker,
+    AcousticProfile,
+    DistanceEstimator,
+)
 from pynq_localizer.notebooks import copy_notebooks
 
 try:
@@ -216,6 +221,8 @@ __all__ = [
     "MicrophoneArrayOverlay",
     "KinematicAnalytics",
     "MultiSourceTracker",
+    "AcousticProfile",
+    "DistanceEstimator",
     "KinematicsDashboard",
     "copy_notebooks",
 ]
@@ -891,12 +898,16 @@ kinematics.py: (pynq_localizer/kinematics.py)
 """
 pynq_localizer.kinematics: High-Precision Acoustic Kinematics & Frequency Ridge Tracking Engine.
 Provides sub-Hertz pitch tracking (20 Hz - 20 kHz), spectral quadruple extraction (f, A, φ, t),
-multi-source tracking, phase velocity verification, smoothed RMS envelope extraction,
-sliding STFT frequency trajectories, temperature-compensated sound speed, Doppler velocity, and gravity metrics.
+multi-source tracking, single-channel distance estimation r = k(f)/A, acoustic profile modeling,
+phase velocity verification, smoothed RMS envelope extraction, sliding STFT frequency trajectories,
+temperature-compensated sound speed, Doppler velocity, and gravity metrics.
 """
 
-from typing import Tuple, Optional, Union, Dict, List, Any
+import json
+from pathlib import Path
+from typing import Tuple, Optional, Union, Dict, List, Any, Callable
 import numpy as np
+from scipy.interpolate import interp1d
 
 class KinematicAnalytics:
     """
@@ -1336,18 +1347,9 @@ class MultiSourceTracker:
         enbw: float = 1.0,
         noise_gate_v: float = 0.005,
         harmonic_rejection: bool = True,
-        h2_coeff: float = 0.03,  # 2nd harmonic power ratio (~ -15 dB)
-        h3_coeff: float = 0.008  # 3rd harmonic power ratio (~ -21 dB)
+        h2_coeff: float = 0.03,
+        h3_coeff: float = 0.008
     ):
-        """
-        :param source_bands: Dictionary mapping source names to (f_min, f_max) tuples in Hz.
-        :param clock_freq_hz: System AXI clock frequency for timestamp decoding (default: 100 MHz).
-        :param enbw: Equivalent Noise Bandwidth window correction factor.
-        :param noise_gate_v: Minimum RMS amplitude in Volts to classify tone as active.
-        :param harmonic_rejection: Enable automatic 2f0/3f0 cross-talk subtraction.
-        :param h2_coeff: Estimated 2nd harmonic distortion power ratio.
-        :param h3_coeff: Estimated 3rd harmonic distortion power ratio.
-        """
         self.source_bands = source_bands
         self.clock_freq_hz = float(clock_freq_hz)
         self.enbw = float(enbw)
@@ -1356,7 +1358,6 @@ class MultiSourceTracker:
         self.h2_coeff = float(h2_coeff)
         self.h3_coeff = float(h3_coeff)
 
-        # Rolling history buffer per source: {src_name: {'t': [], 'f': [], 'amp': [], 'phi': [], 'sir': []}}
         self.history: Dict[str, Dict[str, List[float]]] = {
             src_name: {"t": [], "f": [], "amp": [], "phi": [], "sir": []}
             for src_name in self.source_bands.keys()
@@ -1376,7 +1377,7 @@ class MultiSourceTracker:
         t_sec = float(timer_cycles) / self.clock_freq_hz if self.clock_freq_hz > 0 else 0.0
         raw_quads = {}
 
-        # 1. First Pass: Extract raw band quadruples and band energies
+        # 1. Extract raw quadruples
         for src_name, (f_min, f_max) in self.source_bands.items():
             quad = KinematicAnalytics.extract_quadruple(
                 freq_axis=freq_axis,
@@ -1390,7 +1391,7 @@ class MultiSourceTracker:
             )
             raw_quads[src_name] = quad
 
-        # 2. Second Pass: Coherent Harmonic Cross-Talk Cancellation & SIR Calculation
+        # 2. Harmonic Cross-Talk Cancellation & SIR
         frame_results = {}
         src_names = list(self.source_bands.keys())
 
@@ -1409,26 +1410,22 @@ class MultiSourceTracker:
                     p_i = quad_i["band_energy"]
 
                     if np.isfinite(f_i) and p_i > 0:
-                        # Check 2nd harmonic collision: f_j ≈ 2 * f_i
+                        # 2nd harmonic
                         if abs(f_j - 2.0 * f_i) < (self.source_bands[j_name][1] - self.source_bands[j_name][0]) * 0.5:
                             leak = p_i * self.h2_coeff
                             total_leakage += leak
-
-                        # Check 3rd harmonic collision: f_j ≈ 3 * f_i
+                        # 3rd harmonic
                         elif abs(f_j - 3.0 * f_i) < (self.source_bands[j_name][1] - self.source_bands[j_name][0]) * 0.5:
                             leak = p_i * self.h3_coeff
                             total_leakage += leak
 
-            # Cleaned in-band energy
             p_j_clean = max(0.0, p_j - total_leakage)
             n_points = len(freq_axis) * 2
             v_rms_clean = (np.sqrt(2.0 * p_j_clean) / (n_points * self.enbw)) * (3.3 / 4095.0)
 
-            # Signal-to-Interference Ratio (SIR)
             sir_db = 10.0 * np.log10(max(p_j_clean, 1e-12) / max(total_leakage, 1e-12))
             sir_db = float(np.clip(sir_db, -10.0, 60.0))
 
-            # Update quadruple with cleaned metrics
             quad_j["amplitude_v"] = float(v_rms_clean)
             quad_j["sir_db"] = float(sir_db)
             quad_j["harmonic_leakage_energy"] = float(total_leakage)
@@ -1440,7 +1437,6 @@ class MultiSourceTracker:
 
             frame_results[j_name] = quad_j
 
-            # Update rolling history
             self.history[j_name]["t"].append(t_sec)
             self.history[j_name]["f"].append(quad_j["frequency_hz"] if is_active else np.nan)
             self.history[j_name]["amp"].append(v_rms_clean)
@@ -1470,6 +1466,233 @@ class MultiSourceTracker:
         """Clears all accumulated history buffers."""
         for src_name in self.history:
             self.history[src_name] = {"t": [], "f": [], "amp": [], "phi": [], "sir": []}
+
+# =============================================================================
+# 5. Acoustic Calibration Profile & Injectable Distance Inversion Engine
+# =========================================================================
+
+class AcousticProfile:
+    """
+    Data model and interpolator for physical acoustic calibration functions k(f).
+    Supports discrete calibration grids, continuous splines, custom callables, and JSON export/import.
+    """
+
+    def __init__(
+        self,
+        frequencies_hz: Optional[Union[List[float], np.ndarray]] = None,
+        k_values: Optional[Union[List[float], np.ndarray]] = None,
+        r_squared: Optional[Union[List[float], np.ndarray]] = None,
+        k_uncertainty: Optional[Union[List[float], np.ndarray]] = None,
+        name: str = "DefaultProfile",
+        description: str = "Acoustic calibration curve k(f)"
+    ):
+        self.name = name
+        self.description = description
+        self._callable_model: Optional[Callable[[float], float]] = None
+
+        if frequencies_hz is not None and k_values is not None:
+            self.frequencies = np.asarray(frequencies_hz, dtype=np.float64)
+            self.k_values = np.asarray(k_values, dtype=np.float64)
+            self.r_squared = (
+                np.asarray(r_squared, dtype=np.float64)
+                if r_squared is not None
+                else np.ones_like(self.k_values)
+            )
+            self.k_uncertainty = (
+                np.asarray(k_uncertainty, dtype=np.float64)
+                if k_uncertainty is not None
+                else 0.03 * self.k_values
+            )
+
+            # Build 1D interpolator
+            if len(self.frequencies) > 1:
+                self._interp_k = interp1d(
+                    self.frequencies,
+                    self.k_values,
+                    kind="linear" if len(self.frequencies) < 4 else "cubic",
+                    bounds_error=False,
+                    fill_value=(self.k_values[0], self.k_values[-1])
+                )
+                self._interp_err = interp1d(
+                    self.frequencies,
+                    self.k_uncertainty,
+                    kind="linear",
+                    bounds_error=False,
+                    fill_value=(self.k_uncertainty[0], self.k_uncertainty[-1])
+                )
+            else:
+                self._interp_k = lambda f: self.k_values[0]
+                self._interp_err = lambda f: self.k_uncertainty[0]
+        else:
+            self.frequencies = np.array([1000.0], dtype=np.float64)
+            self.k_values = np.array([0.05], dtype=np.float64)
+            self.r_squared = np.array([1.0], dtype=np.float64)
+            self.k_uncertainty = np.array([0.002], dtype=np.float64)
+            self._interp_k = lambda f: 0.05
+            self._interp_err = lambda f: 0.002
+
+    def evaluate(self, frequency_hz: float) -> Tuple[float, float]:
+        """
+        Evaluates k(f) and its uncertainty delta_k at a specific frequency.
+        :param frequency_hz: Target acoustic pitch in Hz.
+        :return: (k_value in V*m, delta_k in V*m).
+        """
+        f = float(frequency_hz)
+        if not np.isfinite(f) or f <= 0:
+            return float(self.k_values[0]), float(self.k_uncertainty[0])
+
+        if self._callable_model is not None:
+            k_val = float(self._callable_model(f))
+            return k_val, 0.03 * k_val
+
+        k_val = float(self._interp_k(f))
+        k_err = float(self._interp_err(f))
+        return k_val, k_err
+
+    @classmethod
+    def from_constant(cls, k_value: float, relative_error: float = 0.03, name: str = "ConstantProfile") -> "AcousticProfile":
+        """Factory creating an AcousticProfile with a flat, constant k across all frequencies."""
+        profile = cls(
+            frequencies_hz=[100.0, 10000.0],
+            k_values=[float(k_value), float(k_value)],
+            r_squared=[1.0, 1.0],
+            k_uncertainty=[float(k_value) * relative_error, float(k_value) * relative_error],
+            name=name,
+            description=f"Static flat profile with k={k_value:.4f} V*m"
+        )
+        return profile
+
+    @classmethod
+    def from_callable(cls, func: Callable[[float], float], name: str = "CallableProfile") -> "AcousticProfile":
+        """Factory creating an AcousticProfile evaluated directly from a mathematical function k(f)."""
+        profile = cls.from_constant(0.05, name=name)
+        profile._callable_model = func
+        return profile
+
+    def to_json(self, filepath: Union[str, Path]):
+        """Serializes calibration profile to a portable JSON file."""
+        out_path = Path(filepath).resolve()
+        data = {
+            "name": self.name,
+            "description": self.description,
+            "frequencies_hz": self.frequencies.tolist(),
+            "k_values": self.k_values.tolist(),
+            "r_squared": self.r_squared.tolist(),
+            "k_uncertainty": self.k_uncertainty.tolist()
+        }
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+    @classmethod
+    def from_json(cls, filepath: Union[str, Path]) -> "AcousticProfile":
+        """Loads a calibration profile from a JSON file."""
+        in_path = Path(filepath).resolve()
+        with open(in_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return cls(
+            frequencies_hz=data["frequencies_hz"],
+            k_values=data["k_values"],
+            r_squared=data.get("r_squared"),
+            k_uncertainty=data.get("k_uncertainty"),
+            name=data.get("name", in_path.stem),
+            description=data.get("description", "")
+        )
+
+class DistanceEstimator:
+    """
+    Runtime Distance Inversion Engine.
+    Computes real-time physical distance r(t) = k(f0) / A(t) with dynamic error propagation.
+    """
+
+    def __init__(
+        self,
+        profile: Optional[AcousticProfile] = None,
+        k_constant: Optional[float] = None,
+        k_func: Optional[Callable[[float], float]] = None,
+        noise_gate_v: float = 0.003,
+        voltage_uncertainty_v: float = 0.0005,
+        min_distance_m: float = 0.05,
+        max_distance_m: float = 10.0
+    ):
+        """
+        :param profile: Injected AcousticProfile instance containing k(f) calibration data.
+        :param k_constant: Optional static constant k override in V*m (e.g. 0.05 V*m).
+        :param k_func: Optional callable k(f) function.
+        :param noise_gate_v: Minimum RMS amplitude in Volts to compute distance (squelches silence to NaN).
+        :param voltage_uncertainty_v: Inherent ADC voltage noise uncertainty delta_A.
+        :param min_distance_m: Minimum physical clipping boundary in meters (prevents near-field division spikes).
+        :param max_distance_m: Maximum physical clipping boundary in meters.
+        """
+        if profile is not None:
+            self.profile = profile
+        elif k_func is not None:
+            self.profile = AcousticProfile.from_callable(k_func)
+        elif k_constant is not None:
+            self.profile = AcousticProfile.from_constant(k_constant)
+        else:
+            # Default baseline profile (k = 0.05 V*m)
+            self.profile = AcousticProfile.from_constant(0.05, name="DefaultBaseline")
+
+        self.noise_gate_v = float(noise_gate_v)
+        self.voltage_uncertainty_v = float(voltage_uncertainty_v)
+        self.min_dist = float(min_distance_m)
+        self.max_dist = float(max_distance_m)
+
+    def estimate_distance(
+        self,
+        amplitude_v: float,
+        frequency_hz: float,
+        delta_a: Optional[float] = None
+    ) -> Tuple[float, float]:
+        """
+        Calculates physical distance r(t) and uncertainty delta_r(t) from in-band amplitude and frequency.
+        r(t) = k(f0) / A(t)
+        delta_r(t) = r * sqrt( (delta_k / k)^2 + (delta_A / A)^2 )
+
+        :param amplitude_v: Measured in-band RMS voltage envelope A(t).
+        :param frequency_hz: Measured fundamental pitch f0(t).
+        :param delta_a: Optional explicit measurement voltage uncertainty.
+        :return: (distance_meters, uncertainty_meters). Returns (NaN, NaN) if below noise gate.
+        """
+        amp = float(amplitude_v)
+        f0 = float(frequency_hz)
+
+        # Squelch silence/noise floor
+        if not np.isfinite(amp) or amp < self.noise_gate_v or not np.isfinite(f0) or f0 <= 0:
+            return np.nan, np.nan
+
+        # Evaluate k(f0) and delta_k
+        k_val, delta_k = self.profile.evaluate(f0)
+        da = float(delta_a) if delta_a is not None else self.voltage_uncertainty_v
+
+        # Invert spherical decay: r = k / A
+        r_calc = k_val / max(amp, 1e-6)
+        r_clamped = float(np.clip(r_calc, self.min_dist, self.max_dist))
+
+        # First-order error propagation
+        rel_k_err = delta_k / max(k_val, 1e-6)
+        rel_a_err = da / max(amp, 1e-6)
+        delta_r = float(r_clamped * np.sqrt(rel_k_err ** 2 + rel_a_err ** 2))
+
+        return r_clamped, delta_r
+
+    def process_quadruple(self, quadruple: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Augments an incoming quadruple dict with real-time distance metrics.
+        Adds 'distance_m', 'distance_err_m', and 'k_evaluated'.
+        """
+        res = quadruple.copy()
+        amp = res.get("amplitude_v", 0.0)
+        f0 = res.get("frequency_hz", np.nan)
+
+        r_m, r_err = self.estimate_distance(amp, f0)
+        k_val, delta_k = self.profile.evaluate(f0 if np.isfinite(f0) else 1000.0)
+
+        res["distance_m"] = r_m
+        res["distance_err_m"] = r_err
+        res["k_evaluated"] = k_val
+        res["k_uncertainty"] = delta_k
+        return res
 ```
 
 kinematics_dashboard.py: (pynq_localizer/kinematics_dashboard.py)

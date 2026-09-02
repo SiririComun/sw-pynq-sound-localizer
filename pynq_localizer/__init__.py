@@ -2,7 +2,12 @@
 pynq_sound_localizer: FPGA-Accelerated Acoustic Kinematics, Doppler Tracking & Sound Localization.
 """
 
-from pynq_localizer.kinematics import KinematicAnalytics, MultiSourceTracker
+from pynq_localizer.kinematics import (
+    KinematicAnalytics,
+    MultiSourceTracker,
+    AcousticProfile,
+    DistanceEstimator,
+)
 from pynq_localizer.notebooks import copy_notebooks
 
 try:
@@ -25,6 +30,8 @@ __all__ = [
     "MicrophoneArrayOverlay",
     "KinematicAnalytics",
     "MultiSourceTracker",
+    "AcousticProfile",
+    "DistanceEstimator",
     "KinematicsDashboard",
     "copy_notebooks",
 ]
