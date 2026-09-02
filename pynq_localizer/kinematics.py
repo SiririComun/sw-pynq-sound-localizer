@@ -174,9 +174,9 @@ class KinematicAnalytics:
         band_energy = float(np.sum(band_mags ** 2))
         v_rms = (np.sqrt(2.0 * band_energy) / (n_points * enbw)) * raw_scale_factor
 
-        # 4. Fractional-bin Phase Alignment Correction
+        # 4. Fractional-bin Phase Alignment Correction (Subtract window center offset)
         raw_phi = float(phases[k0]) if (0 <= k0 < len(phases)) else 0.0
-        phi_corrected = raw_phi + (np.pi * delta * (n_points - 1.0) / n_points)
+        phi_corrected = raw_phi - (np.pi * delta * (n_points - 1.0) / n_points)
         phi_wrapped = float((phi_corrected + np.pi) % (2.0 * np.pi) - np.pi)
 
         # 5. Sub-Microsecond Hardware Timestamp
