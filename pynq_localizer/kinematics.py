@@ -10,7 +10,6 @@ import json
 from pathlib import Path
 from typing import Tuple, Optional, Union, Dict, List, Any, Callable
 import numpy as np
-from scipy.interpolate import interp1d
 
 class KinematicAnalytics:
     """
@@ -576,10 +575,17 @@ class MultiSourceTracker:
 # 5. Acoustic Calibration Profile & Injectable Distance Inversion Engine
 # =========================================================================
 
+try:
+    from scipy.interpolate import interp1d
+    _HAS_SCIPY = True
+except (ImportError, ModuleNotFoundError):
+    _HAS_SCIPY = False
+
 class AcousticProfile:
     """
     Data model and interpolator for physical acoustic calibration functions k(f).
     Supports discrete calibration grids, continuous splines, custom callables, and JSON export/import.
+    Uses pure NumPy (np.interp) by default with optional SciPy cubic spline enhancement.
     """
 
     def __init__(
@@ -609,25 +615,33 @@ class AcousticProfile:
                 else 0.03 * self.k_values
             )
 
-            # Build 1D interpolator
+            # Build 1D interpolator (Pure NumPy fallback for zero-dependency portability)
             if len(self.frequencies) > 1:
-                self._interp_k = interp1d(
-                    self.frequencies,
-                    self.k_values,
-                    kind="linear" if len(self.frequencies) < 4 else "cubic",
-                    bounds_error=False,
-                    fill_value=(self.k_values[0], self.k_values[-1])
-                )
-                self._interp_err = interp1d(
-                    self.frequencies,
-                    self.k_uncertainty,
-                    kind="linear",
-                    bounds_error=False,
-                    fill_value=(self.k_uncertainty[0], self.k_uncertainty[-1])
-                )
+                if _HAS_SCIPY and len(self.frequencies) >= 4:
+                    self._interp_k = interp1d(
+                        self.frequencies,
+                        self.k_values,
+                        kind="cubic",
+                        bounds_error=False,
+                        fill_value=(self.k_values[0], self.k_values[-1])
+                    )
+                    self._interp_err = interp1d(
+                        self.frequencies,
+                        self.k_uncertainty,
+                        kind="linear",
+                        bounds_error=False,
+                        fill_value=(self.k_uncertainty[0], self.k_uncertainty[-1])
+                    )
+                else:
+                    self._interp_k = lambda f: float(
+                        np.interp(f, self.frequencies, self.k_values, left=self.k_values[0], right=self.k_values[-1])
+                    )
+                    self._interp_err = lambda f: float(
+                        np.interp(f, self.frequencies, self.k_uncertainty, left=self.k_uncertainty[0], right=self.k_uncertainty[-1])
+                    )
             else:
-                self._interp_k = lambda f: self.k_values[0]
-                self._interp_err = lambda f: self.k_uncertainty[0]
+                self._interp_k = lambda f: float(self.k_values[0])
+                self._interp_err = lambda f: float(self.k_uncertainty[0])
         else:
             self.frequencies = np.array([1000.0], dtype=np.float64)
             self.k_values = np.array([0.05], dtype=np.float64)
