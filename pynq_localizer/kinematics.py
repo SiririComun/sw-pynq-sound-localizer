@@ -437,7 +437,7 @@ class KinematicAnalytics:
 class MultiSourceTracker:
     """
     Multi-Band Spectral Tracker for simultaneous independent tracking of multiple acoustic sources.
-    Extracts independent quadruples (f_i, A_i, phi_i, t) for an arbitrary list of frequency bands.
+    Features coherent harmonic leakage cancellation (2f0, 3f0) and dynamic SIR metrics.
     """
 
     def __init__(
@@ -445,23 +445,31 @@ class MultiSourceTracker:
         source_bands: Dict[str, Tuple[float, float]],
         clock_freq_hz: float = 100_000_000.0,
         enbw: float = 1.0,
-        noise_gate_v: float = 0.005
+        noise_gate_v: float = 0.005,
+        harmonic_rejection: bool = True,
+        h2_coeff: float = 0.03,  # 2nd harmonic power ratio (~ -15 dB)
+        h3_coeff: float = 0.008  # 3rd harmonic power ratio (~ -21 dB)
     ):
         """
         :param source_bands: Dictionary mapping source names to (f_min, f_max) tuples in Hz.
-                             Example: {'Speaker_1000': (850.0, 1150.0), 'Speaker_2000': (1850.0, 2150.0)}
         :param clock_freq_hz: System AXI clock frequency for timestamp decoding (default: 100 MHz).
         :param enbw: Equivalent Noise Bandwidth window correction factor.
         :param noise_gate_v: Minimum RMS amplitude in Volts to classify tone as active.
+        :param harmonic_rejection: Enable automatic 2f0/3f0 cross-talk subtraction.
+        :param h2_coeff: Estimated 2nd harmonic distortion power ratio.
+        :param h3_coeff: Estimated 3rd harmonic distortion power ratio.
         """
         self.source_bands = source_bands
         self.clock_freq_hz = float(clock_freq_hz)
         self.enbw = float(enbw)
         self.noise_gate_v = float(noise_gate_v)
+        self.harmonic_rejection = harmonic_rejection
+        self.h2_coeff = float(h2_coeff)
+        self.h3_coeff = float(h3_coeff)
 
-        # Rolling history buffer per source: {src_name: {'t': [], 'f': [], 'amp': [], 'phi': []}}
+        # Rolling history buffer per source: {src_name: {'t': [], 'f': [], 'amp': [], 'phi': [], 'sir': []}}
         self.history: Dict[str, Dict[str, List[float]]] = {
-            src_name: {"t": [], "f": [], "amp": [], "phi": []}
+            src_name: {"t": [], "f": [], "amp": [], "phi": [], "sir": []}
             for src_name in self.source_bands.keys()
         }
 
@@ -473,17 +481,13 @@ class MultiSourceTracker:
         timer_cycles: int = 0
     ) -> Dict[str, Any]:
         """
-        Processes a single polar FFT frame and extracts independent quadruples for all defined sources.
-
-        :param freq_axis: 1D positive half-spectrum frequency axis in Hz.
-        :param magnitude: 1D magnitude spectrum |X(f)|.
-        :param phase_rad: 1D phase spectrum ∠X(f) in radians.
-        :param timer_cycles: Hardware timer cycle count.
-        :return: Dictionary containing per-source quadruple records and global frame timestamp.
+        Processes a single polar FFT frame, extracts raw quadruples, cancels harmonic cross-talk,
+        and computes SIR isolation metrics for all sources.
         """
         t_sec = float(timer_cycles) / self.clock_freq_hz if self.clock_freq_hz > 0 else 0.0
-        frame_results = {}
+        raw_quads = {}
 
+        # 1. First Pass: Extract raw band quadruples and band energies
         for src_name, (f_min, f_max) in self.source_bands.items():
             quad = KinematicAnalytics.extract_quadruple(
                 freq_axis=freq_axis,
@@ -495,20 +499,64 @@ class MultiSourceTracker:
                 clock_freq_hz=self.clock_freq_hz,
                 enbw=self.enbw
             )
+            raw_quads[src_name] = quad
 
-            # Check noise gate
-            is_active = bool(quad["amplitude_v"] >= self.noise_gate_v and quad["is_valid"])
-            quad["is_active"] = is_active
-            quad["source_name"] = src_name
-            quad["band_limits"] = (float(f_min), float(f_max))
+        # 2. Second Pass: Coherent Harmonic Cross-Talk Cancellation & SIR Calculation
+        frame_results = {}
+        src_names = list(self.source_bands.keys())
 
-            frame_results[src_name] = quad
+        for j_name in src_names:
+            quad_j = raw_quads[j_name].copy()
+            f_j = quad_j["frequency_hz"]
+            p_j = quad_j["band_energy"]
+            total_leakage = 0.0
+
+            if self.harmonic_rejection and np.isfinite(f_j):
+                for i_name in src_names:
+                    if i_name == j_name:
+                        continue
+                    quad_i = raw_quads[i_name]
+                    f_i = quad_i["frequency_hz"]
+                    p_i = quad_i["band_energy"]
+
+                    if np.isfinite(f_i) and p_i > 0:
+                        # Check 2nd harmonic collision: f_j ≈ 2 * f_i
+                        if abs(f_j - 2.0 * f_i) < (self.source_bands[j_name][1] - self.source_bands[j_name][0]) * 0.5:
+                            leak = p_i * self.h2_coeff
+                            total_leakage += leak
+
+                        # Check 3rd harmonic collision: f_j ≈ 3 * f_i
+                        elif abs(f_j - 3.0 * f_i) < (self.source_bands[j_name][1] - self.source_bands[j_name][0]) * 0.5:
+                            leak = p_i * self.h3_coeff
+                            total_leakage += leak
+
+            # Cleaned in-band energy
+            p_j_clean = max(0.0, p_j - total_leakage)
+            n_points = len(freq_axis) * 2
+            v_rms_clean = (np.sqrt(2.0 * p_j_clean) / (n_points * self.enbw)) * (3.3 / 4095.0)
+
+            # Signal-to-Interference Ratio (SIR)
+            sir_db = 10.0 * np.log10(max(p_j_clean, 1e-12) / max(total_leakage, 1e-12))
+            sir_db = float(np.clip(sir_db, -10.0, 60.0))
+
+            # Update quadruple with cleaned metrics
+            quad_j["amplitude_v"] = float(v_rms_clean)
+            quad_j["sir_db"] = float(sir_db)
+            quad_j["harmonic_leakage_energy"] = float(total_leakage)
+
+            is_active = bool(v_rms_clean >= self.noise_gate_v and quad_j["is_valid"])
+            quad_j["is_active"] = is_active
+            quad_j["source_name"] = j_name
+            quad_j["band_limits"] = (float(self.source_bands[j_name][0]), float(self.source_bands[j_name][1]))
+
+            frame_results[j_name] = quad_j
 
             # Update rolling history
-            self.history[src_name]["t"].append(t_sec)
-            self.history[src_name]["f"].append(quad["frequency_hz"] if is_active else np.nan)
-            self.history[src_name]["amp"].append(quad["amplitude_v"])
-            self.history[src_name]["phi"].append(quad["phase_rad"] if is_active else np.nan)
+            self.history[j_name]["t"].append(t_sec)
+            self.history[j_name]["f"].append(quad_j["frequency_hz"] if is_active else np.nan)
+            self.history[j_name]["amp"].append(v_rms_clean)
+            self.history[j_name]["phi"].append(quad_j["phase_rad"] if is_active else np.nan)
+            self.history[j_name]["sir"].append(sir_db)
 
         return {
             "timestamp_sec": t_sec,
@@ -519,16 +567,17 @@ class MultiSourceTracker:
         """Returns the complete recorded time series for a specific source."""
         if source_name not in self.history:
             raise KeyError(f"Source '{source_name}' not found in tracker.")
-        
+
         hist = self.history[source_name]
         return {
             "t": np.array(hist["t"]),
             "f": np.array(hist["f"]),
             "amp": np.array(hist["amp"]),
-            "phi": np.array(hist["phi"])
+            "phi": np.array(hist["phi"]),
+            "sir": np.array(hist["sir"])
         }
 
     def reset_history(self):
         """Clears all accumulated history buffers."""
         for src_name in self.history:
-            self.history[src_name] = {"t": [], "f": [], "amp": [], "phi": []}
+            self.history[src_name] = {"t": [], "f": [], "amp": [], "phi": [], "sir": []}
