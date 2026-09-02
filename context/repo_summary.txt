@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/fft-quadruple-telemetry-engine @ 4968f10
+• Repository State    : feat/fft-quadruple-telemetry-engine @ 2431cb5
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1-rc2
 • Package Version     : v1.0.0
 ==============================================================================
@@ -9,10 +9,10 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (1 modified/untracked files)
+Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (4 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/fft-quadruple-telemetry-engine                4968f10 [origin/feat/fft-quadruple-telemetry-engine: ahead 1] feat(dsp): implement MultiSourceTracker multi-band spectral extraction engine
+* feat/fft-quadruple-telemetry-engine                2431cb5 [origin/feat/fft-quadruple-telemetry-engine: ahead 2] feat(dsp): add coherent harmonic leakage cancellation and SIR metrics to MultiSourceTracker
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
   remotes/origin/feat/fft-quadruple-telemetry-engine 5580740 feat(driver): integrate auto-priming warmup and timer initialization into MicrophoneArrayOverlay
@@ -23,7 +23,8 @@ Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 4968f10  (HEAD -> feat/fft-quadruple-telemetry-engine) - 2026-09-02 : feat(dsp): implement MultiSourceTracker multi-band spectral extraction engine (SiririComun)
+* 2431cb5  (HEAD -> feat/fft-quadruple-telemetry-engine) - 2026-09-02 : feat(dsp): add coherent harmonic leakage cancellation and SIR metrics to MultiSourceTracker (SiririComun)
+* 4968f10  - 2026-09-02 : feat(dsp): implement MultiSourceTracker multi-band spectral extraction engine (SiririComun)
 * 5580740  (origin/feat/fft-quadruple-telemetry-engine) - 2026-09-01 : feat(driver): integrate auto-priming warmup and timer initialization into MicrophoneArrayOverlay (SiririComun)
 * b9c2116  - 2026-09-01 : fix(driver): add timer auto-init and non-blocking recovery flush to capture_spectral_frame (SiririComun)
 * 37e1605  - 2026-09-01 : chore(hw): pin hardware overlay to v1.5.1-rc2 with FFT status FIFO drain fix (SiririComun)
@@ -37,7 +38,6 @@ Multi-Branch Git Commit Graph:
 | * 4172361  (origin/feat/v1.6.0-overlay-integration, feat/v1.6.0-overlay-integration) - 2026-08-30 : docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook (SiririComun)
 | * ae732b9  - 2026-08-28 : docs(notebooks): add dedicated experiments for physical 1/r decay and dual-source isolation (SiririComun)
 | * a82abb9  - 2026-08-28 : fix(core): finalize pipelined 3-DMA streaming and lock-step flight recorder (SiririComun)
-| * a3f6a7d  - 2026-08-28 : fix(core): finalize lock-step 3-DMA streaming and auto-fallback telemetry extraction (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -1064,9 +1064,9 @@ class KinematicAnalytics:
         band_energy = float(np.sum(band_mags ** 2))
         v_rms = (np.sqrt(2.0 * band_energy) / (n_points * enbw)) * raw_scale_factor
 
-        # 4. Fractional-bin Phase Alignment Correction
+        # 4. Fractional-bin Phase Alignment Correction (Subtract window center offset)
         raw_phi = float(phases[k0]) if (0 <= k0 < len(phases)) else 0.0
-        phi_corrected = raw_phi + (np.pi * delta * (n_points - 1.0) / n_points)
+        phi_corrected = raw_phi - (np.pi * delta * (n_points - 1.0) / n_points)
         phi_wrapped = float((phi_corrected + np.pi) % (2.0 * np.pi) - np.pi)
 
         # 5. Sub-Microsecond Hardware Timestamp
@@ -2353,4 +2353,153 @@ class TestQuadrupleEngine:
         assert len(f_inst) == n_frames - 1
         assert np.allclose(f_inst, f_target, atol=1e-2)
         assert mean_sqi > 0.99
+```
+
+test_multisource.py: (tests/test_multisource.py)
+
+```python
+"""
+tests/test_multisource.py: Verification Suite for MultiSourceTracker & Harmonic Rejection.
+"""
+
+import numpy as np
+import pytest
+from pynq_localizer.kinematics import MultiSourceTracker
+
+def generate_multi_tone_polar_frame(
+    tones: list,
+    fs: float = 50_000.0,
+    n_fft: int = 2048,
+    noise_sigma_v: float = 0.0
+):
+    """
+    Synthesizes a complex multi-source spectrum matching 12-bit FPGA ADC integer counts.
+    :param tones: List of dicts with 'f', 'amp' (in Volts), 'phase', and optional 'h2_ratio', 'h3_ratio'.
+    """
+    t = np.arange(n_fft) / fs
+    adc_scale = 3.3 / 4095.0  # Volts per ADC count
+    signal_v = np.zeros(n_fft, dtype=np.float64)
+
+    for tone in tones:
+        f = tone["f"]
+        a = tone["amp"]
+        phi = tone.get("phase", 0.0)
+        # Fundamental tone
+        signal_v += a * np.cos(2.0 * np.pi * f * t + phi)
+        # 2nd harmonic non-linearity
+        if "h2_ratio" in tone:
+            signal_v += (a * tone["h2_ratio"]) * np.cos(2.0 * np.pi * (2.0 * f) * t + 2.0 * phi)
+        # 3rd harmonic non-linearity
+        if "h3_ratio" in tone:
+            signal_v += (a * tone["h3_ratio"]) * np.cos(2.0 * np.pi * (3.0 * f) * t + 3.0 * phi)
+
+    if noise_sigma_v > 0:
+        signal_v += np.random.normal(0, noise_sigma_v, n_fft)
+
+    # Convert physical Volts to raw 12-bit ADC integer counts (matching hardware FPGA input)
+    raw_counts = signal_v / adc_scale
+
+    X = np.fft.fft(raw_counts)
+    half_n = n_fft // 2
+    X_half = X[:half_n]
+
+    freq_axis = np.fft.fftfreq(n_fft, d=1.0 / fs)[:half_n]
+    magnitude = np.abs(X_half)
+    phase_rad = np.angle(X_half)
+
+    return freq_axis, magnitude, phase_rad
+
+class TestMultiSourceTracker:
+
+    def test_concurrent_3_source_tracking(self):
+        """Verify independent quadruple extraction for 3 concurrent physical sources."""
+        tones = [
+            {"f": 1000.0, "amp": 0.50, "phase": 0.0},
+            {"f": 2500.0, "amp": 0.35, "phase": np.pi / 3.0},
+            {"f": 4200.0, "amp": 0.20, "phase": -np.pi / 4.0},
+        ]
+        freqs, mags, phases = generate_multi_tone_polar_frame(tones)
+
+        bands = {
+            "Source_1": (850.0, 1150.0),
+            "Source_2": (2350.0, 2650.0),
+            "Source_3": (4050.0, 4350.0),
+        }
+        tracker = MultiSourceTracker(source_bands=bands, noise_gate_v=0.010)
+        res = tracker.process_spectral_frame(freqs, mags, phases, timer_cycles=100_000_000)
+
+        s1 = res["sources"]["Source_1"]
+        s2 = res["sources"]["Source_2"]
+        s3 = res["sources"]["Source_3"]
+
+        # 1. Pitch Accuracy (< 2.0 Hz across multi-tone spectrum)
+        assert abs(s1["frequency_hz"] - 1000.0) < 0.2
+        assert abs(s2["frequency_hz"] - 2500.0) < 0.5
+        assert abs(s3["frequency_hz"] - 4200.0) < 2.0
+
+        # 2. Phase Angle Accuracy on Unit Circle
+        err1 = np.abs(np.arctan2(np.sin(s1["phase_rad"] - 0.0), np.cos(s1["phase_rad"] - 0.0)))
+        err2 = np.abs(np.arctan2(np.sin(s2["phase_rad"] - (np.pi / 3.0)), np.cos(s2["phase_rad"] - (np.pi / 3.0))))
+        err3 = np.abs(np.arctan2(np.sin(s3["phase_rad"] - (-np.pi / 4.0)), np.cos(s3["phase_rad"] - (-np.pi / 4.0))))
+
+        assert err1 < 0.08, f"S1 Phase error: {err1}"
+        assert err2 < 0.08, f"S2 Phase error: {err2}"
+        assert err3 < 0.25, f"S3 Phase error: {err3}" # Multi-tone sidelobe pulling bound
+
+        # 3. All sources active (> 10 mV noise gate)
+        assert s1["is_active"] and s2["is_active"] and s3["is_active"]
+
+    def test_harmonic_leakage_cancellation(self):
+        """
+        Verify that 2f0 harmonic leakage from Source 1 (1000 Hz) into Source 2 (2000 Hz)
+        is suppressed when Source 2 is physically silent.
+        """
+        # Source 1 is ON (1000 Hz @ 0.6V) with 5% 2nd harmonic distortion (2000 Hz)
+        # Source 2 (2000 Hz) is OFF (0.0V)
+        tones = [
+            {"f": 1000.0, "amp": 0.60, "phase": 0.0, "h2_ratio": 0.05},
+        ]
+        freqs, mags, phases = generate_multi_tone_polar_frame(tones)
+
+        bands = {
+            "Speaker_1000": (850.0, 1150.0),
+            "Speaker_2000": (1850.0, 2150.0),
+        }
+
+        # Tracker with harmonic rejection enabled
+        tracker = MultiSourceTracker(
+            source_bands=bands,
+            harmonic_rejection=True,
+            h2_coeff=0.03,
+            noise_gate_v=0.020
+        )
+        res = tracker.process_spectral_frame(freqs, mags, phases, timer_cycles=50_000_000)
+
+        s1 = res["sources"]["Speaker_1000"]
+        s2 = res["sources"]["Speaker_2000"]
+
+        # Speaker 1000 is detected and active
+        assert s1["is_active"] is True
+        assert abs(s1["frequency_hz"] - 1000.0) < 0.2
+
+        # Speaker 2000 leakage should be cancelled and below noise gate
+        print(f"\n[Test] Speaker 2000 Cleaned Amp: {s2['amplitude_v']*1000:.2f} mV (Active={s2['is_active']}, SIR={s2['sir_db']:.1f} dB)")
+        assert s2["is_active"] is False
+
+    def test_trajectory_accumulation(self):
+        """Verify rolling time-series tracking over multiple frames."""
+        bands = {"Tone_A": (900.0, 1100.0)}
+        tracker = MultiSourceTracker(source_bands=bands, noise_gate_v=0.010)
+
+        for i in range(10):
+            freqs, mags, phases = generate_multi_tone_polar_frame(
+                [{"f": 1000.0 + i * 2.0, "amp": 0.30}], noise_sigma_v=0.0
+            )
+            tracker.process_spectral_frame(freqs, mags, phases, timer_cycles=i * 4_000_000)
+
+        traj = tracker.get_source_trajectory("Tone_A")
+        assert len(traj["t"]) == 10
+        assert len(traj["f"]) == 10
+        # Check ascending pitch trajectory
+        assert traj["f"][-1] > traj["f"][0]
 ```
