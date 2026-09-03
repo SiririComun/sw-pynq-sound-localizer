@@ -1,15 +1,23 @@
 """
 pynq_localizer.kinematics: High-Precision Acoustic Kinematics & Frequency Ridge Tracking Engine.
 Provides sub-Hertz pitch tracking (20 Hz - 20 kHz), spectral quadruple extraction (f, A, φ, t),
-multi-source tracking, single-channel distance estimation r = k(f)/A, acoustic profile modeling,
-phase velocity verification, smoothed RMS envelope extraction, sliding STFT frequency trajectories,
-temperature-compensated sound speed, Doppler velocity, and gravity metrics.
+hybrid dual-DMA coherent in-band voltage demodulation, multi-source tracking, single-channel
+distance estimation r = k(f)/A, acoustic profile modeling, phase velocity verification,
+smoothed RMS envelope extraction, sliding STFT trajectories, temperature-compensated sound speed,
+Doppler velocity, and gravity metrics.
 """
 
 import json
 from pathlib import Path
 from typing import Tuple, Optional, Union, Dict, List, Any, Callable
 import numpy as np
+
+try:
+    from scipy.interpolate import interp1d
+    _HAS_SCIPY = True
+except (ImportError, ModuleNotFoundError):
+    _HAS_SCIPY = False
+
 
 class KinematicAnalytics:
     """
@@ -42,11 +50,6 @@ class KinematicAnalytics:
         v(t) = c(T) * ((f_observed - f_source) / f_source)
         Positive v => Source approaching observer.
         Negative v => Source receding from observer.
-
-        :param f_observed: Measured dominant frequency in Hz (scalar or numpy array).
-        :param f_source: Rest / emitted fundamental frequency in Hz.
-        :param temperature_c: Ambient temperature in Celsius.
-        :return: Radial velocity in meters per second (m/s).
         """
         c = cls.speed_of_sound(temperature_c)
         f_obs = np.asarray(f_observed, dtype=np.float64)
@@ -64,17 +67,10 @@ class KinematicAnalytics:
         """
         Calculates gravitational acceleration g from the linear frequency slope of a falling source:
         g = - (c(T) / f_0) * (df / dt)
-
-        :param time_sec: 1D time axis array in seconds during the free-fall interval.
-        :param f_observed: 1D measured frequency array in Hz during free-fall.
-        :param f_source: Rest fundamental frequency of the dropping speaker in Hz.
-        :param temperature_c: Ambient temperature in Celsius.
-        :return: Dictionary containing experimental g, slope (df/dt), R^2 coefficient, and sound speed.
         """
         t = np.asarray(time_sec, dtype=np.float64)
         f = np.asarray(f_observed, dtype=np.float64)
 
-        # Filter out NaN/invalid values
         valid_mask = np.isfinite(t) & np.isfinite(f)
         t_clean = t[valid_mask]
         f_clean = f[valid_mask]
@@ -82,10 +78,8 @@ class KinematicAnalytics:
         if len(t_clean) < 5:
             raise ValueError("Insufficient valid data points to perform linear regression for gravity measurement.")
 
-        # 1st-degree polynomial linear regression: f(t) = slope * t + intercept
         slope, intercept = np.polyfit(t_clean, f_clean, 1)
 
-        # Compute R^2 goodness-of-fit
         f_pred = slope * t_clean + intercept
         ss_res = np.sum((f_clean - f_pred) ** 2)
         ss_tot = np.sum((f_clean - np.mean(f_clean)) ** 2)
@@ -104,8 +98,99 @@ class KinematicAnalytics:
         }
 
     # =========================================================================
-    # 2. Quadruple Extraction (f, A, φ, t) & Spectral Telemetry Engine
+    # 2. Quadruple Extraction & Coherent Time-Domain Demodulation Engine
     # =========================================================================
+
+    @staticmethod
+    def compute_coherent_inband_amplitude(
+        signal_v: np.ndarray,
+        fs: float,
+        target_freq_hz: float,
+        remove_dc: bool = True
+    ) -> float:
+        """
+        Extracts physical in-band RMS voltage from raw 12-bit ADC time-series data at target_freq_hz.
+        Uses single-bin coherent Fourier projection:
+        X(f0) = (2 / N) * sum( (v[n] - mean(v)) * exp(-j * 2*pi * f0 * n / fs) )
+        V_RMS = |X(f0)| / sqrt(2)
+
+        Guarantees 100% immunity to FPGA FFT Block Floating Point bit-shift jumps.
+        :param signal_v: 1D physical voltage array in Volts.
+        :param fs: Sampling frequency in Hz (e.g. 50,000 Hz).
+        :param target_freq_hz: In-band carrier pitch f0 in Hz.
+        :param remove_dc: Subtract mean offset before demodulation.
+        :return: Coherent in-band RMS amplitude in Volts.
+        """
+        v = np.asarray(signal_v, dtype=np.float64)
+        n = len(v)
+        if n == 0 or not np.isfinite(target_freq_hz) or target_freq_hz <= 0:
+            return 0.0
+
+        v_ac = v - np.mean(v) if remove_dc else v
+        t = np.arange(n) / float(fs)
+        phasor = np.exp(-2.0j * np.pi * float(target_freq_hz) * t)
+
+        # Single-bin discrete Fourier projection
+        x_f0 = (2.0 / n) * np.dot(v_ac, phasor)
+        v_rms = float(np.abs(x_f0) / np.sqrt(2.0))
+        return v_rms
+
+    @classmethod
+    def extract_hybrid_quadruple(
+        cls,
+        time_signal_v: np.ndarray,
+        fs: float,
+        freq_axis: np.ndarray,
+        magnitude: np.ndarray,
+        phase_rad: np.ndarray,
+        f_min: float = 100.0,
+        f_max: float = 15000.0,
+        timer_cycles: int = 0,
+        clock_freq_hz: float = 100_000_000.0
+    ) -> Dict[str, Union[float, int, bool]]:
+        """
+        Extracts the hybrid quadruple (f0, A_true, phi, t):
+        1. Pitch (f0) & Phase (phi) extracted from DMA 1 (Hardware FFT/CORDIC).
+        2. In-band Amplitude (A_true) extracted from DMA 0 (Hardware ADC Time Stream).
+
+        :param time_signal_v: 1D raw voltage array from DMA 0.
+        :param fs: Sampling rate in Hz.
+        :param freq_axis: 1D positive half-spectrum frequency axis from DMA 1.
+        :param magnitude: 1D magnitude spectrum from DMA 1.
+        :param phase_rad: 1D phase spectrum from DMA 1.
+        :param f_min: Lower search bound in Hz.
+        :param f_max: Upper search bound in Hz.
+        :param timer_cycles: Hardware timer cycle count.
+        :param clock_freq_hz: System clock rate in Hz (default 100 MHz).
+        :return: Telemetry dictionary with true physical in-band amplitude.
+        """
+        # 1. Extract pitch f0 and phase from hardware FFT/CORDIC
+        quad = cls.extract_quadruple(
+            freq_axis=freq_axis,
+            magnitude=magnitude,
+            phase_rad=phase_rad,
+            f_min=f_min,
+            f_max=f_max,
+            timer_cycles=timer_cycles,
+            clock_freq_hz=clock_freq_hz
+        )
+
+        f0 = quad["frequency_hz"]
+
+        # 2. Extract true physical in-band RMS voltage from raw ADC time buffer
+        if np.isfinite(f0) and f0 > 0:
+            a_true = cls.compute_coherent_inband_amplitude(
+                signal_v=time_signal_v,
+                fs=fs,
+                target_freq_hz=f0,
+                remove_dc=True
+            )
+        else:
+            a_true = quad["amplitude_v"]
+
+        quad["amplitude_v"] = float(a_true)
+        quad["amplitude_raw_fft"] = float(quad.get("amplitude_v", 0.0))
+        return quad
 
     @classmethod
     def extract_quadruple(
@@ -122,31 +207,11 @@ class KinematicAnalytics:
     ) -> Dict[str, Union[float, int, bool]]:
         """
         Extracts the physical quadruple (f0, A, phi, t) from a spectral polar frame within [f_min, f_max].
-
-        :param freq_axis: 1D positive half-spectrum frequency axis in Hz.
-        :param magnitude: 1D linear magnitude spectrum |X(f)|.
-        :param phase_rad: 1D phase spectrum ∠X(f) in radians [-π, +π].
-        :param f_min: Lower search frequency bound in Hz.
-        :param f_max: Upper search frequency bound in Hz.
-        :param timer_cycles: Hardware AXI Timer clock cycles at frame capture.
-        :param clock_freq_hz: AXI system clock frequency (default: 100 MHz).
-        :param enbw: Equivalent Noise Bandwidth window correction factor.
-        :param raw_scale_factor: ADC linear voltage scaling factor.
-        :return: Structured telemetry dictionary containing:
-                 - 'frequency_hz': Exact analytical sinc peak frequency (sub-Hertz).
-                 - 'amplitude_v': Parseval in-band RMS voltage envelope.
-                 - 'phase_rad': Dominant tone phase in radians [-π, +π].
-                 - 'phase_deg': Dominant tone phase in degrees [-180°, +180°].
-                 - 'timestamp_sec': Sub-microsecond hardware timestamp.
-                 - 'peak_bin': Discrete integer bin index of spectral peak.
-                 - 'band_energy': Integrated spectral energy in band.
-                 - 'is_valid': True if tone meets validity bounds.
         """
         freqs = np.asarray(freq_axis, dtype=np.float64)
         mags = np.asarray(magnitude, dtype=np.float64)
         phases = np.asarray(phase_rad, dtype=np.float64)
 
-        # 1. Continuous-to-Discrete Band Gating
         band_mask = (freqs >= float(f_min)) & (freqs <= float(f_max))
         band_indices = np.where(band_mask)[0]
 
@@ -167,22 +232,22 @@ class KinematicAnalytics:
         local_k = int(np.argmax(band_mags))
         k0 = int(band_indices[local_k])
 
-        # 2. Sub-Hertz Analytical Sinc Pitch Interpolation
+        # Sub-Hertz Analytical Sinc Pitch Interpolation
         f0, delta = cls.track_sub_hertz_pitch(
             freqs, mags, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True, return_delta=True
         )
 
-        # 3. In-Band Parseval RMS Energy Integration
+        # In-Band Parseval RMS Energy Integration
         n_points = len(freqs) * 2  # Full FFT size N
         band_energy = float(np.sum(band_mags ** 2))
         v_rms = (np.sqrt(2.0 * band_energy) / (n_points * enbw)) * raw_scale_factor
 
-        # 4. Fractional-bin Phase Alignment Correction (Subtract window center offset)
+        # Fractional-bin Phase Alignment Correction (Subtract window center offset)
         raw_phi = float(phases[k0]) if (0 <= k0 < len(phases)) else 0.0
         phi_corrected = raw_phi - (np.pi * delta * (n_points - 1.0) / n_points)
         phi_wrapped = float((phi_corrected + np.pi) % (2.0 * np.pi) - np.pi)
 
-        # 5. Sub-Microsecond Hardware Timestamp
+        # Sub-Microsecond Hardware Timestamp
         t_sec = float(timer_cycles) / clock_freq_hz
 
         return {
@@ -205,14 +270,7 @@ class KinematicAnalytics:
         f_tol: float = 50.0
     ) -> Tuple[np.ndarray, np.ndarray, float]:
         """
-        Calculates instantaneous phase frequency trajectory f_phase(t) = (1 / 2π) * (dΦ / dt)
-        from unwrapped phase and computes the Signal Quality Index (SQI) relative to expected frequency.
-
-        :param phase_history: 1D array/list of wrapped phase angles in radians.
-        :param time_history: 1D array/list of timestamps in seconds.
-        :param f_expected: Target fundamental frequency for SQI cross-check.
-        :param f_tol: Frequency deviation tolerance for SQI scaling in Hz.
-        :return: (unwrapped_phase_rad, instantaneous_frequency_hz, mean_sqi).
+        Calculates instantaneous phase frequency trajectory f_phase(t) = (1 / 2π) * (dΦ / dt).
         """
         phi = np.asarray(phase_history, dtype=np.float64)
         t = np.asarray(time_history, dtype=np.float64)
@@ -220,17 +278,14 @@ class KinematicAnalytics:
         if len(phi) < 2 or len(t) < 2:
             return np.array([]), np.array([]), 0.0
 
-        # Phase Unwrapping across frame boundaries
         unwrapped_phi = np.unwrap(phi)
         dt = np.diff(t)
         dphi = np.diff(unwrapped_phi)
 
-        # Avoid divide-by-zero on identical timestamps
         valid_dt = dt > 1e-7
         f_inst = np.zeros(len(dt), dtype=np.float64)
         f_inst[valid_dt] = (dphi[valid_dt] / dt[valid_dt]) / (2.0 * np.pi)
 
-        # Calculate Signal Quality Index (SQI)
         if f_expected is not None and len(f_inst) > 0:
             err = np.abs(f_inst - float(f_expected))
             sqi_array = np.clip(1.0 - (err / float(f_tol)), 0.0, 1.0)
@@ -241,7 +296,7 @@ class KinematicAnalytics:
         return unwrapped_phi, f_inst, mean_sqi
 
     # =========================================================================
-    # 3. Sub-Hertz Parabolic Pitch Tracking & STFT Trajectories
+    # 3. Sub-Hertz Analytical Sinc Pitch Tracking & STFT Trajectories
     # =========================================================================
 
     @staticmethod
@@ -256,14 +311,6 @@ class KinematicAnalytics:
         """
         Extracts dominant fundamental frequency f0 with sub-Hertz accuracy (±0.01 Hz)
         using the exact analytical spectral ratio estimator for DFT sinc mainlobes.
-
-        :param freqs: 1D frequency axis array in Hz.
-        :param mags: 1D magnitude array.
-        :param min_freq_hz: Lower search cutoff (default: 20.0 Hz).
-        :param max_freq_hz: Upper search cutoff (default: 20,000.0 Hz).
-        :param interpolate: Enable analytical interpolation on discrete peak.
-        :param return_delta: If True, returns (f0, delta) where delta is the fractional bin offset.
-        :return: (peak_freq_hz, peak_magnitude) or (peak_freq_hz, delta).
         """
         valid_mask = (freqs >= min_freq_hz) & (freqs <= max_freq_hz)
         valid_indices = np.where(valid_mask)[0]
@@ -572,14 +619,8 @@ class MultiSourceTracker:
 
 
 # =============================================================================
-# 5. Acoustic Calibration Profile & Injectable Distance Inversion Engine
-# =========================================================================
-
-try:
-    from scipy.interpolate import interp1d
-    _HAS_SCIPY = True
-except (ImportError, ModuleNotFoundError):
-    _HAS_SCIPY = False
+# 5. Acoustic Calibration Profile & Distance Inversion Engine
+# =============================================================================
 
 class AcousticProfile:
     """
@@ -720,7 +761,7 @@ class AcousticProfile:
 
 class DistanceEstimator:
     """
-    Runtime Distance Inversion Engine.
+    Runtime Single-Channel Distance Inversion Engine.
     Computes real-time physical distance r(t) = k(f0) / A(t) with dynamic error propagation.
     """
 
@@ -734,15 +775,6 @@ class DistanceEstimator:
         min_distance_m: float = 0.05,
         max_distance_m: float = 10.0
     ):
-        """
-        :param profile: Injected AcousticProfile instance containing k(f) calibration data.
-        :param k_constant: Optional static constant k override in V*m (e.g. 0.05 V*m).
-        :param k_func: Optional callable k(f) function.
-        :param noise_gate_v: Minimum RMS amplitude in Volts to compute distance (squelches silence to NaN).
-        :param voltage_uncertainty_v: Inherent ADC voltage noise uncertainty delta_A.
-        :param min_distance_m: Minimum physical clipping boundary in meters (prevents near-field division spikes).
-        :param max_distance_m: Maximum physical clipping boundary in meters.
-        """
         if profile is not None:
             self.profile = profile
         elif k_func is not None:
@@ -750,7 +782,6 @@ class DistanceEstimator:
         elif k_constant is not None:
             self.profile = AcousticProfile.from_constant(k_constant)
         else:
-            # Default baseline profile (k = 0.05 V*m)
             self.profile = AcousticProfile.from_constant(0.05, name="DefaultBaseline")
 
         self.noise_gate_v = float(noise_gate_v)
@@ -768,11 +799,6 @@ class DistanceEstimator:
         Calculates physical distance r(t) and uncertainty delta_r(t) from in-band amplitude and frequency.
         r(t) = k(f0) / A(t)
         delta_r(t) = r * sqrt( (delta_k / k)^2 + (delta_A / A)^2 )
-
-        :param amplitude_v: Measured in-band RMS voltage envelope A(t).
-        :param frequency_hz: Measured fundamental pitch f0(t).
-        :param delta_a: Optional explicit measurement voltage uncertainty.
-        :return: (distance_meters, uncertainty_meters). Returns (NaN, NaN) if below noise gate.
         """
         amp = float(amplitude_v)
         f0 = float(frequency_hz)
@@ -781,15 +807,12 @@ class DistanceEstimator:
         if not np.isfinite(amp) or amp < self.noise_gate_v or not np.isfinite(f0) or f0 <= 0:
             return np.nan, np.nan
 
-        # Evaluate k(f0) and delta_k
         k_val, delta_k = self.profile.evaluate(f0)
         da = float(delta_a) if delta_a is not None else self.voltage_uncertainty_v
 
-        # Invert spherical decay: r = k / A
         r_calc = k_val / max(amp, 1e-6)
         r_clamped = float(np.clip(r_calc, self.min_dist, self.max_dist))
 
-        # First-order error propagation
         rel_k_err = delta_k / max(k_val, 1e-6)
         rel_a_err = da / max(amp, 1e-6)
         delta_r = float(r_clamped * np.sqrt(rel_k_err ** 2 + rel_a_err ** 2))
@@ -797,10 +820,7 @@ class DistanceEstimator:
         return r_clamped, delta_r
 
     def process_quadruple(self, quadruple: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Augments an incoming quadruple dict with real-time distance metrics.
-        Adds 'distance_m', 'distance_err_m', and 'k_evaluated'.
-        """
+        """Augments an incoming quadruple dict with real-time distance metrics."""
         res = quadruple.copy()
         amp = res.get("amplitude_v", 0.0)
         f0 = res.get("frequency_hz", np.nan)
