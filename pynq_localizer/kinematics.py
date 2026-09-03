@@ -2,9 +2,10 @@
 pynq_localizer.kinematics: High-Precision Acoustic Kinematics & Frequency Ridge Tracking Engine.
 Provides sub-Hertz pitch tracking (20 Hz - 20 kHz), spectral quadruple extraction (f, A, φ, t),
 hybrid dual-DMA coherent in-band voltage demodulation, multi-source tracking, single-channel
-distance estimation r = k(f)/A, acoustic profile modeling, phase velocity verification,
-smoothed RMS envelope extraction, sliding STFT trajectories, temperature-compensated sound speed,
-Doppler velocity, and gravity metrics.
+distance estimation r = k(f)/A, acoustic profile modeling, standalone acoustic calibration
+protocols with R^2 linearity gating, phase velocity verification, smoothed RMS envelope
+extraction, sliding STFT trajectories, temperature-compensated sound speed, Doppler velocity,
+and gravity metrics.
 """
 
 import json
@@ -845,15 +846,7 @@ class DistanceEstimator:
         """
         Processes a raw spectral frame dict, performs hybrid in-band demodulation,
         and computes metric distance r(t) = k(f0) / A_true(t).
-
-        :param frame_dict: Output dictionary from capture_spectral_frame() or capture_quadruple().
-        :param source: Target microphone ('A0' or 'A1').
-        :param fs: Sampling frequency in Hz.
-        :param f_min: Search minimum frequency in Hz.
-        :param f_max: Search maximum frequency in Hz.
-        :return: Augmented quadruple dictionary with distance_m and distance_err_m.
         """
-        # 1. If quadruple already extracted, use it; otherwise extract hybrid quadruple
         if "quadruple" in frame_dict:
             quad = frame_dict["quadruple"].copy()
         else:
@@ -870,3 +863,186 @@ class DistanceEstimator:
             )
 
         return self.process_quadruple(quad)
+
+
+# =============================================================================
+# 6. Standalone Acoustic Calibration Protocol Suite
+# =============================================================================
+
+class AcousticCalibrationProtocol:
+    """
+    Standalone Acoustic Calibration & Regression Protocol.
+    Ingests multi-distance x multi-frequency calibration sweeps, performs 1/r linear
+    regressions with room offset absorption, validates R^2 >= 0.95 linearity gates,
+    and produces ready-to-use AcousticProfile artifacts.
+    """
+
+    def __init__(self, r2_threshold: float = 0.95):
+        """
+        :param r2_threshold: Minimum R^2 coefficient of determination to accept calibration (default: 0.95).
+        """
+        self.r2_threshold = float(r2_threshold)
+        # Data store: {frequency_hz: [(distance_m, v_rms), ...]}
+        self._raw_measurements: Dict[float, List[Tuple[float, float]]] = {}
+        self._fit_results: Dict[float, Dict[str, float]] = {}
+
+    def add_measurement(self, distance_m: float, frequency_hz: float, amplitude_v: float):
+        """
+        Records a single calibration observation point (distance, frequency, voltage).
+        :param distance_m: Physical tape-measured distance in meters (e.g. 0.30 m).
+        :param frequency_hz: Emitted carrier tone frequency in Hz (e.g. 1000.0 Hz).
+        :param amplitude_v: Measured in-band RMS voltage in Volts.
+        """
+        r = float(distance_m)
+        f = float(frequency_hz)
+        v = float(amplitude_v)
+
+        if r <= 0 or not np.isfinite(r) or not np.isfinite(f) or not np.isfinite(v):
+            return
+
+        if f not in self._raw_measurements:
+            self._raw_measurements[f] = []
+        self._raw_measurements[f].append((r, v))
+
+    def add_dataset(
+        self,
+        distances_m: Union[List[float], np.ndarray],
+        frequencies_hz: Union[List[float], np.ndarray],
+        amplitude_matrix_v: Union[List[List[float]], np.ndarray]
+    ):
+        """
+        Ingests a complete 2D calibration grid of distances x frequencies.
+        :param distances_m: 1D array of calibration distances (length M).
+        :param frequencies_hz: 1D array of calibration frequencies (length K).
+        :param amplitude_matrix_v: 2D array of measured in-band voltages (shape M x K).
+        """
+        r_arr = np.asarray(distances_m, dtype=np.float64)
+        f_arr = np.asarray(frequencies_hz, dtype=np.float64)
+        v_mat = np.asarray(amplitude_matrix_v, dtype=np.float64)
+
+        if v_mat.shape != (len(r_arr), len(f_arr)):
+            raise ValueError(
+                f"Shape mismatch: amplitude_matrix shape {v_mat.shape} != ({len(r_arr)}, {len(f_arr)})"
+            )
+
+        for i, r in enumerate(r_arr):
+            for j, f in enumerate(f_arr):
+                self.add_measurement(r, f, v_mat[i, j])
+
+    def fit(self) -> Dict[float, Dict[str, float]]:
+        """
+        Solves 1st-order linear 1/r regressions for all ingested frequencies:
+        V_RMS(r_i) = k(f) * (1 / r_i) + c_room
+
+        :return: Dictionary mapping frequency_hz to fit results (k, delta_k, c_room, r_squared, passed_gate).
+        """
+        self._fit_results.clear()
+
+        for f, points in self._raw_measurements.items():
+            if len(points) < 2:
+                continue
+
+            r_vals = np.array([p[0] for p in points], dtype=np.float64)
+            v_vals = np.array([p[1] for p in points], dtype=np.float64)
+
+            # Invert distance: x = 1 / r
+            x = 1.0 / r_vals
+            y = v_vals
+            n = len(x)
+
+            # Linear regression: y = slope * x + intercept
+            slope, intercept = np.polyfit(x, y, 1)
+            y_pred = slope * x + intercept
+
+            # Compute R^2 goodness-of-fit
+            ss_res = np.sum((y - y_pred) ** 2)
+            ss_tot = np.sum((y - np.mean(y)) ** 2)
+            r2 = float(1.0 - (ss_res / (ss_tot + 1e-12)))
+
+            # Estimate standard error of slope delta_k
+            if n > 2:
+                s_err = np.sqrt(ss_res / (n - 2))
+                s_xx = np.sum((x - np.mean(x)) ** 2)
+                slope_err = float(s_err / np.sqrt(s_xx + 1e-12))
+            else:
+                slope_err = float(0.05 * abs(slope))
+
+            passed_gate = bool(r2 >= self.r2_threshold and slope > 0)
+
+            self._fit_results[f] = {
+                "k": float(slope),
+                "delta_k": float(slope_err),
+                "c_room": float(intercept),
+                "r_squared": float(r2),
+                "passed_gate": passed_gate,
+                "n_points": n,
+                "r_min_m": float(np.min(r_vals)),
+                "r_max_m": float(np.max(r_vals)),
+                "v_min_v": float(np.min(v_vals)),
+                "v_max_v": float(np.max(v_vals))
+            }
+
+        return self._fit_results
+
+    def export_profile(
+        self,
+        name: str = "Calibrated_Room_Profile",
+        description: str = "Acoustic calibration profile fitted via 1/r regression",
+        only_passed: bool = True
+    ) -> AcousticProfile:
+        """
+        Constructs and returns an AcousticProfile from the regression results.
+        :param name: Profile name.
+        :param description: Calibration metadata description.
+        :param only_passed: If True, only includes frequency points meeting R^2 >= threshold.
+        :return: Ready-to-use AcousticProfile instance.
+        """
+        if not self._fit_results:
+            self.fit()
+
+        freqs = []
+        k_vals = []
+        r2_vals = []
+        k_errs = []
+
+        sorted_freqs = sorted(self._fit_results.keys())
+        for f in sorted_freqs:
+            res = self._fit_results[f]
+            if only_passed and not res["passed_gate"]:
+                continue
+            freqs.append(f)
+            k_vals.append(res["k"])
+            r2_vals.append(res["r_squared"])
+            k_errs.append(res["delta_k"])
+
+        if len(freqs) == 0:
+            raise ValueError(
+                f"No calibration points passed the R^2 >= {self.r2_threshold} quality gate. "
+                f"Check measurement linearity or lower r2_threshold."
+            )
+
+        return AcousticProfile(
+            frequencies_hz=freqs,
+            k_values=k_vals,
+            r_squared=r2_vals,
+            k_uncertainty=k_errs,
+            name=name,
+            description=description
+        )
+
+    def save_profile_json(
+        self,
+        filepath: Union[str, Path],
+        name: str = "Calibrated_Room_Profile",
+        description: str = "Acoustic calibration profile fitted via 1/r regression"
+    ) -> Path:
+        """Fits, exports, and saves calibration profile to a portable JSON file."""
+        profile = self.export_profile(name=name, description=description)
+        out_path = Path(filepath).resolve()
+        profile.to_json(out_path)
+        return out_path
+
+    def clear(self):
+        """Clears all raw measurements and fit results."""
+        self._raw_measurements.clear()
+        self._fit_results.clear()

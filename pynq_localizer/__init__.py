@@ -7,6 +7,7 @@ from pynq_localizer.kinematics import (
     MultiSourceTracker,
     AcousticProfile,
     DistanceEstimator,
+    AcousticCalibrationProtocol,
 )
 from pynq_localizer.notebooks import copy_notebooks
 
@@ -32,6 +33,7 @@ __all__ = [
     "MultiSourceTracker",
     "AcousticProfile",
     "DistanceEstimator",
+    "AcousticCalibrationProtocol",
     "KinematicsDashboard",
     "copy_notebooks",
 ]
