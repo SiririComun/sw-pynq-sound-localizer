@@ -954,10 +954,17 @@ class AcousticCalibrationProtocol:
             slope, intercept = np.polyfit(x, y, 1)
             y_pred = slope * x + intercept
 
-            # Compute R^2 goodness-of-fit
+            # Compute R^2 goodness-of-fit with degenerate flat-line detection
             ss_res = np.sum((y - y_pred) ** 2)
             ss_tot = np.sum((y - np.mean(y)) ** 2)
-            r2 = float(1.0 - (ss_res / (ss_tot + 1e-12)))
+
+            if ss_tot < 1e-9 or slope <= 1e-4:
+                # Flat horizontal line or negative/zero slope (no physical 1/r decay)
+                r2 = 0.0
+                passed_gate = False
+            else:
+                r2 = float(1.0 - (ss_res / (ss_tot + 1e-12)))
+                passed_gate = bool(r2 >= self.r2_threshold and slope > 1e-4)
 
             # Estimate standard error of slope delta_k
             if n > 2:
