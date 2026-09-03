@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/fft-quadruple-telemetry-engine @ 217b6e8
+• Repository State    : feat/fft-quadruple-telemetry-engine @ b61748f
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1-rc2
 • Package Version     : v1.0.0
 ==============================================================================
@@ -12,7 +12,7 @@ Git Context & Branch Topology:
 Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/fft-quadruple-telemetry-engine                217b6e8 [origin/feat/fft-quadruple-telemetry-engine] docs(context): update repository summary and Cog configuration with hybrid test suite
+* feat/fft-quadruple-telemetry-engine                b61748f [origin/feat/fft-quadruple-telemetry-engine: ahead 1] feat(calibration): implement AcousticCalibrationProtocol 1/r regression solver and profile exporter
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
   remotes/origin/feat/fft-quadruple-telemetry-engine 217b6e8 docs(context): update repository summary and Cog configuration with hybrid test suite
@@ -23,7 +23,8 @@ Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 217b6e8  (HEAD -> feat/fft-quadruple-telemetry-engine, origin/feat/fft-quadruple-telemetry-engine) - 2026-09-03 : docs(context): update repository summary and Cog configuration with hybrid test suite (SiririComun)
+* b61748f  (HEAD -> feat/fft-quadruple-telemetry-engine) - 2026-09-03 : feat(calibration): implement AcousticCalibrationProtocol 1/r regression solver and profile exporter (SiririComun)
+* 217b6e8  (origin/feat/fft-quadruple-telemetry-engine) - 2026-09-03 : docs(context): update repository summary and Cog configuration with hybrid test suite (SiririComun)
 * da5ae0f  - 2026-09-03 : test(dsp): add unit verification suite for hybrid dual-DMA BFP-immune extraction (SiririComun)
 * 8ab79b6  - 2026-09-03 : feat(driver): integrate capture_quadruple hybrid dual-DMA API and DistanceEstimator.process_frame (SiririComun)
 * b7fcdff  - 2026-09-03 : feat(dsp): implement compute_coherent_inband_amplitude and extract_hybrid_quadruple in KinematicAnalytics (SiririComun)
@@ -37,7 +38,6 @@ Multi-Branch Git Commit Graph:
 * 2431cb5  - 2026-09-02 : feat(dsp): add coherent harmonic leakage cancellation and SIR metrics to MultiSourceTracker (SiririComun)
 * 4968f10  - 2026-09-02 : feat(dsp): implement MultiSourceTracker multi-band spectral extraction engine (SiririComun)
 * 5580740  - 2026-09-01 : feat(driver): integrate auto-priming warmup and timer initialization into MicrophoneArrayOverlay (SiririComun)
-* b9c2116  - 2026-09-01 : fix(driver): add timer auto-init and non-blocking recovery flush to capture_spectral_frame (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -3278,4 +3278,10 @@ class TestHybridDualDMAEngine:
         assert "distance_m" in res
         assert abs(res["distance_m"] - 1.00) < 0.01
         assert abs(res["frequency_hz"] - 2000.0) < 0.2
+```
+
+test_calibration.py: (tests/test_calibration.py)
+
+```python
+
 ```
