@@ -833,3 +833,40 @@ class DistanceEstimator:
         res["k_evaluated"] = k_val
         res["k_uncertainty"] = delta_k
         return res
+
+    def process_frame(
+        self,
+        frame_dict: Dict[str, Any],
+        source: str = "A0",
+        fs: float = 50_000.0,
+        f_min: float = 100.0,
+        f_max: float = 15000.0
+    ) -> Dict[str, Any]:
+        """
+        Processes a raw spectral frame dict, performs hybrid in-band demodulation,
+        and computes metric distance r(t) = k(f0) / A_true(t).
+
+        :param frame_dict: Output dictionary from capture_spectral_frame() or capture_quadruple().
+        :param source: Target microphone ('A0' or 'A1').
+        :param fs: Sampling frequency in Hz.
+        :param f_min: Search minimum frequency in Hz.
+        :param f_max: Search maximum frequency in Hz.
+        :return: Augmented quadruple dictionary with distance_m and distance_err_m.
+        """
+        # 1. If quadruple already extracted, use it; otherwise extract hybrid quadruple
+        if "quadruple" in frame_dict:
+            quad = frame_dict["quadruple"].copy()
+        else:
+            time_sig = frame_dict["v_a0"] if "A0" in source.upper() or "CH1" in source.upper() else frame_dict["v_a1"]
+            quad = KinematicAnalytics.extract_hybrid_quadruple(
+                time_signal_v=time_sig,
+                fs=fs,
+                freq_axis=frame_dict["freqs"],
+                magnitude=frame_dict["mag"],
+                phase_rad=frame_dict["phase"],
+                f_min=f_min,
+                f_max=f_max,
+                timer_cycles=frame_dict.get("timer_cycles", 0)
+            )
+
+        return self.process_quadruple(quad)

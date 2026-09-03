@@ -1,13 +1,13 @@
 """
 pynq_localizer.array: Core Dual-Microphone Hardware Interface & Lock-Step Polar Streaming Engine.
 Features zero-skew simultaneous sampling (A0 & A1), hardware anti-aliasing decimation,
-32-bit polar CORDIC phase-magnitude spectral capture, sub-microsecond hardware timestamping,
-and continuous multi-second flight recording.
+32-bit polar CORDIC phase-magnitude spectral capture, hybrid dual-DMA BFP-immune amplitude
+demodulation, sub-microsecond hardware timestamping, and continuous multi-second flight recording.
 """
 
 import time
 from pathlib import Path
-from typing import Union, Optional, Tuple, Dict
+from typing import Union, Optional, Tuple, Dict, Any
 import numpy as np
 from pynq import Overlay, allocate
 
@@ -156,7 +156,7 @@ class MicrophoneArrayOverlay(Overlay):
                 time.sleep(0.0005)
 
     # =========================================================================
-    # 2. Lock-Step Dual DMA Capture (Time Domain + Polar Frequency Domain)
+    # 2. Lock-Step Dual DMA Capture & Hybrid Quadruple Engine
     # =========================================================================
 
     def capture_spectral_frame(
@@ -171,13 +171,7 @@ class MicrophoneArrayOverlay(Overlay):
         :param fft_source: Channel routed to the FFT core ('A0' or 'A1').
         :param crop_startup_samples: Number of initial boundary samples to crop from time domain.
         :param timeout: Maximum wait time in seconds.
-        :return: Dictionary with keys:
-                 - 'v_a0': 1D voltage array for Mic 1 (A0).
-                 - 'v_a1': 1D voltage array for Mic 2 (A1).
-                 - 'freqs': Positive half-spectrum frequency axis in Hz.
-                 - 'mag': Linear magnitude spectrum |X(f)| (length N/2).
-                 - 'phase': Physical phase spectrum ∠X(f) in radians [-π, +π] (length N/2).
-                 - 'timer_cycles': Hardware AXI Timer clock cycles at frame completion.
+        :return: Dictionary containing v_a0, v_a1, freqs, mag, phase, and timer_cycles.
         """
         self.trigger.set_fft_channel("CH2" if ("A1" in fft_source.upper() or "CH2" in fft_source.upper()) else "CH1")
 
@@ -230,15 +224,60 @@ class MicrophoneArrayOverlay(Overlay):
             "timer_cycles": t_hw_cycles
         }
 
+    def capture_quadruple(
+        self,
+        source: str = "A0",
+        f_min: float = 100.0,
+        f_max: float = 15000.0,
+        timeout: float = 0.5
+    ) -> Dict[str, Any]:
+        """
+        High-level capture method returning the hybrid BFP-immune quadruple (f0, A_true, phi, t).
+        Combines hardware pitch/phase vectoring (DMA 1) with time-domain coherent demodulation (DMA 0).
+
+        :param source: Microphone channel to process ('A0' or 'A1').
+        :param f_min: Search range minimum frequency in Hz.
+        :param f_max: Search range maximum frequency in Hz.
+        :param timeout: Maximum wait time in seconds.
+        :return: Telemetry dictionary containing:
+                 - 'quadruple': Dict with f0, amplitude_v (BFP-immune), phase_rad, timestamp_sec.
+                 - 'v_time': 1D voltage array of the selected channel.
+                 - 'freqs': 1D positive frequency axis in Hz.
+                 - 'mag': 1D raw FFT magnitude spectrum.
+                 - 'phase': 1D raw CORDIC phase spectrum.
+        """
+        from pynq_localizer.kinematics import KinematicAnalytics
+
+        frame = self.capture_spectral_frame(fft_source=source, timeout=timeout)
+        time_sig = frame["v_a0"] if "A0" in source.upper() or "CH1" in source.upper() else frame["v_a1"]
+
+        quad = KinematicAnalytics.extract_hybrid_quadruple(
+            time_signal_v=time_sig,
+            fs=self.fs_per_ch,
+            freq_axis=frame["freqs"],
+            magnitude=frame["mag"],
+            phase_rad=frame["phase"],
+            f_min=f_min,
+            f_max=f_max,
+            timer_cycles=frame["timer_cycles"]
+        )
+
+        return {
+            "quadruple": quad,
+            "v_time": time_sig,
+            "v_a0": frame["v_a0"],
+            "v_a1": frame["v_a1"],
+            "freqs": frame["freqs"],
+            "mag": frame["mag"],
+            "phase": frame["phase"]
+        }
+
     def capture_frame(
         self,
         crop_startup_samples: int = 8,
         timeout: float = 2.0
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Legacy wrapper: Captures a single synchronous dual-channel audio frame from A0 and A1.
-        :return: (voltages_mic1_a0, voltages_mic2_a1) arrays.
-        """
+        """Legacy wrapper: Captures a single synchronous dual-channel audio frame from A0 and A1."""
         res = self.capture_spectral_frame(crop_startup_samples=crop_startup_samples, timeout=timeout)
         return res["v_a0"], res["v_a1"]
 
@@ -253,8 +292,6 @@ class MicrophoneArrayOverlay(Overlay):
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Continuously streams and records uninterrupted multi-second flight data from both microphones.
-        Ideal for Doppler moving vehicle tracking and free-fall gravitational acceleration measurement.
-
         :param duration_sec: Total duration to record in seconds (e.g. 3.0, 5.0, 10.0).
         :param chunk_size: Size of individual DMA streaming packets (default: 4096).
         :return: (time_axis_sec, v_mic1_a0, v_mic2_a1) arrays.
@@ -271,7 +308,6 @@ class MicrophoneArrayOverlay(Overlay):
         chunk_buf = allocate(shape=(chunk_size,), dtype="u2")
         dummy_fft_buf = allocate(shape=(chunk_size // 2,), dtype="u4")
 
-        # Reset DMAs
         self.axi_dma_0.mmio.write(0x30, 0x04)
         self.axi_dma_1.mmio.write(0x30, 0x04)
         time.sleep(0.002)
@@ -298,7 +334,6 @@ class MicrophoneArrayOverlay(Overlay):
                 raw_interleaved[write_ptr : write_ptr + chunk_size] = np.array(chunk_buf)
                 write_ptr += chunk_size
 
-            # Trim to exact requested length
             valid_samples = raw_interleaved[:total_interleaved_samples]
             raw_a0 = valid_samples[0::2]
             raw_a1 = valid_samples[1::2]
@@ -320,11 +355,7 @@ class MicrophoneArrayOverlay(Overlay):
     # =========================================================================
 
     def play_audio(self, channel: int = 1, custom_data: Optional[np.ndarray] = None):
-        """
-        Plays captured microphone audio directly in Jupyter Notebook.
-        :param channel: 1 for Mic 1 (A0), 2 for Mic 2 (A1).
-        :param custom_data: Optional custom 1D numpy array of audio samples to play.
-        """
+        """Plays captured microphone audio directly in Jupyter Notebook."""
         try:
             from IPython.display import Audio, display
         except ImportError:
@@ -346,11 +377,7 @@ class MicrophoneArrayOverlay(Overlay):
         window_duration_sec: float = 10.0,
         hop_ms: float = 10.0
     ):
-        """
-        Launches the real-time 10-second rolling Multi-Tab Kinematics Dashboard (A(t) & f0(t)).
-        :param window_duration_sec: Rolling time window in seconds (default: 10.0s).
-        :param hop_ms: Telemetry extraction rate in milliseconds (default: 10.0 ms).
-        """
+        """Launches the real-time 10-second rolling Multi-Tab Kinematics Dashboard."""
         from pynq_localizer.kinematics_dashboard import KinematicsDashboard
         dash = KinematicsDashboard(
             overlay=self,
