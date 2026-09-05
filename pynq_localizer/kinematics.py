@@ -3,9 +3,9 @@ pynq_localizer.kinematics: High-Precision Acoustic Kinematics & Frequency Ridge 
 Provides sub-Hertz pitch tracking (20 Hz - 20 kHz), spectral quadruple extraction (f, A, φ, t),
 hybrid dual-DMA coherent in-band voltage demodulation, multi-source tracking, single-channel
 distance estimation r = k(f)/A, acoustic profile modeling, standalone acoustic calibration
-protocols with R^2 linearity gating, phase velocity verification, smoothed RMS envelope
-extraction, sliding STFT trajectories, temperature-compensated sound speed, Doppler velocity,
-and gravity metrics.
+protocols with Weighted Least Squares (WLS) and dynamic 1/r boundary pruning, phase velocity
+verification, smoothed RMS envelope extraction, sliding STFT trajectories, temperature-compensated
+sound speed, Doppler velocity, and gravity metrics.
 """
 
 import json
@@ -34,8 +34,6 @@ class KinematicAnalytics:
         """
         Calculates the temperature-compensated speed of sound in air.
         c(T) = 331.3 * sqrt(1 + T_c / 273.15) [m/s]
-        :param temperature_c: Ambient air temperature in Celsius (default: 20.0°C).
-        :return: Sound velocity c in m/s (e.g. 343.2 m/s at 20°C).
         """
         return float(331.3 * np.sqrt(1.0 + (float(temperature_c) / 273.15)))
 
@@ -49,8 +47,6 @@ class KinematicAnalytics:
         """
         Calculates instantaneous radial velocity v(t) from observed Doppler frequency:
         v(t) = c(T) * ((f_observed - f_source) / f_source)
-        Positive v => Source approaching observer.
-        Negative v => Source receding from observer.
         """
         c = cls.speed_of_sound(temperature_c)
         f_obs = np.asarray(f_observed, dtype=np.float64)
@@ -116,11 +112,6 @@ class KinematicAnalytics:
         V_RMS = |X(f0)| / sqrt(2)
 
         Guarantees 100% immunity to FPGA FFT Block Floating Point bit-shift jumps.
-        :param signal_v: 1D physical voltage array in Volts.
-        :param fs: Sampling frequency in Hz (e.g. 50,000 Hz).
-        :param target_freq_hz: In-band carrier pitch f0 in Hz.
-        :param remove_dc: Subtract mean offset before demodulation.
-        :return: Coherent in-band RMS amplitude in Volts.
         """
         v = np.asarray(signal_v, dtype=np.float64)
         n = len(v)
@@ -153,19 +144,7 @@ class KinematicAnalytics:
         Extracts the hybrid quadruple (f0, A_true, phi, t):
         1. Pitch (f0) & Phase (phi) extracted from DMA 1 (Hardware FFT/CORDIC).
         2. In-band Amplitude (A_true) extracted from DMA 0 (Hardware ADC Time Stream).
-
-        :param time_signal_v: 1D raw voltage array from DMA 0.
-        :param fs: Sampling rate in Hz.
-        :param freq_axis: 1D positive half-spectrum frequency axis from DMA 1.
-        :param magnitude: 1D magnitude spectrum from DMA 1.
-        :param phase_rad: 1D phase spectrum from DMA 1.
-        :param f_min: Lower search bound in Hz.
-        :param f_max: Upper search bound in Hz.
-        :param timer_cycles: Hardware timer cycle count.
-        :param clock_freq_hz: System clock rate in Hz (default 100 MHz).
-        :return: Telemetry dictionary with true physical in-band amplitude.
         """
-        # 1. Extract pitch f0 and phase from hardware FFT/CORDIC
         quad = cls.extract_quadruple(
             freq_axis=freq_axis,
             magnitude=magnitude,
@@ -178,7 +157,6 @@ class KinematicAnalytics:
 
         f0 = quad["frequency_hz"]
 
-        # 2. Extract true physical in-band RMS voltage from raw ADC time buffer
         if np.isfinite(f0) and f0 > 0:
             a_true = cls.compute_coherent_inband_amplitude(
                 signal_v=time_signal_v,
@@ -233,22 +211,18 @@ class KinematicAnalytics:
         local_k = int(np.argmax(band_mags))
         k0 = int(band_indices[local_k])
 
-        # Sub-Hertz Analytical Sinc Pitch Interpolation
         f0, delta = cls.track_sub_hertz_pitch(
             freqs, mags, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True, return_delta=True
         )
 
-        # In-Band Parseval RMS Energy Integration
-        n_points = len(freqs) * 2  # Full FFT size N
+        n_points = len(freqs) * 2
         band_energy = float(np.sum(band_mags ** 2))
         v_rms = (np.sqrt(2.0 * band_energy) / (n_points * enbw)) * raw_scale_factor
 
-        # Fractional-bin Phase Alignment Correction (Subtract window center offset)
         raw_phi = float(phases[k0]) if (0 <= k0 < len(phases)) else 0.0
         phi_corrected = raw_phi - (np.pi * delta * (n_points - 1.0) / n_points)
         phi_wrapped = float((phi_corrected + np.pi) % (2.0 * np.pi) - np.pi)
 
-        # Sub-Microsecond Hardware Timestamp
         t_sec = float(timer_cycles) / clock_freq_hz
 
         return {
@@ -270,9 +244,7 @@ class KinematicAnalytics:
         f_expected: Optional[float] = None,
         f_tol: float = 50.0
     ) -> Tuple[np.ndarray, np.ndarray, float]:
-        """
-        Calculates instantaneous phase frequency trajectory f_phase(t) = (1 / 2π) * (dΦ / dt).
-        """
+        """Calculates instantaneous phase frequency trajectory f_phase(t) = (1 / 2π) * (dΦ / dt)."""
         phi = np.asarray(phase_history, dtype=np.float64)
         t = np.asarray(time_history, dtype=np.float64)
 
@@ -521,14 +493,10 @@ class MultiSourceTracker:
         phase_rad: np.ndarray,
         timer_cycles: int = 0
     ) -> Dict[str, Any]:
-        """
-        Processes a single polar FFT frame, extracts raw quadruples, cancels harmonic cross-talk,
-        and computes SIR isolation metrics for all sources.
-        """
+        """Processes a single polar FFT frame, extracts raw quadruples, cancels harmonic cross-talk, and computes SIR."""
         t_sec = float(timer_cycles) / self.clock_freq_hz if self.clock_freq_hz > 0 else 0.0
         raw_quads = {}
 
-        # 1. Extract raw quadruples
         for src_name, (f_min, f_max) in self.source_bands.items():
             quad = KinematicAnalytics.extract_quadruple(
                 freq_axis=freq_axis,
@@ -542,7 +510,6 @@ class MultiSourceTracker:
             )
             raw_quads[src_name] = quad
 
-        # 2. Harmonic Cross-Talk Cancellation & SIR
         frame_results = {}
         src_names = list(self.source_bands.keys())
 
@@ -561,11 +528,9 @@ class MultiSourceTracker:
                     p_i = quad_i["band_energy"]
 
                     if np.isfinite(f_i) and p_i > 0:
-                        # 2nd harmonic
                         if abs(f_j - 2.0 * f_i) < (self.source_bands[j_name][1] - self.source_bands[j_name][0]) * 0.5:
                             leak = p_i * self.h2_coeff
                             total_leakage += leak
-                        # 3rd harmonic
                         elif abs(f_j - 3.0 * f_i) < (self.source_bands[j_name][1] - self.source_bands[j_name][0]) * 0.5:
                             leak = p_i * self.h3_coeff
                             total_leakage += leak
@@ -626,8 +591,8 @@ class MultiSourceTracker:
 class AcousticProfile:
     """
     Data model and interpolator for physical acoustic calibration functions k(f).
-    Supports discrete calibration grids, continuous splines, custom callables, and JSON export/import.
-    Uses pure NumPy (np.interp) by default with optional SciPy cubic spline enhancement.
+    Stores discrete calibration grids, splines, system metadata (volume/gain), and
+    frequency-dependent certified operating bounds [r_min(f), r_max(f)].
     """
 
     def __init__(
@@ -636,12 +601,16 @@ class AcousticProfile:
         k_values: Optional[Union[List[float], np.ndarray]] = None,
         r_squared: Optional[Union[List[float], np.ndarray]] = None,
         k_uncertainty: Optional[Union[List[float], np.ndarray]] = None,
+        operational_bounds: Optional[Dict[str, Dict[str, float]]] = None,
+        system_metadata: Optional[Dict[str, Any]] = None,
         name: str = "DefaultProfile",
         description: str = "Acoustic calibration curve k(f)"
     ):
         self.name = name
         self.description = description
         self._callable_model: Optional[Callable[[float], float]] = None
+        self.operational_bounds = operational_bounds or {}
+        self.system_metadata = system_metadata or {}
 
         if frequencies_hz is not None and k_values is not None:
             self.frequencies = np.asarray(frequencies_hz, dtype=np.float64)
@@ -657,7 +626,7 @@ class AcousticProfile:
                 else 0.03 * self.k_values
             )
 
-            # Build 1D interpolator (Pure NumPy fallback for zero-dependency portability)
+            # Build 1D interpolator
             if len(self.frequencies) > 1:
                 if _HAS_SCIPY and len(self.frequencies) >= 4:
                     self._interp_k = interp1d(
@@ -693,11 +662,7 @@ class AcousticProfile:
             self._interp_err = lambda f: 0.002
 
     def evaluate(self, frequency_hz: float) -> Tuple[float, float]:
-        """
-        Evaluates k(f) and its uncertainty delta_k at a specific frequency.
-        :param frequency_hz: Target acoustic pitch in Hz.
-        :return: (k_value in V*m, delta_k in V*m).
-        """
+        """Evaluates k(f) and its uncertainty delta_k at a specific frequency."""
         f = float(frequency_hz)
         if not np.isfinite(f) or f <= 0:
             return float(self.k_values[0]), float(self.k_uncertainty[0])
@@ -710,32 +675,56 @@ class AcousticProfile:
         k_err = float(self._interp_err(f))
         return k_val, k_err
 
+    def get_operational_bounds(self, frequency_hz: float) -> Dict[str, float]:
+        """Retrieves certified physical operating distance/voltage boundaries for a frequency."""
+        f = float(frequency_hz)
+        if not self.operational_bounds:
+            return {"r_min_m": 0.10, "r_max_m": 2.00, "v_min_v": 0.002, "v_sat_v": 0.500}
+
+        # Find closest calibrated frequency key
+        closest_f = min(self.operational_bounds.keys(), key=lambda k: abs(float(k) - f))
+        return self.operational_bounds[closest_f]
+
     @classmethod
-    def from_constant(cls, k_value: float, relative_error: float = 0.03, name: str = "ConstantProfile") -> "AcousticProfile":
-        """Factory creating an AcousticProfile with a flat, constant k across all frequencies."""
+    def from_constant(
+        cls,
+        k_value: float,
+        relative_error: float = 0.03,
+        system_metadata: Optional[Dict[str, Any]] = None,
+        name: str = "ConstantProfile"
+    ) -> "AcousticProfile":
+        """Factory creating an AcousticProfile with a flat constant k."""
         profile = cls(
             frequencies_hz=[100.0, 10000.0],
             k_values=[float(k_value), float(k_value)],
             r_squared=[1.0, 1.0],
             k_uncertainty=[float(k_value) * relative_error, float(k_value) * relative_error],
+            system_metadata=system_metadata or {"volume_setting": 0.75, "gain_setting": "default"},
             name=name,
             description=f"Static flat profile with k={k_value:.4f} V*m"
         )
         return profile
 
     @classmethod
-    def from_callable(cls, func: Callable[[float], float], name: str = "CallableProfile") -> "AcousticProfile":
+    def from_callable(
+        cls,
+        func: Callable[[float], float],
+        system_metadata: Optional[Dict[str, Any]] = None,
+        name: str = "CallableProfile"
+    ) -> "AcousticProfile":
         """Factory creating an AcousticProfile evaluated directly from a mathematical function k(f)."""
-        profile = cls.from_constant(0.05, name=name)
+        profile = cls.from_constant(0.05, system_metadata=system_metadata, name=name)
         profile._callable_model = func
         return profile
 
     def to_json(self, filepath: Union[str, Path]):
-        """Serializes calibration profile to a portable JSON file."""
+        """Serializes calibration profile, metadata, and operational bounds to a JSON file."""
         out_path = Path(filepath).resolve()
         data = {
             "name": self.name,
             "description": self.description,
+            "system_metadata": self.system_metadata,
+            "operational_bounds": self.operational_bounds,
             "frequencies_hz": self.frequencies.tolist(),
             "k_values": self.k_values.tolist(),
             "r_squared": self.r_squared.tolist(),
@@ -746,7 +735,7 @@ class AcousticProfile:
 
     @classmethod
     def from_json(cls, filepath: Union[str, Path]) -> "AcousticProfile":
-        """Loads a calibration profile from a JSON file."""
+        """Loads a calibration profile, metadata, and bounds from a JSON file."""
         in_path = Path(filepath).resolve()
         with open(in_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -755,6 +744,8 @@ class AcousticProfile:
             k_values=data["k_values"],
             r_squared=data.get("r_squared"),
             k_uncertainty=data.get("k_uncertainty"),
+            operational_bounds=data.get("operational_bounds", {}),
+            system_metadata=data.get("system_metadata", {}),
             name=data.get("name", in_path.stem),
             description=data.get("description", "")
         )
@@ -763,7 +754,8 @@ class AcousticProfile:
 class DistanceEstimator:
     """
     Runtime Single-Channel Distance Inversion Engine.
-    Computes real-time physical distance r(t) = k(f0) / A(t) with dynamic error propagation.
+    Computes real-time physical distance r(t) = k(f0) / A_true(t) with dynamic error propagation
+    and certified operating boundary status checks.
     """
 
     def __init__(
@@ -795,42 +787,55 @@ class DistanceEstimator:
         amplitude_v: float,
         frequency_hz: float,
         delta_a: Optional[float] = None
-    ) -> Tuple[float, float]:
+    ) -> Tuple[float, float, str]:
         """
-        Calculates physical distance r(t) and uncertainty delta_r(t) from in-band amplitude and frequency.
+        Calculates physical distance r(t), uncertainty delta_r(t), and operational status flag:
         r(t) = k(f0) / A(t)
         delta_r(t) = r * sqrt( (delta_k / k)^2 + (delta_A / A)^2 )
+
+        :return: (distance_meters, uncertainty_meters, status_str).
+                 Status is one of: 'ACTIVE_VALID', 'OUT_OF_BOUNDS_SATURATION', 'OUT_OF_BOUNDS_NOISE', 'SILENCE'.
         """
         amp = float(amplitude_v)
         f0 = float(frequency_hz)
 
         # Squelch silence/noise floor
         if not np.isfinite(amp) or amp < self.noise_gate_v or not np.isfinite(f0) or f0 <= 0:
-            return np.nan, np.nan
+            return np.nan, np.nan, "SILENCE"
 
         k_val, delta_k = self.profile.evaluate(f0)
+        bounds = self.profile.get_operational_bounds(f0)
         da = float(delta_a) if delta_a is not None else self.voltage_uncertainty_v
 
         r_calc = k_val / max(amp, 1e-6)
         r_clamped = float(np.clip(r_calc, self.min_dist, self.max_dist))
 
+        # Check operational boundaries
+        if r_calc < bounds.get("r_min_m", self.min_dist):
+            status = "OUT_OF_BOUNDS_SATURATION"
+        elif r_calc > bounds.get("r_max_m", self.max_dist):
+            status = "OUT_OF_BOUNDS_NOISE"
+        else:
+            status = "ACTIVE_VALID"
+
         rel_k_err = delta_k / max(k_val, 1e-6)
         rel_a_err = da / max(amp, 1e-6)
         delta_r = float(r_clamped * np.sqrt(rel_k_err ** 2 + rel_a_err ** 2))
 
-        return r_clamped, delta_r
+        return r_clamped, delta_r, status
 
     def process_quadruple(self, quadruple: Dict[str, Any]) -> Dict[str, Any]:
-        """Augments an incoming quadruple dict with real-time distance metrics."""
+        """Augments an incoming quadruple dict with real-time distance metrics and operational status."""
         res = quadruple.copy()
         amp = res.get("amplitude_v", 0.0)
         f0 = res.get("frequency_hz", np.nan)
 
-        r_m, r_err = self.estimate_distance(amp, f0)
+        r_m, r_err, status = self.estimate_distance(amp, f0)
         k_val, delta_k = self.profile.evaluate(f0 if np.isfinite(f0) else 1000.0)
 
         res["distance_m"] = r_m
         res["distance_err_m"] = r_err
+        res["distance_status"] = status
         res["k_evaluated"] = k_val
         res["k_uncertainty"] = delta_k
         return res
@@ -843,10 +848,7 @@ class DistanceEstimator:
         f_min: float = 100.0,
         f_max: float = 15000.0
     ) -> Dict[str, Any]:
-        """
-        Processes a raw spectral frame dict, performs hybrid in-band demodulation,
-        and computes metric distance r(t) = k(f0) / A_true(t).
-        """
+        """Processes raw spectral frame dict, performs hybrid in-band demodulation, and computes distance."""
         if "quadruple" in frame_dict:
             quad = frame_dict["quadruple"].copy()
         else:
@@ -866,43 +868,63 @@ class DistanceEstimator:
 
 
 # =============================================================================
-# 6. Standalone Acoustic Calibration Protocol Suite
+# 6. Standalone Acoustic Calibration Protocol Suite (WLS & Boundary Pruner)
 # =============================================================================
 
 class AcousticCalibrationProtocol:
     """
     Standalone Acoustic Calibration & Regression Protocol.
-    Ingests multi-distance x multi-frequency calibration sweeps, performs 1/r linear
-    regressions with room offset absorption, validates R^2 >= 0.95 linearity gates,
-    and produces ready-to-use AcousticProfile artifacts.
+    Ingests multi-sample (N=30) observations per point, applies dynamic boundary pruning
+    to isolate the central valid 1/r region, solves Weighted Least Squares (WLS) regressions,
+    validates R^2 >= 0.95 linearity gates, and exports complete AcousticProfile artifacts.
     """
 
-    def __init__(self, r2_threshold: float = 0.95):
-        """
-        :param r2_threshold: Minimum R^2 coefficient of determination to accept calibration (default: 0.95).
-        """
+    def __init__(
+        self,
+        r2_threshold: float = 0.95,
+        system_metadata: Optional[Dict[str, Any]] = None
+    ):
         self.r2_threshold = float(r2_threshold)
-        # Data store: {frequency_hz: [(distance_m, v_rms), ...]}
-        self._raw_measurements: Dict[float, List[Tuple[float, float]]] = {}
-        self._fit_results: Dict[float, Dict[str, float]] = {}
+        self.system_metadata = system_metadata or {
+            "speaker_volume": 0.75,
+            "mic_gain": "+35dB",
+            "environment_label": "default_lab",
+            "temperature_c": 20.0
+        }
+        # Data store: {frequency_hz: {distance_m: [v_1, v_2, ..., v_N]}}
+        self._measurements: Dict[float, Dict[float, List[float]]] = {}
+        self._fit_results: Dict[float, Dict[str, Any]] = {}
 
-    def add_measurement(self, distance_m: float, frequency_hz: float, amplitude_v: float):
+    def add_measurement(
+        self,
+        distance_m: float,
+        frequency_hz: float,
+        amplitude_v: Union[float, List[float], np.ndarray]
+    ):
         """
-        Records a single calibration observation point (distance, frequency, voltage).
-        :param distance_m: Physical tape-measured distance in meters (e.g. 0.30 m).
-        :param frequency_hz: Emitted carrier tone frequency in Hz (e.g. 1000.0 Hz).
-        :param amplitude_v: Measured in-band RMS voltage in Volts.
+        Records measurement observations for a given distance and frequency station.
+        Accepts single scalar voltages or lists/arrays of repeat observations (e.g. N=30).
         """
         r = float(distance_m)
         f = float(frequency_hz)
-        v = float(amplitude_v)
 
-        if r <= 0 or not np.isfinite(r) or not np.isfinite(f) or not np.isfinite(v):
+        if r <= 0 or not np.isfinite(r) or not np.isfinite(f):
             return
 
-        if f not in self._raw_measurements:
-            self._raw_measurements[f] = []
-        self._raw_measurements[f].append((r, v))
+        if f not in self._measurements:
+            self._measurements[f] = {}
+        if r not in self._measurements[f]:
+            self._measurements[f][r] = []
+
+        if isinstance(amplitude_v, (list, tuple, np.ndarray)):
+            for v in amplitude_v:
+                v_flt = float(v)
+                if np.isfinite(v_flt) and v_flt > 0:
+                    self._measurements[f][r].append(v_flt)
+        else:
+            v_flt = float(amplitude_v)
+            if np.isfinite(v_flt) and v_flt > 0:
+                self._measurements[f][r].append(v_flt)
 
     def add_dataset(
         self,
@@ -910,12 +932,7 @@ class AcousticCalibrationProtocol:
         frequencies_hz: Union[List[float], np.ndarray],
         amplitude_matrix_v: Union[List[List[float]], np.ndarray]
     ):
-        """
-        Ingests a complete 2D calibration grid of distances x frequencies.
-        :param distances_m: 1D array of calibration distances (length M).
-        :param frequencies_hz: 1D array of calibration frequencies (length K).
-        :param amplitude_matrix_v: 2D array of measured in-band voltages (shape M x K).
-        """
+        """Ingests a complete 2D calibration grid of distances x frequencies."""
         r_arr = np.asarray(distances_m, dtype=np.float64)
         f_arr = np.asarray(frequencies_hz, dtype=np.float64)
         v_mat = np.asarray(amplitude_matrix_v, dtype=np.float64)
@@ -929,52 +946,122 @@ class AcousticCalibrationProtocol:
             for j, f in enumerate(f_arr):
                 self.add_measurement(r, f, v_mat[i, j])
 
-    def fit(self) -> Dict[float, Dict[str, float]]:
+    def _prune_linear_window(
+        self,
+        r_sorted: np.ndarray,
+        v_means: np.ndarray
+    ) -> Tuple[int, int]:
         """
-        Solves 1st-order linear 1/r regressions for all ingested frequencies:
-        V_RMS(r_i) = k(f) * (1 / r_i) + c_room
+        Dynamic Boundary Pruning: Identifies the central valid 1/r linear sub-window [i_start, i_stop].
+        Excludes near-field saturation/clipping at small r and far-field room reflection floors at large r.
+        """
+        m = len(r_sorted)
+        if m <= 4:
+            return 0, m  # Not enough points to prune, keep all
 
-        :return: Dictionary mapping frequency_hz to fit results (k, delta_k, c_room, r_squared, passed_gate).
+        # Evaluate candidate contiguous sub-windows of length >= 4
+        best_start, best_stop = 0, m
+        best_r2 = -1.0
+        min_window_len = max(4, int(np.ceil(m * 0.5)))
+
+        for start in range(m - min_window_len + 1):
+            for stop in range(start + min_window_len, m + 1):
+                r_sub = r_sorted[start:stop]
+                v_sub = v_means[start:stop]
+
+                x_sub = 1.0 / r_sub
+                y_sub = v_sub
+
+                slope, intercept = np.polyfit(x_sub, y_sub, 1)
+                y_pred = slope * x_sub + intercept
+                ss_res = np.sum((y_sub - y_pred) ** 2)
+                ss_tot = np.sum((y_sub - np.mean(y_sub)) ** 2)
+
+                if ss_tot > 1e-9 and slope > 1e-4:
+                    r2 = 1.0 - (ss_res / (ss_tot + 1e-12))
+                    # Favor larger windows with high R^2
+                    score = r2 * (len(r_sub) / m)
+                    if score > best_r2:
+                        best_r2 = score
+                        best_start, best_stop = start, stop
+
+        return best_start, best_stop
+
+    def fit(self) -> Dict[float, Dict[str, Any]]:
+        """
+        Computes statistical parameters, performs dynamic boundary pruning,
+        and solves Weighted Least Squares (WLS) regressions:
+        V(r_i) = k(f) * (1 / r_i) + c_room
         """
         self._fit_results.clear()
 
-        for f, points in self._raw_measurements.items():
-            if len(points) < 2:
+        for f, dist_dict in self._measurements.items():
+            if len(dist_dict) < 2:
                 continue
 
-            r_vals = np.array([p[0] for p in points], dtype=np.float64)
-            v_vals = np.array([p[1] for p in points], dtype=np.float64)
+            r_sorted = np.array(sorted(dist_dict.keys()), dtype=np.float64)
+            v_means = []
+            v_stds = []
+            v_sems = []
+            sample_counts = []
 
-            # Invert distance: x = 1 / r
-            x = 1.0 / r_vals
-            y = v_vals
-            n = len(x)
+            for r in r_sorted:
+                samples = np.array(dist_dict[r], dtype=np.float64)
+                n = len(samples)
+                mean_val = float(np.mean(samples)) if n > 0 else 0.0
+                std_val = float(np.std(samples, ddof=1)) if n > 1 else max(0.001 * mean_val, 1e-5)
+                sem_val = float(std_val / np.sqrt(n)) if n > 0 else std_val
 
-            # Linear regression: y = slope * x + intercept
-            slope, intercept = np.polyfit(x, y, 1)
-            y_pred = slope * x + intercept
+                v_means.append(mean_val)
+                v_stds.append(std_val)
+                v_sems.append(sem_val)
+                sample_counts.append(n)
 
-            # Compute R^2 goodness-of-fit with degenerate flat-line detection
-            ss_res = np.sum((y - y_pred) ** 2)
-            ss_tot = np.sum((y - np.mean(y)) ** 2)
+            v_means = np.array(v_means, dtype=np.float64)
+            v_sems = np.array(v_sems, dtype=np.float64)
 
+            # 1. Dynamic Boundary Pruning
+            i_start, i_stop = self._prune_linear_window(r_sorted, v_means)
+
+            r_pruned = r_sorted[i_start:i_stop]
+            v_pruned = v_means[i_start:i_stop]
+            sem_pruned = v_sems[i_start:i_stop]
+
+            # 2. Weighted Least Squares (WLS) on pruned region: x = 1/r
+            x_wls = 1.0 / r_pruned
+            y_wls = v_pruned
+            w_wls = 1.0 / np.maximum(sem_pruned ** 2, 1e-10)
+
+            # WLS fit: y = k * x + c
+            w_sum = np.sum(w_wls)
+            x_bar = np.sum(w_wls * x_wls) / w_sum
+            y_bar = np.sum(w_wls * y_wls) / w_sum
+
+            s_xx = np.sum(w_wls * (x_wls - x_bar) ** 2)
+            s_xy = np.sum(w_wls * (x_wls - x_bar) * (y_wls - y_bar))
+
+            if s_xx > 1e-12:
+                slope = float(s_xy / s_xx)
+                intercept = float(y_bar - slope * x_bar)
+            else:
+                slope = 0.0
+                intercept = float(y_bar)
+
+            y_pred = slope * x_wls + intercept
+            ss_res = np.sum(w_wls * (y_wls - y_pred) ** 2)
+            ss_tot = np.sum(w_wls * (y_wls - y_bar) ** 2)
+
+            n_pts = len(r_pruned)
             if ss_tot < 1e-9 or slope <= 1e-4:
-                # Flat horizontal line or negative/zero slope (no physical 1/r decay)
                 r2 = 0.0
                 passed_gate = False
+                slope_err = float(0.05 * abs(slope))
             else:
                 r2 = float(1.0 - (ss_res / (ss_tot + 1e-12)))
                 passed_gate = bool(r2 >= self.r2_threshold and slope > 1e-4)
-
-            # Estimate standard error of slope delta_k
-            if n > 2:
-                s_err = np.sqrt(ss_res / (n - 2))
-                s_xx = np.sum((x - np.mean(x)) ** 2)
-                slope_err = float(s_err / np.sqrt(s_xx + 1e-12))
-            else:
-                slope_err = float(0.05 * abs(slope))
-
-            passed_gate = bool(r2 >= self.r2_threshold and slope > 0)
+                # Standard error of weighted slope
+                s_sq = ss_res / max(n_pts - 2, 1)
+                slope_err = float(np.sqrt(s_sq / max(s_xx, 1e-12)))
 
             self._fit_results[f] = {
                 "k": float(slope),
@@ -982,11 +1069,24 @@ class AcousticCalibrationProtocol:
                 "c_room": float(intercept),
                 "r_squared": float(r2),
                 "passed_gate": passed_gate,
-                "n_points": n,
-                "r_min_m": float(np.min(r_vals)),
-                "r_max_m": float(np.max(r_vals)),
-                "v_min_v": float(np.min(v_vals)),
-                "v_max_v": float(np.max(v_vals))
+                "n_pruned_points": n_pts,
+                "n_total_points": len(r_sorted),
+                "pruned_indices": (int(i_start), int(i_stop)),
+                "r_valid_min_m": float(np.min(r_pruned)),
+                "r_valid_max_m": float(np.max(r_pruned)),
+                "v_sat_v": float(np.max(v_pruned)),
+                "v_min_v": float(np.min(v_pruned)),
+                "raw_stations": [
+                    {
+                        "r_m": float(r_sorted[idx]),
+                        "mean_v": float(v_means[idx]),
+                        "std_v": float(v_stds[idx]),
+                        "sem_v": float(v_sems[idx]),
+                        "n_samples": int(sample_counts[idx]),
+                        "is_pruned_in": bool(i_start <= idx < i_stop)
+                    }
+                    for idx in range(len(r_sorted))
+                ]
             }
 
         return self._fit_results
@@ -994,16 +1094,10 @@ class AcousticCalibrationProtocol:
     def export_profile(
         self,
         name: str = "Calibrated_Room_Profile",
-        description: str = "Acoustic calibration profile fitted via 1/r regression",
+        description: str = "WLS calibrated profile with dynamic boundary pruning",
         only_passed: bool = True
     ) -> AcousticProfile:
-        """
-        Constructs and returns an AcousticProfile from the regression results.
-        :param name: Profile name.
-        :param description: Calibration metadata description.
-        :param only_passed: If True, only includes frequency points meeting R^2 >= threshold.
-        :return: Ready-to-use AcousticProfile instance.
-        """
+        """Constructs an AcousticProfile with certified operating bounds and system metadata."""
         if not self._fit_results:
             self.fit()
 
@@ -1011,6 +1105,7 @@ class AcousticCalibrationProtocol:
         k_vals = []
         r2_vals = []
         k_errs = []
+        bounds_dict = {}
 
         sorted_freqs = sorted(self._fit_results.keys())
         for f in sorted_freqs:
@@ -1021,11 +1116,17 @@ class AcousticCalibrationProtocol:
             k_vals.append(res["k"])
             r2_vals.append(res["r_squared"])
             k_errs.append(res["delta_k"])
+            bounds_dict[str(f)] = {
+                "r_min_m": res["r_valid_min_m"],
+                "r_max_m": res["r_valid_max_m"],
+                "v_sat_v": res["v_sat_v"],
+                "v_min_v": res["v_min_v"],
+                "c_room_v": res["c_room"]
+            }
 
         if len(freqs) == 0:
             raise ValueError(
-                f"No calibration points passed the R^2 >= {self.r2_threshold} quality gate. "
-                f"Check measurement linearity or lower r2_threshold."
+                f"No calibration points passed the R^2 >= {self.r2_threshold} quality gate."
             )
 
         return AcousticProfile(
@@ -1033,6 +1134,8 @@ class AcousticCalibrationProtocol:
             k_values=k_vals,
             r_squared=r2_vals,
             k_uncertainty=k_errs,
+            operational_bounds=bounds_dict,
+            system_metadata=self.system_metadata,
             name=name,
             description=description
         )
@@ -1041,9 +1144,9 @@ class AcousticCalibrationProtocol:
         self,
         filepath: Union[str, Path],
         name: str = "Calibrated_Room_Profile",
-        description: str = "Acoustic calibration profile fitted via 1/r regression"
+        description: str = "WLS calibrated profile with dynamic boundary pruning"
     ) -> Path:
-        """Fits, exports, and saves calibration profile to a portable JSON file."""
+        """Fits, exports, and saves calibration profile with metadata and bounds to JSON."""
         profile = self.export_profile(name=name, description=description)
         out_path = Path(filepath).resolve()
         profile.to_json(out_path)
@@ -1051,5 +1154,5 @@ class AcousticCalibrationProtocol:
 
     def clear(self):
         """Clears all raw measurements and fit results."""
-        self._raw_measurements.clear()
+        self._measurements.clear()
         self._fit_results.clear()
