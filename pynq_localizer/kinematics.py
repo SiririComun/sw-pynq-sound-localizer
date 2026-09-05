@@ -952,23 +952,24 @@ class AcousticCalibrationProtocol:
         v_means: np.ndarray
     ) -> Tuple[int, int]:
         """
-        Dynamic Boundary Pruning: Identifies the central valid 1/r linear sub-window [i_start, i_stop].
-        Excludes near-field saturation/clipping at small r and far-field room reflection floors at large r.
+        Dynamic Boundary Pruning: Identifies the optimal 1/r linear sub-window [i_start, i_stop]
+        by jointly maximizing R^2 and adherence to the theoretical power-law slope d(ln V)/d(ln r) = -1.0.
         """
         m = len(r_sorted)
         if m <= 4:
-            return 0, m  # Not enough points to prune, keep all
+            return 0, m
 
-        # Evaluate candidate contiguous sub-windows of length >= 4
+        min_window_len = max(4, int(np.ceil(m * 0.35)))
         best_start, best_stop = 0, m
-        best_r2 = -1.0
-        min_window_len = max(4, int(np.ceil(m * 0.5)))
+        best_score = -1.0
 
-        for start in range(m - min_window_len + 1):
-            for stop in range(start + min_window_len, m + 1):
+        for win_len in range(m, min_window_len - 1, -1):
+            for start in range(m - win_len + 1):
+                stop = start + win_len
                 r_sub = r_sorted[start:stop]
                 v_sub = v_means[start:stop]
 
+                # 1. 1/r Linear Fit
                 x_sub = 1.0 / r_sub
                 y_sub = v_sub
 
@@ -978,12 +979,39 @@ class AcousticCalibrationProtocol:
                 ss_tot = np.sum((y_sub - np.mean(y_sub)) ** 2)
 
                 if ss_tot > 1e-9 and slope > 1e-4:
-                    r2 = 1.0 - (ss_res / (ss_tot + 1e-12))
-                    # Favor larger windows with high R^2
-                    score = r2 * (len(r_sub) / m)
-                    if score > best_r2:
-                        best_r2 = score
-                        best_start, best_stop = start, stop
+                    r2 = float(1.0 - (ss_res / (ss_tot + 1e-12)))
+                    
+                    # 2. Log-Log Power Law Slope: d(ln V) / d(ln r) ~ -1.0
+                    log_r = np.log(r_sub)
+                    log_v = np.log(np.maximum(v_sub, 1e-6))
+                    log_slope, _ = np.polyfit(log_r, log_v, 1)
+
+                    penalty = abs(log_slope - (-1.0))
+                    if penalty < 0.35 and r2 >= self.r2_threshold:
+                        # Composite score favors high R^2, physical 1/r slope, and coverage
+                        score = r2 * (1.0 - penalty) * (len(r_sub) ** 0.3)
+                        if score > best_score:
+                            best_score = score
+                            best_start, best_stop = start, stop
+
+        # Fallback if no window passed both gates: maximize R^2
+        if best_score < 0:
+            best_r2 = -1.0
+            for start in range(m - min_window_len + 1):
+                for stop in range(start + min_window_len, m + 1):
+                    r_sub = r_sorted[start:stop]
+                    v_sub = v_means[start:stop]
+                    x_sub = 1.0 / r_sub
+                    y_sub = v_sub
+                    slope, intercept = np.polyfit(x_sub, y_sub, 1)
+                    y_pred = slope * x_sub + intercept
+                    ss_res = np.sum((y_sub - y_pred) ** 2)
+                    ss_tot = np.sum((y_sub - np.mean(y_sub)) ** 2)
+                    if ss_tot > 1e-9 and slope > 1e-4:
+                        r2 = float(1.0 - (ss_res / (ss_tot + 1e-12)))
+                        if r2 > best_r2:
+                            best_r2 = r2
+                            best_start, best_stop = start, stop
 
         return best_start, best_stop
 
