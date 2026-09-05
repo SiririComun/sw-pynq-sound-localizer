@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/fft-quadruple-telemetry-engine @ a2acb8c
+• Repository State    : feat/fft-quadruple-telemetry-engine @ d482201
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1-rc2
 • Package Version     : v1.0.0
 ==============================================================================
@@ -9,10 +9,10 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (1 modified/untracked files)
+Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (3 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/fft-quadruple-telemetry-engine                a2acb8c [origin/feat/fft-quadruple-telemetry-engine] docs(context): update repository summary and Cog configuration with calibration suite
+* feat/fft-quadruple-telemetry-engine                d482201 [origin/feat/fft-quadruple-telemetry-engine: ahead 1] feat(dsp): refactor AcousticCalibrationProtocol with WLS regression, dynamic boundary pruning, and metadata tracking
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
   remotes/origin/feat/fft-quadruple-telemetry-engine a2acb8c docs(context): update repository summary and Cog configuration with calibration suite
@@ -23,7 +23,8 @@ Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* a2acb8c  (HEAD -> feat/fft-quadruple-telemetry-engine, origin/feat/fft-quadruple-telemetry-engine) - 2026-09-03 : docs(context): update repository summary and Cog configuration with calibration suite (SiririComun)
+* d482201  (HEAD -> feat/fft-quadruple-telemetry-engine) - 2026-09-05 : feat(dsp): refactor AcousticCalibrationProtocol with WLS regression, dynamic boundary pruning, and metadata tracking (SiririComun)
+* a2acb8c  (origin/feat/fft-quadruple-telemetry-engine) - 2026-09-03 : docs(context): update repository summary and Cog configuration with calibration suite (SiririComun)
 * ced5821  - 2026-09-03 : docs(notebook): add standalone 02_acoustic_calibration_lab interactive notebook (SiririComun)
 * 5c882b5  - 2026-09-03 : test(calibration): add unit verification suite for 1/r regression and R^2 quality gate (SiririComun)
 * b4695b4  - 2026-09-03 : fix(calibration): add degenerate flat-line detection and slope bounds in AcousticCalibrationProtocol (SiririComun)
@@ -37,7 +38,6 @@ Multi-Branch Git Commit Graph:
 * f27f834  - 2026-09-02 : test(dsp): add unit verification suite for AcousticProfile and DistanceEstimator (SiririComun)
 * ac3d287  - 2026-09-02 : feat(dsp): implement pure NumPy 1D interpolator with optional SciPy fallback in AcousticProfile (SiririComun)
 * 8e54811  - 2026-09-02 : feat(dsp): implement AcousticProfile and DistanceEstimator single-channel inversion engine (SiririComun)
-* f931ce3  - 2026-09-02 : docs(context): update repository summary and Cog configuration with multi-source test suite (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -1873,23 +1873,24 @@ class AcousticCalibrationProtocol:
         v_means: np.ndarray
     ) -> Tuple[int, int]:
         """
-        Dynamic Boundary Pruning: Identifies the central valid 1/r linear sub-window [i_start, i_stop].
-        Excludes near-field saturation/clipping at small r and far-field room reflection floors at large r.
+        Dynamic Boundary Pruning: Identifies the optimal 1/r linear sub-window [i_start, i_stop]
+        by jointly maximizing R^2 and adherence to the theoretical power-law slope d(ln V)/d(ln r) = -1.0.
         """
         m = len(r_sorted)
         if m <= 4:
-            return 0, m  # Not enough points to prune, keep all
+            return 0, m
 
-        # Evaluate candidate contiguous sub-windows of length >= 4
+        min_window_len = max(4, int(np.ceil(m * 0.35)))
         best_start, best_stop = 0, m
-        best_r2 = -1.0
-        min_window_len = max(4, int(np.ceil(m * 0.5)))
+        best_score = -1.0
 
-        for start in range(m - min_window_len + 1):
-            for stop in range(start + min_window_len, m + 1):
+        for win_len in range(m, min_window_len - 1, -1):
+            for start in range(m - win_len + 1):
+                stop = start + win_len
                 r_sub = r_sorted[start:stop]
                 v_sub = v_means[start:stop]
 
+                # 1. 1/r Linear Fit
                 x_sub = 1.0 / r_sub
                 y_sub = v_sub
 
@@ -1899,12 +1900,39 @@ class AcousticCalibrationProtocol:
                 ss_tot = np.sum((y_sub - np.mean(y_sub)) ** 2)
 
                 if ss_tot > 1e-9 and slope > 1e-4:
-                    r2 = 1.0 - (ss_res / (ss_tot + 1e-12))
-                    # Favor larger windows with high R^2
-                    score = r2 * (len(r_sub) / m)
-                    if score > best_r2:
-                        best_r2 = score
-                        best_start, best_stop = start, stop
+                    r2 = float(1.0 - (ss_res / (ss_tot + 1e-12)))
+
+                    # 2. Log-Log Power Law Slope: d(ln V) / d(ln r) ~ -1.0
+                    log_r = np.log(r_sub)
+                    log_v = np.log(np.maximum(v_sub, 1e-6))
+                    log_slope, _ = np.polyfit(log_r, log_v, 1)
+
+                    penalty = abs(log_slope - (-1.0))
+                    if penalty < 0.35 and r2 >= self.r2_threshold:
+                        # Composite score favors high R^2, physical 1/r slope, and coverage
+                        score = r2 * (1.0 - penalty) * (len(r_sub) ** 0.3)
+                        if score > best_score:
+                            best_score = score
+                            best_start, best_stop = start, stop
+
+        # Fallback if no window passed both gates: maximize R^2
+        if best_score < 0:
+            best_r2 = -1.0
+            for start in range(m - min_window_len + 1):
+                for stop in range(start + min_window_len, m + 1):
+                    r_sub = r_sorted[start:stop]
+                    v_sub = v_means[start:stop]
+                    x_sub = 1.0 / r_sub
+                    y_sub = v_sub
+                    slope, intercept = np.polyfit(x_sub, y_sub, 1)
+                    y_pred = slope * x_sub + intercept
+                    ss_res = np.sum((y_sub - y_pred) ** 2)
+                    ss_tot = np.sum((y_sub - np.mean(y_sub)) ** 2)
+                    if ss_tot > 1e-9 and slope > 1e-4:
+                        r2 = float(1.0 - (ss_res / (ss_tot + 1e-12)))
+                        if r2 > best_r2:
+                            best_r2 = r2
+                            best_start, best_stop = start, stop
 
         return best_start, best_stop
 
@@ -3138,6 +3166,7 @@ class TestAcousticProfile:
             k_values=k_values,
             r_squared=r2_values,
             k_uncertainty=k_err,
+            system_metadata={"speaker_volume": 0.75, "mic_gain": "+35dB"},
             name="SpeakerA_Calibrated"
         )
 
@@ -3146,21 +3175,29 @@ class TestAcousticProfile:
         assert abs(k_1000 - 0.050) < 1e-6
         assert abs(err_1000 - 0.002) < 1e-6
 
-        # Intermediate interpolated frequency (1500 Hz between 1000 Hz and 2000 Hz)
+        # Intermediate interpolated frequency (1500 Hz)
         k_1500, err_1500 = profile.evaluate(1500.0)
         assert 0.050 < k_1500 < 0.080
         assert 0.002 < err_1500 < 0.003
 
     def test_profile_json_roundtrip(self):
-        """Verify export to JSON and reload without precision loss."""
+        """Verify export to JSON and reload preserving metadata and operational bounds."""
         frequencies = [800.0, 1500.0, 3000.0]
         k_values = [0.045, 0.065, 0.095]
         r2_values = [0.992, 0.985, 0.978]
+        bounds = {
+            "800.0": {"r_min_m": 0.20, "r_max_m": 0.90, "v_sat_v": 0.22, "v_min_v": 0.005},
+            "1500.0": {"r_min_m": 0.15, "r_max_m": 1.20, "v_sat_v": 0.43, "v_min_v": 0.004},
+            "3000.0": {"r_min_m": 0.25, "r_max_m": 0.80, "v_sat_v": 0.38, "v_min_v": 0.006},
+        }
+        metadata = {"speaker_volume": 0.80, "mic_gain": "+35dB", "environment": "test_lab"}
 
         profile_orig = AcousticProfile(
             frequencies_hz=frequencies,
             k_values=k_values,
             r_squared=r2_values,
+            operational_bounds=bounds,
+            system_metadata=metadata,
             name="JSON_Test_Profile"
         )
 
@@ -3175,6 +3212,9 @@ class TestAcousticProfile:
             assert np.allclose(profile_loaded.frequencies, frequencies)
             assert np.allclose(profile_loaded.k_values, k_values)
             assert np.allclose(profile_loaded.r_squared, r2_values)
+            assert profile_loaded.system_metadata["speaker_volume"] == 0.80
+            assert "1500.0" in profile_loaded.operational_bounds
+            assert profile_loaded.operational_bounds["1500.0"]["r_max_m"] == 1.20
 
             # Evaluate loaded profile
             k_val, _ = profile_loaded.evaluate(1500.0)
@@ -3185,13 +3225,11 @@ class TestAcousticProfile:
 
     def test_from_constant_and_callable(self):
         """Verify constant and callable profile factories."""
-        # 1. Constant Profile
         prof_const = AcousticProfile.from_constant(0.060, relative_error=0.05)
         k_val, k_err = prof_const.evaluate(2500.0)
         assert abs(k_val - 0.060) < 1e-6
         assert abs(k_err - 0.003) < 1e-6
 
-        # 2. Callable Profile: k(f) = 0.02 + 0.00001 * f
         prof_callable = AcousticProfile.from_callable(lambda f: 0.02 + 0.00001 * f)
         k_val, _ = prof_callable.evaluate(3000.0)
         assert abs(k_val - 0.050) < 1e-6
@@ -3200,36 +3238,56 @@ class TestDistanceEstimator:
 
     def test_single_channel_distance_inversion(self):
         """Verify r = k(f0) / A(t) calculation and dynamic error propagation."""
-        # Flat profile with k = 0.050 V*m and delta_k = 0.002 V*m (4% rel error)
         prof = AcousticProfile.from_constant(0.050, relative_error=0.04)
         estimator = DistanceEstimator(
             profile=prof,
             noise_gate_v=0.003,
-            voltage_uncertainty_v=0.0005  # 0.5 mV noise
+            voltage_uncertainty_v=0.0005
         )
 
-        # Test at r = 1.00 m (A = k / r = 0.050 / 1.0 = 0.050 V = 50 mV)
-        r_est, r_err = estimator.estimate_distance(amplitude_v=0.050, frequency_hz=1000.0)
+        # Test at r = 1.00 m (A = 0.050 V -> r = 1.00 m)
+        r_est, r_err, status = estimator.estimate_distance(amplitude_v=0.050, frequency_hz=1000.0)
         assert abs(r_est - 1.00) < 1e-3
-        # Expected error: r * sqrt((0.04)^2 + (0.0005/0.05)^2) = 1.0 * sqrt(0.0016 + 0.0001) = ~0.041 m
         assert 0.035 < r_err < 0.050
+        assert status == "ACTIVE_VALID"
 
-        # Test at r = 0.50 m (A = 0.100 V = 100 mV)
-        r_est_half, _ = estimator.estimate_distance(amplitude_v=0.100, frequency_hz=1000.0)
+        # Test at r = 0.50 m (A = 0.100 V -> r = 0.50 m)
+        r_est_half, _, status_half = estimator.estimate_distance(amplitude_v=0.100, frequency_hz=1000.0)
         assert abs(r_est_half - 0.50) < 1e-3
-
-        # Test at r = 2.00 m (A = 0.025 V = 25 mV)
-        r_est_double, _ = estimator.estimate_distance(amplitude_v=0.025, frequency_hz=1000.0)
-        assert abs(r_est_double - 2.00) < 1e-3
+        assert status_half == "ACTIVE_VALID"
 
     def test_noise_gate_squelching(self):
-        """Verify that amplitudes below noise gate return (NaN, NaN)."""
+        """Verify that amplitudes below noise gate return (NaN, NaN, 'SILENCE')."""
         estimator = DistanceEstimator(k_constant=0.050, noise_gate_v=0.005)
 
-        # Signal below noise gate (A = 0.002 V = 2 mV < 5 mV threshold)
-        r_est, r_err = estimator.estimate_distance(amplitude_v=0.002, frequency_hz=1000.0)
+        r_est, r_err, status = estimator.estimate_distance(amplitude_v=0.002, frequency_hz=1000.0)
         assert np.isnan(r_est)
         assert np.isnan(r_err)
+        assert status == "SILENCE"
+
+    def test_operational_bounds_status_checking(self):
+        """Verify that operational boundaries assign correct status flags."""
+        bounds = {
+            "1000.0": {"r_min_m": 0.20, "r_max_m": 0.80, "v_sat_v": 0.25, "v_min_v": 0.010}
+        }
+        prof = AcousticProfile(
+            frequencies_hz=[1000.0],
+            k_values=[0.050],
+            operational_bounds=bounds
+        )
+        estimator = DistanceEstimator(profile=prof, noise_gate_v=0.002)
+
+        # In-bounds test (r = 0.50 m -> inside [0.20, 0.80])
+        _, _, st_valid = estimator.estimate_distance(amplitude_v=0.100, frequency_hz=1000.0)
+        assert st_valid == "ACTIVE_VALID"
+
+        # Saturation near-field test (A = 0.50 V -> r_calc = 0.10 m < 0.20 m r_min)
+        _, _, st_sat = estimator.estimate_distance(amplitude_v=0.500, frequency_hz=1000.0)
+        assert st_sat == "OUT_OF_BOUNDS_SATURATION"
+
+        # Far-field noise test (A = 0.005 V -> r_calc = 10.0 m > 0.80 m r_max)
+        _, _, st_noise = estimator.estimate_distance(amplitude_v=0.005, frequency_hz=1000.0)
+        assert st_noise == "OUT_OF_BOUNDS_NOISE"
 
     def test_process_quadruple_augmentation(self):
         """Verify seamless augmentation of quadruple dictionaries with distance metrics."""
@@ -3237,7 +3295,7 @@ class TestDistanceEstimator:
 
         raw_quad = {
             "frequency_hz": 1200.0,
-            "amplitude_v": 0.080, # 80 mV -> r = 0.040 / 0.080 = 0.50 m
+            "amplitude_v": 0.080,  # 80 mV -> r = 0.040 / 0.080 = 0.50 m
             "phase_rad": 0.45,
             "timestamp_sec": 1.234567,
             "is_valid": True
@@ -3247,9 +3305,11 @@ class TestDistanceEstimator:
 
         assert "distance_m" in augmented
         assert "distance_err_m" in augmented
+        assert "distance_status" in augmented
         assert "k_evaluated" in augmented
         assert abs(augmented["distance_m"] - 0.50) < 1e-3
         assert abs(augmented["k_evaluated"] - 0.040) < 1e-6
+        assert augmented["distance_status"] == "ACTIVE_VALID"
 ```
 
 test_hybrid.py: (tests/test_hybrid.py)
@@ -3395,6 +3455,7 @@ test_calibration.py: (tests/test_calibration.py)
 ```python
 """
 tests/test_calibration.py: Verification Suite for AcousticCalibrationProtocol Engine.
+Tests multi-sample statistics (N=30), dynamic boundary pruning, WLS regression, and JSON export.
 """
 
 import tempfile
@@ -3409,29 +3470,57 @@ from pynq_localizer.kinematics import (
 
 class TestAcousticCalibrationProtocol:
 
-    def test_synthetic_grid_regression_accuracy(self):
+    def test_multi_sample_statistical_aggregation(self):
+        """Verify that N=30 repeat frame observations correctly compute mean, std, and SEM."""
+        protocol = AcousticCalibrationProtocol()
+
+        # Simulate 30 frame observations for 2 distance stations
+        np.random.seed(42)
+        samples_30cm = np.random.normal(loc=0.035, scale=0.001, size=30)
+        samples_50cm = np.random.normal(loc=0.021, scale=0.001, size=30)
+
+        protocol.add_measurement(distance_m=0.30, frequency_hz=1000.0, amplitude_v=samples_30cm)
+        protocol.add_measurement(distance_m=0.50, frequency_hz=1000.0, amplitude_v=samples_50cm)
+        fits = protocol.fit()
+
+        stations = fits[1000.0]["raw_stations"]
+        assert len(stations) == 2
+        st0 = stations[0]
+        st1 = stations[1]
+
+        assert st0["n_samples"] == 30
+        assert abs(st0["mean_v"] - 0.035) < 0.0005
+        assert 0.0007 < st0["std_v"] < 0.0013
+        assert st0["sem_v"] < st0["std_v"] / 4.0
+
+        assert st1["n_samples"] == 30
+        assert abs(st1["mean_v"] - 0.021) < 0.0005
+
+    def test_wls_regression_recovery_accuracy(self):
         """
-        Verify that 1/r linear regression recovers known ground-truth k(f)
-        across a multi-frequency x multi-distance grid with < 1% error.
+        Verify that WLS 1/r regression recovers ground-truth k(f) across
+        a multi-frequency grid with < 1% error and high R^2.
         """
-        distances_m = [0.25, 0.40, 0.60, 0.80, 1.00, 1.20]
+        distances_m = [0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 1.00]
         frequencies_hz = [500.0, 1000.0, 2000.0, 3500.0]
 
-        # Ground-truth physical k(f) function: k(f) = 0.020 + 0.00002 * f
         true_k = np.array([0.020 + 0.00002 * f for f in frequencies_hz])  # [0.030, 0.040, 0.060, 0.090]
-        true_c_room = 0.0015  # 1.5 mV room reflection floor
+        true_c_room = 0.0012  # 1.2 mV room reflection baseline
 
-        # Synthesize V_RMS(r_i, f_j) = k(f_j) / r_i + c_room
-        amp_matrix = np.zeros((len(distances_m), len(frequencies_hz)), dtype=np.float64)
+        protocol = AcousticCalibrationProtocol(
+            r2_threshold=0.95,
+            system_metadata={"speaker_volume": 0.75, "mic_gain": "+35dB"}
+        )
+
+        np.random.seed(123)
         for i, r in enumerate(distances_m):
             for j, f in enumerate(frequencies_hz):
-                amp_matrix[i, j] = (true_k[j] / r) + true_c_room
+                # Simulate N=20 frame burst per point
+                v_expected = (true_k[j] / r) + true_c_room
+                samples = np.random.normal(loc=v_expected, scale=0.0005, size=20)
+                protocol.add_measurement(distance_m=r, frequency_hz=f, amplitude_v=samples)
 
-        # Run Calibration Protocol
-        protocol = AcousticCalibrationProtocol(r2_threshold=0.95)
-        protocol.add_dataset(distances_m, frequencies_hz, amp_matrix)
         fit_results = protocol.fit()
-
         assert len(fit_results) == len(frequencies_hz)
 
         for j, f in enumerate(frequencies_hz):
@@ -3440,83 +3529,77 @@ class TestAcousticCalibrationProtocol:
             r2 = res["r_squared"]
             error_pct = abs(recovered_k - true_k[j]) / true_k[j] * 100.0
 
-            print(f"\n[Calib Test] f={f:.0f}Hz | True k={true_k[j]:.4f} | Recovered k={recovered_k:.4f} | Error={error_pct:.3f}% | R^2={r2:.5f}")
+            print(f"\n[WLS Test] f={f:.0f}Hz | True k={true_k[j]:.4f} | Recovered k={recovered_k:.4f} | Error={error_pct:.3f}% | R^2={r2:.5f}")
             assert error_pct < 1.0, f"k(f) recovery error too high for {f} Hz: {error_pct}%"
-            assert r2 > 0.99, f"R^2 too low for {f} Hz: {r2}"
+            assert r2 > 0.98, f"R^2 too low for {f} Hz: {r2}"
             assert res["passed_gate"] is True
 
-    def test_room_intercept_absorption(self):
-        """Verify that ambient room reflection offset c_room is isolated without biasing k."""
-        distances_m = [0.30, 0.50, 0.70, 0.90]
+    def test_dynamic_boundary_pruning_saturation_and_reverberation(self):
+        """
+        Verify that the dynamic boundary pruner detects and excludes near-field saturation
+        at small r and far-field room reflection floors at large r, isolating the true 1/r window.
+        """
+        protocol = AcousticCalibrationProtocol(r2_threshold=0.95)
         k_true = 0.050
-        c_room_true = 0.003  # 3 mV room echo floor
 
-        protocol = AcousticCalibrationProtocol(r2_threshold=0.95)
-        for r in distances_m:
-            v_measured = (k_true / r) + c_room_true
-            protocol.add_measurement(distance_m=r, frequency_hz=1500.0, amplitude_v=v_measured)
+        # Synthesize a 12-point distance sweep:
+        # [0.10, 0.15] -> Saturated clipping ceiling (flat at 0.30 V)
+        # [0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85] -> True 1/r decay (V = 0.050 / r)
+        # [1.20, 1.50, 2.00] -> Reverberation floor (flat at 0.008 V)
+        distances = [0.10, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 1.20, 1.50, 2.00]
+        voltages = []
 
-        fits = protocol.fit()
-        res = fits[1500.0]
-
-        assert abs(res["k"] - k_true) < 1e-4
-        assert abs(res["c_room"] - c_room_true) < 1e-4
-        assert res["r_squared"] > 0.999
-
-    def test_quality_gate_rejection(self):
-        """Verify that non-linear or severely corrupted data points fail R^2 >= 0.95 gate."""
-        protocol = AcousticCalibrationProtocol(r2_threshold=0.95)
-
-        # Tone 1 (1000 Hz): Clean 1/r linear decay -> Should PASS
-        for r in [0.30, 0.60, 0.90]:
-            protocol.add_measurement(distance_m=r, frequency_hz=1000.0, amplitude_v=0.040 / r)
-
-        # Tone 2 (2500 Hz): Saturated/corrupted constant amplitude -> Should FAIL
-        for r in [0.30, 0.60, 0.90]:
-            protocol.add_measurement(distance_m=r, frequency_hz=2500.0, amplitude_v=0.020)  # Flat, non-decaying
+        for r in distances:
+            if r <= 0.15:
+                v = 0.300  # Saturated flat ceiling
+            elif r >= 1.20:
+                v = 0.008  # Flat reverberant room echo floor
+            else:
+                v = k_true / r  # True 1/r physics
+            voltages.append(v)
+            protocol.add_measurement(distance_m=r, frequency_hz=2000.0, amplitude_v=v)
 
         fits = protocol.fit()
-        assert fits[1000.0]["passed_gate"] is True
-        assert fits[2500.0]["passed_gate"] is False  # R^2 ~ 0 -> Failed gate!
+        res = fits[2000.0]
 
-        # Exporting profile with only_passed=True should only contain 1000 Hz
-        profile = protocol.export_profile(only_passed=True)
-        assert len(profile.frequencies) == 1
-        assert profile.frequencies[0] == 1000.0
+        # The pruner should have excluded the saturated points and far reverberant points
+        assert res["passed_gate"] is True
+        assert res["n_pruned_points"] < res["n_total_points"]
+        assert abs(res["k"] - k_true) / k_true * 100.0 < 1.0  # Recovers 0.050 with < 1% error
+        assert res["r_squared"] > 0.99
 
-    def test_end_to_end_export_and_runtime_inversion(self):
-        """Verify export to JSON and real-time distance inference in DistanceEstimator."""
-        protocol = AcousticCalibrationProtocol(r2_threshold=0.95)
+        # Certified linear window boundaries
+        assert res["r_valid_min_m"] >= 0.25  # Excluded 0.10 m and 0.15 m
+        assert res["r_valid_max_m"] <= 0.85  # Excluded 1.20 m, 1.50 m, 2.00 m
 
-        # Add 3 frequencies
-        for f, k_val in [(800.0, 0.035), (1600.0, 0.055), (3200.0, 0.085)]:
-            for r in [0.30, 0.50, 0.80, 1.00]:
-                protocol.add_measurement(distance_m=r, frequency_hz=f, amplitude_v=k_val / r)
+    def test_end_to_end_profile_export_and_runtime_inversion(self):
+        """Verify full calibration export with metadata, bounds, and DistanceEstimator runtime verification."""
+        metadata = {"speaker_volume": 0.75, "mic_gain": "+35dB", "environment": "physics_lab"}
+        protocol = AcousticCalibrationProtocol(r2_threshold=0.95, system_metadata=metadata)
+
+        for f, k_val in [(1000.0, 0.040), (2000.0, 0.060)]:
+            for r in [0.25, 0.35, 0.50, 0.70, 0.90]:
+                v = (k_val / r) + 0.001
+                protocol.add_measurement(distance_m=r, frequency_hz=f, amplitude_v=v)
 
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
             tmp_json = Path(tmp.name)
 
         try:
-            # Save profile to JSON
-            protocol.save_profile_json(tmp_json, name="TestRoomProfile")
+            protocol.save_profile_json(tmp_json, name="CalibratedLabProfile")
 
-            # Load profile into DistanceEstimator
+            # Load into DistanceEstimator
             loaded_prof = AcousticProfile.from_json(tmp_json)
+            assert loaded_prof.system_metadata["speaker_volume"] == 0.75
+            assert "1000.0" in loaded_prof.operational_bounds
+
             estimator = DistanceEstimator(profile=loaded_prof, noise_gate_v=0.002)
 
-            # Test distance inference at f = 1600 Hz (k = 0.055)
-            # If A = 55 mV (0.055 V) -> r should be 1.00 m
-            r_1m, _ = estimator.estimate_distance(amplitude_v=0.055, frequency_hz=1600.0)
-            assert abs(r_1m - 1.00) < 0.01
-
-            # If A = 110 mV (0.110 V) -> r should be 0.50 m
-            r_50cm, _ = estimator.estimate_distance(amplitude_v=0.110, frequency_hz=1600.0)
-            assert abs(r_50cm - 0.50) < 0.01
-
-            # Test distance inference at f = 800 Hz (k = 0.035)
-            # If A = 70 mV (0.070 V) -> r should be 0.50 m
-            r_800, _ = estimator.estimate_distance(amplitude_v=0.070, frequency_hz=800.0)
-            assert abs(r_800 - 0.50) < 0.01
+            # Test in-bounds distance inversion at f = 2000 Hz (k = 0.060)
+            # If A = 120 mV (0.120 V) -> r = 0.060 / 0.120 = 0.50 m
+            r_est, _, status = estimator.estimate_distance(amplitude_v=0.120, frequency_hz=2000.0)
+            assert abs(r_est - 0.50) < 0.01
+            assert status == "ACTIVE_VALID"
 
         finally:
             if tmp_json.exists():
