@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/fft-quadruple-telemetry-engine @ d482201
+• Repository State    : feat/fft-quadruple-telemetry-engine @ 0c5c057
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1-rc2
 • Package Version     : v1.0.0
 ==============================================================================
@@ -9,13 +9,13 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (3 modified/untracked files)
+Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/fft-quadruple-telemetry-engine                d482201 [origin/feat/fft-quadruple-telemetry-engine: ahead 1] feat(dsp): refactor AcousticCalibrationProtocol with WLS regression, dynamic boundary pruning, and metadata tracking
+* feat/fft-quadruple-telemetry-engine                0c5c057 [origin/feat/fft-quadruple-telemetry-engine] docs(context): update repository summary with calibrated WLS and power-law pruner
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/fft-quadruple-telemetry-engine a2acb8c docs(context): update repository summary and Cog configuration with calibration suite
+  remotes/origin/feat/fft-quadruple-telemetry-engine 0c5c057 docs(context): update repository summary with calibrated WLS and power-law pruner
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
@@ -23,8 +23,11 @@ Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* d482201  (HEAD -> feat/fft-quadruple-telemetry-engine) - 2026-09-05 : feat(dsp): refactor AcousticCalibrationProtocol with WLS regression, dynamic boundary pruning, and metadata tracking (SiririComun)
-* a2acb8c  (origin/feat/fft-quadruple-telemetry-engine) - 2026-09-03 : docs(context): update repository summary and Cog configuration with calibration suite (SiririComun)
+* 0c5c057  (HEAD -> feat/fft-quadruple-telemetry-engine, origin/feat/fft-quadruple-telemetry-engine) - 2026-09-05 : docs(context): update repository summary with calibrated WLS and power-law pruner (SiririComun)
+* e3a4a26  - 2026-09-05 : test(calibration): update unit test suites for WLS regression, power-law pruning, and operational bounds (SiririComun)
+* 53b30e6  - 2026-09-05 : feat(dsp): implement power-law penalty scoring in dynamic boundary pruner for AcousticCalibrationProtocol (SiririComun)
+* d482201  - 2026-09-05 : feat(dsp): refactor AcousticCalibrationProtocol with WLS regression, dynamic boundary pruning, and metadata tracking (SiririComun)
+* a2acb8c  - 2026-09-03 : docs(context): update repository summary and Cog configuration with calibration suite (SiririComun)
 * ced5821  - 2026-09-03 : docs(notebook): add standalone 02_acoustic_calibration_lab interactive notebook (SiririComun)
 * 5c882b5  - 2026-09-03 : test(calibration): add unit verification suite for 1/r regression and R^2 quality gate (SiririComun)
 * b4695b4  - 2026-09-03 : fix(calibration): add degenerate flat-line detection and slope bounds in AcousticCalibrationProtocol (SiririComun)
@@ -35,9 +38,6 @@ Multi-Branch Git Commit Graph:
 * 8ab79b6  - 2026-09-03 : feat(driver): integrate capture_quadruple hybrid dual-DMA API and DistanceEstimator.process_frame (SiririComun)
 * b7fcdff  - 2026-09-03 : feat(dsp): implement compute_coherent_inband_amplitude and extract_hybrid_quadruple in KinematicAnalytics (SiririComun)
 * f1739a4  - 2026-09-02 : docs(context): update repository summary and Cog configuration with distance test suite (SiririComun)
-* f27f834  - 2026-09-02 : test(dsp): add unit verification suite for AcousticProfile and DistanceEstimator (SiririComun)
-* ac3d287  - 2026-09-02 : feat(dsp): implement pure NumPy 1D interpolator with optional SciPy fallback in AcousticProfile (SiririComun)
-* 8e54811  - 2026-09-02 : feat(dsp): implement AcousticProfile and DistanceEstimator single-channel inversion engine (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -3618,11 +3618,12 @@ class TestAcousticCalibrationProtocol:
 # $$V_{\text{RMS}}(r_i,\, f_j) = k(f_j) \cdot \left(\frac{1}{r_i}\right) + c_{\text{room}}(f_j)$$
 # * **Slope $k(f_j)$:** The true physical speaker-to-microphone acoustic constant in $\text{Volts}\cdot\text{meters}$.
 # * **Intercept $c_{\text{room}}(f_j)$:** Absorbs constant ambient room reverberation.
-# * **Linearity Gate $R^2(f) \ge 0.95$:** Validates that measurements were taken within the line-of-sight Direct Field Zone.
+# * **Dynamic Boundary Pruner:** Automatically excludes near-field saturation/clipping at small $r$ and far-field room echoes at large $r$, fitting $k(f)$ strictly on the true linear $1/r$ region.
+# * **Weighted Least Squares (WLS):** Uses statistical variance ($w_i = 1/\sigma_i^2$) across $N=30$ repeat frame observations per station.
 
 # %% [markdown] Cell 2
-## 1. Initialize Hardware Overlay & Calibration Protocol
-# Instantiate `MicrophoneArrayOverlay` and `AcousticCalibrationProtocol`.
+## 1. Initialize Hardware Overlay & System Metadata
+# Instantiate `MicrophoneArrayOverlay` and configure the fixed system metadata (`speaker_volume`, `mic_gain`, `temperature_c`).
 
 # %% [code] Cell 3
 import time
@@ -3640,60 +3641,100 @@ from pynq_localizer import (
     DistanceEstimator
 )
 
-# Initialize hardware
+# 1. Initialize hardware
 ol = MicrophoneArrayOverlay()
-protocol = AcousticCalibrationProtocol(r2_threshold=0.95)
+
+# 2. Fixed System Operating Parameters (Traceability Metadata)
+system_metadata = {
+    "speaker_device": "Smartphone",
+    "speaker_volume_setting": 0.75,          # Fixed at 75% volume slider
+    "mic_gain_setting": "+35dB / 12 o clock", # Fixed MAX4466 trimmer pot position
+    "environment_label": "Acoustic_Lab_Desk",
+    "temperature_c": 20.0
+}
+
+# 3. Initialize Calibration Protocol with R^2 >= 0.95 quality gate
+protocol = AcousticCalibrationProtocol(r2_threshold=0.95, system_metadata=system_metadata)
 
 print(f"✅ Hardware Overlay Active: {ol.current_profile} mode ({ol.fs_per_ch:.0f} SPS)")
+print(f"✅ System Metadata Locked: Volume={system_metadata['speaker_volume_setting']*100:.0f}%, Gain={system_metadata['mic_gain_setting']}")
 print(f"✅ Calibration Protocol Initialized (R² Quality Gate >= {protocol.r2_threshold})")
 
 # %% [markdown] Cell 4
-## 2. Define Calibration Grid (Distances & Frequencies)
-# Configure the physical measurement grid. Standard recommendations:
-# * **Distances:** 3 or 4 points within the direct-field linear zone (e.g. $0.30\,\text{m}, 0.50\,\text{m}, 0.80\,\text{m}$).
-# * **Frequencies:** Key acoustic carrier tones (e.g. $1000\,\text{Hz}, 1500\,\text{Hz}, 2000\,\text{Hz}, 2500\,\text{Hz}$).
+## 2. Define Master High-Density Calibration Grid
+# Defines the **14 distance stations** ($0.15\,\text{m} - 1.00\,\text{m}$) and **26 bin-aligned carrier frequencies** ($390.6\,\text{Hz} - 6005.8\,\text{Hz}$).
 
 # %% [code] Cell 5
-# Calibration Grid Configuration
-calib_distances_m = [0.30, 0.50, 0.80]             # Tape-measured distances in meters
-calib_frequencies_hz = [1000.0, 1500.0, 2000.0, 2500.0] # Carrier frequencies to calibrate in Hz
+# 14 Distance Stations in meters (Dense near-to-mid coverage)
+calib_distances_m = [
+    0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50,
+    0.55, 0.60, 0.70, 0.80, 0.90, 1.00
+]
 
-print("Calibration Grid Configured:")
-print(f"  • Distances   : {calib_distances_m} meters")
-print(f"  • Frequencies : {calib_frequencies_hz} Hz")
+# 26 Exact Bin-Aligned Carrier Frequencies (k_bin * 24.4140625 Hz)
+calib_frequencies_hz = [
+    # 1. Smooth Low Band (150-200 Hz steps)
+    390.6,   512.7,   683.6,   854.5,  1000.9,  1220.7,  1440.4,
+    # 2. Dense Resonance & Transition Zone (50-100 Hz steps)
+    1611.3,  1708.9,  1806.6,  1904.3,  2001.9,  2124.0,  2246.1,
+    2368.1,  2489.2,  2612.3,  2734.4,  2856.4,  3002.9,  3222.6,  3442.4,
+    # 3. High Band (300-500 Hz steps)
+    3808.6,  4296.9,  5004.9,  6005.8
+]
+
+print(f"Master Calibration Grid Configured:")
+print(f"  • Distance Stations   ({len(calib_distances_m)} stations)   : {calib_distances_m} meters")
+print(f"  • Frequency Carriers  ({len(calib_frequencies_hz)} tones)      : {calib_frequencies_hz[0]:.1f} Hz -> {calib_frequencies_hz[-1]:.1f} Hz")
+print(f"  • Total Calibration Observations  : {len(calib_distances_m) * len(calib_frequencies_hz)} grid cells (N=30 samples/cell)")
 
 # %% [markdown] Cell 6
-## 3. Guided Interactive Sweep Capture
-# Run this cell when you are ready with your phone tone generator. For each distance, place the phone at the tape-measured distance, play the requested frequency, and call `capture_calibration_point()`.
+## 3. Station-Based Burst Statistical Capture ($N=30$ frames per tone)
+# For each distance station, place the phone at the tape mark, play the stepped tones, and run `capture_station_sweep()`.
 
 # %% [code] Cell 7
-# Interactive Guided Calibration Capture Function
-def capture_calibration_point(distance_m, target_freq_hz, num_averages=15):
-    """Captures num_averages frames and computes the mean in-band RMS voltage."""
-    amps = []
-    for _ in range(num_averages):
-        frame = ol.capture_quadruple(source="A0", f_min=target_freq_hz-60.0, f_max=target_freq_hz+60.0, timeout=0.35)
-        q = frame["quadruple"]
-        if q["amplitude_v"] > 0.001:
-            amps.append(q["amplitude_v"])
-        time.sleep(0.01)
+# Statistical Batch Sweep Capture Function
+def capture_station_sweep(distance_m, target_frequencies=None, n_samples=30):
+    """
+    Captures N=30 burst frames across all frequencies at a fixed distance station,
+    computing sample mean, standard deviation, and statistical confidence intervals.
+    """
+    freqs_to_run = target_frequencies if target_frequencies is not None else calib_frequencies_hz
+    print(f"\n📍 Capturing Station at r = {distance_m:.2f} meters ({len(freqs_to_run)} tones, N={n_samples} samples/tone)...")
+    station_results = {}
     
-    if len(amps) == 0:
-        raise ValueError(f"No signal detected for {target_freq_hz} Hz at {distance_m} m. Ensure tone is playing!")
-    
-    mean_v = float(np.mean(amps))
-    protocol.add_measurement(distance_m=distance_m, frequency_hz=target_freq_hz, amplitude_v=mean_v)
-    print(f"  ✅ Captured r={distance_m:.2f} m | f={target_freq_hz:.0f} Hz | Mean V_RMS={mean_v*1000:.2f} mV")
-    return mean_v
+    for f_target in freqs_to_run:
+        samples = []
+        for _ in range(n_samples):
+            # Hybrid dual-DMA capture (BFP-immune)
+            frame = ol.capture_quadruple(source="A0", f_min=max(20.0, f_target-40.0), f_max=f_target+40.0, timeout=0.35)
+            q = frame["quadruple"]
+            if q["amplitude_v"] > 0.0005:  # Valid audio frame
+                samples.append(q["amplitude_v"])
+            time.sleep(0.005)
+        
+        if len(samples) > 0:
+            protocol.add_measurement(distance_m=distance_m, frequency_hz=f_target, amplitude_v=samples)
+            mean_v = float(np.mean(samples))
+            std_v = float(np.std(samples, ddof=1)) if len(samples) > 1 else 0.0
+            sem_v = std_v / np.sqrt(len(samples)) if len(samples) > 0 else 0.0
+            station_results[f_target] = {"mean_v": mean_v, "std_v": std_v, "sem_v": sem_v, "n": len(samples)}
+            print(f"    • f={f_target:6.1f} Hz: V_RMS = {mean_v*1000.0:6.2f} mV ± {sem_v*1000.0:4.2f} mV (σ={std_v*1000.0:4.2f} mV, N={len(samples)})")
+        else:
+            print(f"    ⚠ f={f_target:6.1f} Hz: Skipped (no tone detected)")
+            
+    return station_results
 
-print("Ready for guided calibration. (Call capture_calibration_point for each measurement).")
+print("Ready for guided calibration. (Call capture_station_sweep(distance_m) at each station mark).")
 
 # %% [markdown] Cell 8
-## 4. Automated 1/r Regression Fitting & Interactive Diagnostics
-# Fit $1/r$ lines across all frequencies and display interactive Plotly regression curves, $k(f)$ spectra, and $R^2(f)$ quality bars.
+## 4. WLS Regression, Dynamic Pruning & Interactive Diagnostics
+# Solves the Weighted Least Squares regressions over the automatically pruned linear $1/r$ sub-windows and displays:
+# 1. **$V_{\text{RMS}}$ vs $1/r$ Linear Curves** with $\pm 1\sigma$ error bars and visual demarcation of pruned vs. active points.
+# 2. **Continuous $k(f)$ Function** [$\text{V}\cdot\text{m}$].
+# 3. **Goodness-of-Fit $R^2(f)$ Score** against the $0.95$ Quality Gate.
 
 # %% [code] Cell 9
-# Fit 1/r Regressions
+# Execute WLS Regression & Dynamic Boundary Pruning
 fit_results = protocol.fit()
 
 # -----------------------------------------------------------------------------
@@ -3702,70 +3743,99 @@ fit_results = protocol.fit()
 fig = make_subplots(
     rows=1, cols=3,
     subplot_titles=(
-        "<b>1. V_RMS vs. 1/r Linear Regression Lines</b>",
+        "<b>1. WLS Regressions (Error Bars & Pruning)</b>",
         "<b>2. Calibrated k(f) Function [V·m]</b>",
         "<b>3. Goodness-of-Fit R²(f) Quality Gate</b>"
     ),
     horizontal_spacing=0.08
 )
 
-colors = ["#00FFCC", "#FFA500", "#00E5FF", "#FF007F", "#76FF03"]
+colors = ["#00FFCC", "#FFA500", "#00E5FF", "#FF007F", "#76FF03", "#E040FB", "#FFD600", "#00E676"]
 
-freqs_list = []
-k_list = []
-r2_list = []
+valid_freqs = sorted(fit_results.keys())
+k_list = [fit_results[f]["k"] for f in valid_freqs]
+k_err_list = [fit_results[f]["delta_k"] for f in valid_freqs]
+r2_list = [fit_results[f]["r_squared"] for f in valid_freqs]
 
-for idx, (f, res) in enumerate(fit_results.items()):
-    freqs_list.append(f)
-    k_list.append(res["k"])
-    r2_list.append(res["r_squared"])
+for idx, f in enumerate(valid_freqs):
+    res = fit_results[f]
+    stations = res["raw_stations"]
     
-    # Regression line in Col 1
-    points = protocol._raw_measurements[f]
-    r_meas = np.array([p[0] for p in points])
-    v_meas = np.array([p[1] for p in points]) * 1000.0 # in mV
+    r_active = np.array([st["r_m"] for st in stations if st["is_pruned_in"]])
+    v_active = np.array([st["mean_v"] for st in stations if st["is_pruned_in"]]) * 1000.0
+    err_active = np.array([st["std_v"] for st in stations if st["is_pruned_in"]]) * 1000.0
     
-    inv_r = 1.0 / r_meas
-    inv_r_line = np.linspace(min(inv_r)*0.9, max(inv_r)*1.1, 50)
-    v_line = (res["k"] * inv_r_line + res["c_room"]) * 1000.0
+    r_pruned = np.array([st["r_m"] for st in stations if not st["is_pruned_in"]])
+    v_pruned = np.array([st["mean_v"] for st in stations if not st["is_pruned_in"]]) * 1000.0
     
     c = colors[idx % len(colors)]
-    fig.add_scatter(x=inv_r, y=v_meas, mode="markers", marker=dict(size=8, color=c), name=f"{f:.0f} Hz (Data)", row=1, col=1)
-    fig.add_scatter(x=inv_r_line, y=v_line, mode="lines", line=dict(color=c, dash="dash"), name=f"{f:.0f} Hz (Fit)", row=1, col=1)
+    
+    # Active linear points with error bars
+    if len(r_active) > 0:
+        inv_r_active = 1.0 / r_active
+        fig.add_scatter(
+            x=inv_r_active, y=v_active,
+            error_y=dict(type="data", array=err_active, visible=True),
+            mode="markers", marker=dict(size=8, color=c),
+            name=f"{f:.0f} Hz (Active)", row=1, col=1
+        )
+        
+        # Fitted regression line
+        inv_r_line = np.linspace(min(inv_r_active)*0.9, max(inv_r_active)*1.1, 40)
+        v_line = (res["k"] * inv_r_line + res["c_room"]) * 1000.0
+        fig.add_scatter(
+            x=inv_r_line, y=v_line, mode="lines", line=dict(color=c, dash="dash"),
+            name=f"{f:.0f} Hz (Fit)", row=1, col=1
+        )
+    
+    # Pruned extreme points (grayed out)
+    if len(r_pruned) > 0:
+        fig.add_scatter(
+            x=1.0 / r_pruned, y=v_pruned, mode="markers",
+            marker=dict(size=6, color="gray", symbol="x"),
+            name=f"{f:.0f} Hz (Pruned)", row=1, col=1,
+            showlegend=False
+        )
 
-# Column 2: k(f) continuous curve
-fig.add_scatter(x=freqs_list, y=k_list, mode="lines+markers", line=dict(color="#00FFCC", width=2), marker=dict(size=8), name="k(f)", row=1, col=2)
+# Column 2: Continuous k(f) function with error bars
+fig.add_scatter(
+    x=valid_freqs, y=k_list,
+    error_y=dict(type="data", array=k_err_list, visible=True),
+    mode="lines+markers", line=dict(color="#00FFCC", width=2.5), marker=dict(size=8),
+    name="k(f)", row=1, col=2
+)
 
-# Column 3: R^2 Bar Chart with 0.95 Quality Gate Line
-fig.add_bar(x=[f"{f:.0f} Hz" for f in freqs_list], y=r2_list, marker=dict(color="#00E5FF"), name="R² Score", row=1, col=3)
-fig.add_hline(y=0.95, line=dict(color="orange", dash="dash"), annotation_text="R² Gate (0.95)", row=1, col=3)
+# Column 3: R^2 Quality Bar Chart
+fig.add_bar(x=[f"{f:.0f}" for f in valid_freqs], y=r2_list, marker=dict(color="#00E5FF"), name="R² Score", row=1, col=3)
+fig.add_hline(y=protocol.r2_threshold, line=dict(color="orange", dash="dash"), annotation_text=f"R² Gate ({protocol.r2_threshold})", row=1, col=3)
 
-fig.update_layout(template="plotly_dark", height=450, title="<b>Acoustic Calibration Laboratory: 1/r Regression & Quality Analysis</b>")
+fig.update_layout(template="plotly_dark", height=460, title="<b>Acoustic Calibration Laboratory: WLS Regressions & Quality Analysis</b>")
 fig.update_xaxes(title="1 / Distance [m⁻¹]", row=1, col=1)
 fig.update_yaxes(title="V_RMS [mV]", row=1, col=1)
 fig.update_xaxes(title="Frequency [Hz]", row=1, col=2)
 fig.update_yaxes(title="k [V·m]", row=1, col=2)
-fig.update_yaxes(title="R² Score", range=[0.8, 1.01], row=1, col=3)
+fig.update_xaxes(title="Frequency [Hz]", row=1, col=3)
+fig.update_yaxes(title="R² Score", range=[0.85, 1.01], row=1, col=3)
 
 fig.show()
 
 # %% [markdown] Cell 10
-## 5. Export Calibrated Profile to JSON
-# Save the validated profile to a portable JSON file.
+## 5. Export Calibrated Profile with Metadata & Operational Bounds
+# Saves the profile to a portable JSON file preserving the system metadata and certified operational bounds.
 
 # %% [code] Cell 11
-export_path = "my_phone_calibrated_profile.json"
+export_path = "calibrated_room_profile.json"
 saved_file = protocol.save_profile_json(
     filepath=export_path,
-    name="Smartphone_Lab_Profile",
-    description="Multi-frequency 1/r calibrated profile for smartphone speaker in lab environment"
+    name="Smartphone_Lab_WLS_Profile",
+    description="WLS calibrated 1/r profile with dynamic boundary pruning and N=30 statistical variance"
 )
 
 print(f"🎉 SUCCESS: Saved calibrated profile to: {saved_file.resolve()}")
 
 # %% [markdown] Cell 12
-## 6. Live Distance Inversion Verification
-# Load the newly created profile into `DistanceEstimator` and track distance live in centimeters.
+## 6. Live Distance Inversion & Operational Boundary Verification
+# Loads the newly created profile into `DistanceEstimator` and tracks physical distance in centimeters with certified boundary checking.
 
 # %% [code] Cell 13
 # Load newly generated profile into DistanceEstimator
@@ -3781,6 +3851,7 @@ print(f"Detected Pitch f0  : {result['frequency_hz']:.1f} Hz")
 print(f"In-Band Amplitude  : {result['amplitude_v']*1000:.2f} mV")
 print(f"Evaluated k(f0)    : {result['k_evaluated']:.4f} V·m")
 print(f"Inverted Distance  : {result['distance_m']*100:.1f} cm (±{result['distance_err_m']*100:.1f} cm)")
+print(f"Operational Status : {result['distance_status']}")
 
 ol.close()
 print("\n🔒 Hardware resources cleanly released.")
