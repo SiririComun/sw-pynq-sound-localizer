@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/fft-quadruple-telemetry-engine @ a6bb1b5
+• Repository State    : feat/fft-quadruple-telemetry-engine @ c15bffa
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1-rc2
 • Package Version     : v1.0.0
 ==============================================================================
@@ -9,10 +9,10 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (6 modified/untracked files)
+Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/fft-quadruple-telemetry-engine                a6bb1b5 [origin/feat/fft-quadruple-telemetry-engine] docs(notebook): overhaul 02_acoustic_calibration_lab with WLS diagnostics, N=30 statistics, and 14x26 master grid
+* feat/fft-quadruple-telemetry-engine                c15bffa [origin/feat/fft-quadruple-telemetry-engine: ahead 3] docs(context): update repository summary and Cog configuration for 3-row dashboard telemetry
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
   remotes/origin/feat/fft-quadruple-telemetry-engine a6bb1b5 docs(notebook): overhaul 02_acoustic_calibration_lab with WLS diagnostics, N=30 statistics, and 14x26 master grid
@@ -23,7 +23,10 @@ Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* a6bb1b5  (HEAD -> feat/fft-quadruple-telemetry-engine, origin/feat/fft-quadruple-telemetry-engine) - 2026-09-05 : docs(notebook): overhaul 02_acoustic_calibration_lab with WLS diagnostics, N=30 statistics, and 14x26 master grid (SiririComun)
+* c15bffa  (HEAD -> feat/fft-quadruple-telemetry-engine) - 2026-09-07 : docs(context): update repository summary and Cog configuration for 3-row dashboard telemetry (SiririComun)
+* 9bf3b22  - 2026-09-07 : test(dashboard): add unit verification suite for 3-row layout, buffer geometry, and CSV export (SiririComun)
+* 3bb793c  - 2026-09-07 : feat(dashboard): implement 3-row telemetry view with metric distance and BFP-immune demodulation (SiririComun)
+* a6bb1b5  (origin/feat/fft-quadruple-telemetry-engine) - 2026-09-05 : docs(notebook): overhaul 02_acoustic_calibration_lab with WLS diagnostics, N=30 statistics, and 14x26 master grid (SiririComun)
 * 0c5c057  - 2026-09-05 : docs(context): update repository summary with calibrated WLS and power-law pruner (SiririComun)
 * e3a4a26  - 2026-09-05 : test(calibration): update unit test suites for WLS regression, power-law pruning, and operational bounds (SiririComun)
 * 53b30e6  - 2026-09-05 : feat(dsp): implement power-law penalty scoring in dynamic boundary pruner for AcousticCalibrationProtocol (SiririComun)
@@ -35,9 +38,6 @@ Multi-Branch Git Commit Graph:
 * eb2872c  - 2026-09-03 : test(calibration): add unit verification suite for AcousticCalibrationProtocol regression and quality gating (SiririComun)
 * b61748f  - 2026-09-03 : feat(calibration): implement AcousticCalibrationProtocol 1/r regression solver and profile exporter (SiririComun)
 * 217b6e8  - 2026-09-03 : docs(context): update repository summary and Cog configuration with hybrid test suite (SiririComun)
-* da5ae0f  - 2026-09-03 : test(dsp): add unit verification suite for hybrid dual-DMA BFP-immune extraction (SiririComun)
-* 8ab79b6  - 2026-09-03 : feat(driver): integrate capture_quadruple hybrid dual-DMA API and DistanceEstimator.process_frame (SiririComun)
-* b7fcdff  - 2026-09-03 : feat(dsp): implement compute_coherent_inband_amplitude and extract_hybrid_quadruple in KinematicAnalytics (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -3091,57 +3091,154 @@ setup(
 
 ```python
 # %% [markdown] Cell 1
-# Notebook 1: Real-Time Acoustic Kinematics & Telemetry Dashboard
-# Welcome to **`pynq-sound-localizer`** (`v1.0.0`). This notebook demonstrates how to load the FPGA hardware overlay, launch the **10-Second Rolling Kinematics Dashboard**, record continuous multi-second flight data, and extract clean Doppler telemetry.
+# 🛰️ Notebook 1: Real-Time Acoustic Kinematics, Doppler Tracking & Metric Distance Dashboard
+# Welcome to **`pynq-sound-localizer`** (`v1.1.0`).
+# This notebook demonstrates real-time FPGA-accelerated acoustic processing on the **PYNQ-Z2 board (`xc7z020clg400-1`)**:
+# * **Simultaneous Dual-Channel Parallel Sampling:** True zero inter-channel skew ($0.00\,\mu\text{s}$) across MAX4466 microphones on pins A0 (`Vaux1`) and A1 (`Vaux9`).
+# * **Flagship 3-Row Telemetry View:**
+# 1. **Row 1 ($A_{\text{true}}(t)$ [mV]):** Coherent in-band physical amplitude envelope, 100% immune to FPGA Block Floating Point (BFP) bit-shift jumps.
+# 2. **Row 2 ($f_0(t)$ [Hz]):** Sub-Hertz fundamental pitch tracking ($20\,\text{Hz} - 20\,\text{kHz}$) with moving median reflection filtering and noise squelching.
+# 3. **Row 3 ($r(t)$ [cm]):** Real-time metric distance inversion $r(t) = \frac{k(f_0)}{A_{\text{true}}(t)}$ with dynamic confidence bands $\pm \delta r(t)$.
+# * **Multi-Tab GUI:** Real-time synchronized 10-second rolling view with Mic 1 (A0), Mic 2 (A1), and Dual Comparison overlays.
+# * **Direct Python Handoff & CSV Logging:** Extract clean non-NaN NumPy arrays for Doppler velocity analysis ($v = c \cdot \frac{\Delta f}{f_0}$) and distance trajectory fitting.
+# * **Continuous Multi-Second Flight Recorder:** Uninterrupted DMA streaming to DDR memory for flight kinematics and Jupyter audio playback.
 
 # %% [markdown] Cell 2
-## 1. Load the Hardware Overlay
-# Instantiate `MicrophoneArrayOverlay()`. It automatically downloads and configures the verified `v1.5.0` bitstream on the PYNQ-Z2 board.
+## 1. Load Hardware Overlay & Acoustic Calibration Profile
+# Instantiate `MicrophoneArrayOverlay()`. It automatically configures the FPGA bitstream (`v1.5.1-rc2`) and hardware decimator ($M=10$, $50\,\text{kSPS}$ per channel).
+# We check for a local `calibrated_room_profile.json` generated by Notebook 2 (`02_acoustic_calibration_lab.ipynb`).
 
 # %% [code] Cell 3
-from pynq_localizer import MicrophoneArrayOverlay, KinematicAnalytics
+from pathlib import Path
+from pynq_localizer import MicrophoneArrayOverlay, KinematicAnalytics, AcousticProfile, DistanceEstimator
 
-# Auto-detect board and load overlay
+# 1. Auto-detect board and load overlay
 ol = MicrophoneArrayOverlay()
-print(f"✅ Overlay loaded: {ol.current_profile} mode ({ol.fs_per_ch:.0f} SPS per channel)")
-print(f"   Speed of sound at 20°C: {KinematicAnalytics.speed_of_sound(20.0):.2f} m/s")
+c_sound = KinematicAnalytics.speed_of_sound(temperature_c=20.0)
+
+print(f"✅ Hardware Overlay loaded: {ol.current_profile} mode ({ol.fs_per_ch:.0f} SPS per channel)")
+print(f"✅ Speed of sound at 20°C: {c_sound:.2f} m/s")
+
+# 2. Check for calibrated profile from Lab 02
+profile_path = Path("calibrated_room_profile.json")
+if profile_path.exists():
+    profile = AcousticProfile.from_json(profile_path)
+    print(f"✅ Loaded calibrated room profile: '{profile.name}' ({len(profile.frequencies)} carrier tones)")
+else:
+    profile = AcousticProfile.from_constant(0.050, name="DefaultBaseline_k0.050")
+    print("ℹ️ Using default baseline profile (k = 0.050 V·m).")
+    print("   Run '02_acoustic_calibration_lab.ipynb' to generate a room-specific WLS profile!")
 
 # %% [markdown] Cell 4
-## 2. Launch the Real-Time 10-Second Rolling Telemetry Dashboard
-# Click **`Start Stream`** and make sound near the microphones (or wave a pure tone generator from a smartphone). Observe:
-# - **Row 1:** Instantaneous physical loudness envelope $A(t)$ in Volts.
-# - **Row 2:** Sub-Hertz dominant pitch scatter points $f_0(t)$ with real-time noise squelching.
-# - **Tabs:** Switch seamlessly between **Mic 1 (A0)**, **Mic 2 (A1)**, and **Dual Overlay**.
+## 2. Launch the 3-Row Rolling Telemetry Dashboard
+# Click **`Start Stream`** and generate sound near the microphones (or play a pure tone such as $1000\,\text{Hz} - 2500\,\text{Hz}$ from a smartphone and move it toward and away from the microphones).
+# Observe the live 3-row display:
+# - **Row 1:** Instantaneous physical in-band amplitude $A_{\text{true}}(t)$ in **mV** (immune to BFP bit-shifts).
+# - **Row 2:** Sub-Hertz dominant pitch $f_0(t)$ in **Hz**.
+# - **Row 3:** Inverted physical metric distance $r(t)$ in **cm** with shaded confidence uncertainty band $\pm \delta r(t)$.
+# - **Tabs:** Dedicated **Mic 1 (A0)**, **Mic 2 (A1)**, and **Dual Comparison Overlay**.
 
 # %% [code] Cell 5
-# Launch the multi-tab live instrument
-app = ol.kinematics_dashboard()
+# Launch the live 3-row multi-tab instrument
+app = ol.kinematics_dashboard(
+    window_duration_sec=10.0,
+    hop_ms=10.0,
+    profile=profile
+)
 
 # %% [markdown] Cell 6
-## 3. Direct Clean Data Handoff in Python
-# Extract the sanitized non-NaN data directly from the dashboard into NumPy arrays for instant analysis.
+## 3. Direct Clean Data Handoff & Doppler Motion Analysis
+# Extract clean, non-NaN arrays directly from the running dashboard buffer into Python using `app.get_clean_data()`.
+# We compute:
+# 1. **Doppler Radial Velocity:**
+# $$v_{\text{radial}}(t) = c \cdot \frac{f_0(t) - f_{\text{rest}}}{f_{\text{rest}}}$$
+# 2. **Metric Distance Trajectory:**
+# Inverted distance $r(t)$ [cm] and uncertainty $\delta r(t)$ [cm].
 
 # %% [code] Cell 7
-t_clean, amp_clean, freq_clean = app.get_clean_data(channel=1)
-print(f"Captured {len(t_clean)} clean motion points!")
-if len(freq_clean) > 0:
-    print(f"Frequency span: {freq_clean.min():.1f} Hz -> {freq_clean.max():.1f} Hz (Shift: {freq_clean.max() - freq_clean.min():.1f} Hz)")
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Extract clean synchronized non-NaN telemetry from Channel 1 (A0)
+t_clean, amp_clean, freq_clean, dist_clean, disterr_clean = app.get_clean_data(
+    channel=1, return_distance=True
+)
+
+print(f"Captured {len(t_clean)} clean motion telemetry points from Mic 1!")
+
+if len(freq_clean) > 5:
+    f_rest = float(np.median(freq_clean))  # Estimate rest carrier frequency
+    v_radial = KinematicAnalytics.calculate_doppler_velocity(
+        f_observed=freq_clean, f_source=f_rest, temperature_c=20.0
+    )
+    
+    print(f"Rest Frequency f0   : {f_rest:.1f} Hz")
+    print(f"Observed Pitch Span : {freq_clean.min():.1f} Hz -> {freq_clean.max():.1f} Hz (Δf = {freq_clean.max() - freq_clean.min():.1f} Hz)")
+    print(f"Max Doppler Velocity: {np.max(np.abs(v_radial)):.2f} m/s ({np.max(np.abs(v_radial))*3.6:.2f} km/h)")
+    print(f"Inverted Distance   : {dist_clean.min():.1f} cm -> {dist_clean.max():.1f} cm")
+    
+    # Plot synchronized Doppler Velocity and Metric Distance
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.12,
+        subplot_titles=(
+            "<b>Instantaneous Doppler Radial Velocity v_radial(t) [m/s]</b>",
+            "<b>Inverted Physical Distance r(t) with Confidence Error Band [cm]</b>"
+        )
+    )
+    # Row 1: Doppler Velocity
+    fig.add_scatter(x=t_clean, y=v_radial, mode="lines+markers", line=dict(color="#00FFCC", width=2), marker=dict(size=4), name="v_radial (m/s)", row=1, col=1)
+    fig.add_hline(y=0.0, line=dict(color="gray", dash="dash"), row=1, col=1)
+    # Row 2: Distance with confidence band
+    fig.add_scatter(x=t_clean, y=dist_clean + disterr_clean, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.3)", dash="dot"), showlegend=False, name="+δr", row=2, col=1)
+    fig.add_scatter(x=t_clean, y=dist_clean - disterr_clean, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.3)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.20)", name="±δr Confidence", row=2, col=1)
+    fig.add_scatter(x=t_clean, y=dist_clean, mode="lines+markers", line=dict(color="#00FFCC", width=2), marker=dict(size=4), name="Distance (cm)", row=2, col=1)
+    
+    fig.update_layout(template="plotly_dark", height=500, title="<b>Extracted Motion Telemetry: Doppler Kinematics & Metric Distance</b>")
+    fig.update_yaxes(title="v (m/s)", row=1, col=1)
+    fig.update_yaxes(title="Distance (cm)", row=2, col=1)
+    fig.update_xaxes(title="Time (s)", row=2, col=1)
+    fig.show()
+else:
+    print("⚠️ No tone detected. Ensure audio source is active and un-muted.")
 
 # %% [markdown] Cell 8
-## 4. Continuous Multi-Second Flight Recording & Audio Playback
-# Record uninterrupted audio to DDR memory and listen to it directly in Jupyter.
+## 4. Export Telemetry to CSV
+# Export the rolling 10-second synchronized buffer directly to disk.
 
 # %% [code] Cell 9
-# Record 3.0 seconds of 50 kSPS dual-channel audio
-t_axis, v_mic1, v_mic2 = ol.record_continuous(duration_sec=3.0)
+# Export clean CSV (non-NaN rows only)
+csv_file = app.export_csv(clean_silence=True)
 
-# Listen to Microphone 1
-ol.play_audio(channel=1, custom_data=v_mic1)
+# Read preview from CSV file
+with open(csv_file, "r", encoding="utf-8") as f:
+    preview_lines = [f.readline() for _ in range(6)]
+
+print(f"📁 CSV Exported to: {csv_file}")
+print("   Header & First 5 rows:")
+for line in preview_lines:
+    print("   " + line.strip())
 
 # %% [markdown] Cell 10
-## 5. Hardware Shutdown & Cleanup
+## 5. Continuous Multi-Second Flight Recording & Audio Playback
+# Record uninterrupted multi-second audio directly to DDR memory using the continuous DMA streaming engine. Listen to the captured flight audio directly in Jupyter.
 
 # %% [code] Cell 11
+# Record 4.0 seconds of continuous 50 kSPS dual-channel flight data
+t_flight, v_mic1, v_mic2 = ol.record_continuous(duration_sec=4.0)
+
+print(f"Captured {len(t_flight)} stereo samples with 0.00 µs inter-channel skew.")
+print(f"Mic 1 (A0) Peak-to-Peak: {(v_mic1.max() - v_mic1.min())*1000:.1f} mV")
+print(f"Mic 2 (A1) Peak-to-Peak: {(v_mic2.max() - v_mic2.min())*1000:.1f} mV")
+
+# Listen to Microphone 1 audio directly in Jupyter
+ol.play_audio(channel=1, custom_data=v_mic1)
+
+# %% [markdown] Cell 12
+## 6. Hardware Shutdown & Cleanup
+# Stop the background dashboard threads and release FPGA DMA/CMA memory buffers.
+
+# %% [code] Cell 13
 app.stop()
 ol.close()
 print("🔒 Hardware resources cleanly released.")
