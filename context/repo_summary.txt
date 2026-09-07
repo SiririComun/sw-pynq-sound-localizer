@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/fft-quadruple-telemetry-engine @ c15bffa
+• Repository State    : feat/fft-quadruple-telemetry-engine @ ca0bc19
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1-rc2
 • Package Version     : v1.0.0
 ==============================================================================
@@ -9,13 +9,13 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/fft-quadruple-telemetry-engine                c15bffa [origin/feat/fft-quadruple-telemetry-engine: ahead 3] docs(context): update repository summary and Cog configuration for 3-row dashboard telemetry
+* feat/fft-quadruple-telemetry-engine                ca0bc19 [origin/feat/fft-quadruple-telemetry-engine] docs(notebook): overhaul 01_realtime_kinematics_telemetry with 3-row dashboard and distance telemetry
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/fft-quadruple-telemetry-engine a6bb1b5 docs(notebook): overhaul 02_acoustic_calibration_lab with WLS diagnostics, N=30 statistics, and 14x26 master grid
+  remotes/origin/feat/fft-quadruple-telemetry-engine ca0bc19 docs(notebook): overhaul 01_realtime_kinematics_telemetry with 3-row dashboard and distance telemetry
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
@@ -23,10 +23,11 @@ Repository Tags & Release History:
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* c15bffa  (HEAD -> feat/fft-quadruple-telemetry-engine) - 2026-09-07 : docs(context): update repository summary and Cog configuration for 3-row dashboard telemetry (SiririComun)
+* ca0bc19  (HEAD -> feat/fft-quadruple-telemetry-engine, origin/feat/fft-quadruple-telemetry-engine) - 2026-09-07 : docs(notebook): overhaul 01_realtime_kinematics_telemetry with 3-row dashboard and distance telemetry (SiririComun)
+* c15bffa  - 2026-09-07 : docs(context): update repository summary and Cog configuration for 3-row dashboard telemetry (SiririComun)
 * 9bf3b22  - 2026-09-07 : test(dashboard): add unit verification suite for 3-row layout, buffer geometry, and CSV export (SiririComun)
 * 3bb793c  - 2026-09-07 : feat(dashboard): implement 3-row telemetry view with metric distance and BFP-immune demodulation (SiririComun)
-* a6bb1b5  (origin/feat/fft-quadruple-telemetry-engine) - 2026-09-05 : docs(notebook): overhaul 02_acoustic_calibration_lab with WLS diagnostics, N=30 statistics, and 14x26 master grid (SiririComun)
+* a6bb1b5  - 2026-09-05 : docs(notebook): overhaul 02_acoustic_calibration_lab with WLS diagnostics, N=30 statistics, and 14x26 master grid (SiririComun)
 * 0c5c057  - 2026-09-05 : docs(context): update repository summary with calibrated WLS and power-law pruner (SiririComun)
 * e3a4a26  - 2026-09-05 : test(calibration): update unit test suites for WLS regression, power-law pruning, and operational bounds (SiririComun)
 * 53b30e6  - 2026-09-05 : feat(dsp): implement power-law penalty scoring in dynamic boundary pruner for AcousticCalibrationProtocol (SiririComun)
@@ -37,7 +38,6 @@ Multi-Branch Git Commit Graph:
 * b4695b4  - 2026-09-03 : fix(calibration): add degenerate flat-line detection and slope bounds in AcousticCalibrationProtocol (SiririComun)
 * eb2872c  - 2026-09-03 : test(calibration): add unit verification suite for AcousticCalibrationProtocol regression and quality gating (SiririComun)
 * b61748f  - 2026-09-03 : feat(calibration): implement AcousticCalibrationProtocol 1/r regression solver and profile exporter (SiririComun)
-* 217b6e8  - 2026-09-03 : docs(context): update repository summary and Cog configuration with hybrid test suite (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -71,18 +71,18 @@ README.md: (README.md)
 ```markdown
 # Real-Time Acoustic Kinematics, Doppler Tracking & Sound Localizer on PYNQ-Z2
 
-[![PyPI Version](https://img.shields.io/pypi/v/pynq-sound-localizer.svg)](https://pypi.org/project/pynq-sound-localizer/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Hardware Overlay](https://img.shields.io/badge/Hardware-hw--xadc--dma--overlays%20v1.5.0-orange.svg)](https://github.com/SiririComun/hw-xadc-dma-overlays)
+[![Hardware Overlay](https://img.shields.io/badge/Hardware-hw--xadc--dma--overlays%20v1.5.1--rc2-orange.svg)](https://github.com/SiririComun/hw-xadc-dma-overlays)
 [![Board Support](https://img.shields.io/badge/Board-PYNQ--Z2-green.svg)](https://tul.com.tw/ProductsPYNQ-Z2.html)
+[![Python Version](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
 
-A high-performance FPGA-accelerated acoustic processing platform on the **PYNQ-Z2 board (`xc7z020clg400-1`)** providing **true simultaneous dual-ADC parallel sampling ($0.00\,\mu\text{s}$ inter-channel skew)**, **$20\,\text{Hz} - 20\,\text{kHz}$ sub-Hertz fundamental pitch tracking**, **real-time 10-second rolling dual-telemetry curves**, and multi-second continuous flight recording for Doppler kinematics.
+A high-performance FPGA-accelerated acoustic processing platform for the **PYNQ-Z2 board (`xc7z020clg400-1`)**. Provides **true simultaneous dual-ADC parallel sampling ($0.00\,\mu\text{s}$ inter-channel skew)**, **sub-Hertz fundamental pitch tracking ($20\,\text{Hz} - 20\,\text{kHz}$)**, **real-time single-channel metric distance inversion ($r = k(f_0)/A_{\text{true}}$)**, **flagship 3-row rolling telemetry curves**, and continuous multi-second flight recording for Doppler kinematics.
 
 ---
 
 ## 🏛 System Architecture
 
-The package automatically downloads its pre-compiled hardware bitstream (`v1.5.0`) and metadata from GitHub Releases into local cache and encapsulates the dual DMA receivers, XADC parallel sequencer, hardware decimators, and telemetry engines into a clean Python API.
+The package automatically pulls its pre-compiled hardware bitstream (`v1.5.1-rc2`) and metadata from GitHub Releases into local cache and encapsulates dual DMA receivers, XADC parallel sequencers, hardware decimators, and telemetry engines into a clean Python API:
 
 ```
  [ MAX4466 Mic 1 ] ─────────────────────────> [ PYNQ-Z2 Pin A0 (Vaux1) ]
@@ -93,31 +93,50 @@ The package automatically downloads its pre-compiled hardware bitstream (`v1.5.0
                                                             ▼
                                                   [ axis_decimator IP ]
                                                 (FPGA Anti-Aliasing M=10)
-                                                            │ (50 kSPS Decimated Audio Stream)
+                                                            │ (50 kSPS Decimated Stream)
+                              ┌─────────────────────────────┴─────────────────────────────┐
+                              ▼                                                           ▼
+                   [ AXI DMA 0 (Time Stream) ]                                 [ FPGA FFT Core + CORDIC ]
+                              │ (Raw 12-bit ADC Voltages)                                 │ (32-bit Phase/Magnitude)
+                              ▼                                                           ▼
+                      [ DDR Time Buffer ]                                         [ AXI DMA 1 (Polar FFT) ]
+                              │                                                           │
+                              └─────────────────────────────┬─────────────────────────────┘
                                                             ▼
-                                                  [ AXI DMA 0 (Time) ]
-                                                            │
-                                                            ▼ (DDR Memory)
                                                [ MicrophoneArrayOverlay ]
-                                      ├── .trigger               (HardwareTrigger AXI-Lite)
-                                      ├── .capture_frame()       (0.00 µs Synchronous Snapshot)
-                                      ├── .record_continuous()   (Multi-Second Flight Logger)
-                                      ├── .play_audio()          (Jupyter Audio Playback)
-                                      └── .kinematics_dashboard()(10s Rolling Real-Time GUI)
+                                      ├── .capture_spectral_frame() (Lock-Step Dual-DMA Frame)
+                                      ├── .capture_quadruple()      (BFP-Immune (f, A, φ, t))
+                                      ├── .record_continuous()      (Multi-Second Flight Logger)
+                                      ├── .play_audio()             (Jupyter Audio Playback)
+                                      └── .kinematics_dashboard()   (3-Row Rolling Live GUI)
 ```
 
 ---
 
-## 🎛 Real-Time 10-Second Rolling Telemetry Dashboard
+## 🎛 Real-Time 3-Row Telemetry Dashboard
 
-The flagship **`KinematicsDashboard`** uses a decoupled two-thread architecture ($100\,\text{Hz}$ background DSP worker + $30\,\text{FPS}$ Plotly rendering) to display real-time physical telemetry without browser lag:
+The **`KinematicsDashboard`** uses a decoupled two-thread architecture ($100\,\text{Hz}$ background DSP worker + $30\,\text{FPS}$ Plotly rendering) to display real-time physical telemetry without browser lag:
 
-* **Row 1 (Amplitude vs. Time):** Instantaneous smoothed RMS acoustic loudness envelope $A(t)$ in physical Volts with an active noise gate threshold.
-* **Row 2 (Frequency vs. Time):** Sub-Hertz fundamental pitch trajectory $f_0(t)$ ($20\,\text{Hz} - 20\,\text{kHz}$) with moving median reflection filtering and noise squelch gating.
+* **Row 1 (Amplitude vs. Time):** Physical in-band amplitude envelope $A_{\text{true}}(t)$ in physical **mV**, extracted via single-bin coherent Fourier projection. **100% immune to FPGA Block Floating Point (BFP) bit-shift scaling**.
+* **Row 2 (Frequency vs. Time):** Sub-Hertz fundamental pitch trajectory $f_0(t)$ ($20\,\text{Hz} - 20\,\text{kHz}$) using exact DFT sinc peak ratio interpolation ($\pm 0.01\,\text{Hz}$ precision) with moving-median reflection rejection and active noise squelch gating.
+* **Row 3 (Distance vs. Time):** Real-time inverted metric distance $r(t) = \frac{k(f_0)}{A_{\text{true}}(t)}$ in **cm** with dynamic confidence error bands ($\pm \delta r(t)$).
+* **Live Status Readouts:** Real-time frequency and distance tracking directly in the header bar (`A0: 35.2mV (1000.5Hz → 45.2cm)`).
 * **3-Tab Synchronized View:** Dedicated **Mic 1 (A0)**, **Mic 2 (A1)**, and **Dual Comparison Overlay**.
-* **Clean CSV Export:** Exports 10-second synchronized data without `NaN` values directly to disk.
+* **Clean CSV Export:** Exports synchronized time, amplitude, pitch, distance, and uncertainty columns without `NaN` values directly to disk.
 
-![Real-Time Acoustic Kinematics Dashboard](docs/images/01_kinematics_telemetry_dual.png)
+---
+
+## 📐 Acoustic Calibration Protocol & Distance Inversion
+
+Spherical acoustic wave propagation dictates:
+
+$$V_{\text{RMS}}(r_i,\, f_j) = k(f_j) \cdot \left(\frac{1}{r_i}\right) + c_{\text{room}}(f_j)$$
+
+* **`AcousticCalibrationProtocol`:** Ingests multi-sample ($N=30$) observations across an acoustic grid (e.g., 14 distance stations $\times$ 26 carrier frequencies), applies **Dynamic Boundary Pruning** using log-log power-law penalty scoring ($\frac{d\ln V}{d\ln r} \approx -1.0$) to reject near-field saturation clipping and far-field echo floors, and solves **Weighted Least Squares (WLS)** regressions ($w_i = 1/\sigma_i^2$).
+* **`AcousticProfile`:** Portable JSON profile artifact storing continuous interpolated $k(f)$, measurement uncertainties $\delta k(f)$, certified operating bounds $[r_{\text{min}}(f),\, r_{\text{max}}(f)]$, and environmental metadata.
+* **`DistanceEstimator`:** Real-time distance solver with dynamic uncertainty propagation:
+
+$$\delta r(t) = r \cdot \sqrt{\left(\frac{\delta k}{k}\right)^2 + \left(\frac{\delta A}{A}\right)^2}$$
 
 ---
 
@@ -134,11 +153,11 @@ Connect two analog electret microphones (such as Adafruit **MAX4466** or MAX9814
 
 ---
 
-## 🚀 Quick Start & Installation
+## 🚀 Installation & Getting Started
 
-### 1. Install from PyPI (or GitHub)
+### 1. Install from GitHub
 ```bash
-pip install --upgrade pynq-sound-localizer
+pip install git+https://github.com/SiririComun/sw-pynq-sound-localizer.git
 ```
 
 ### 2. Copy Example Notebooks to Jupyter Workspace
@@ -150,33 +169,46 @@ pynq-localizer-get-notebooks
 
 ## 💻 Python API Usage
 
-### 1. Launch the Live 10-Second Rolling Dashboard
+### 1. Launch the Live 3-Row Telemetry Dashboard
 ```python
 from pynq_localizer import MicrophoneArrayOverlay
 
-# Auto-downloads and loads the pinned v1.5.0 bitstream
+# Auto-downloads and loads the pinned v1.5.1-rc2 bitstream
 ol = MicrophoneArrayOverlay()
 
-# Launch the live interactive multi-tab instrument
+# Launch the live interactive 3-row dashboard (auto-loads calibrated profile if present)
 app = ol.kinematics_dashboard()
 ```
 
-### 2. Direct Clean Data Handoff in Jupyter
+### 2. Direct Clean Telemetry Handoff in Python
 ```python
 # Extract clean non-NaN telemetry arrays directly from the dashboard
-t_sec, amp_v, freq_hz = app.get_clean_data(channel=1)
+t_sec, amp_v, freq_hz, dist_cm, disterr_cm = app.get_clean_data(channel=1, return_distance=True)
 
 print(f"Captured {len(t_sec)} clean motion points!")
-print(f"Observed Doppler frequency span: {freq_hz.min():.1f} Hz -> {freq_hz.max():.1f} Hz")
+print(f"Observed Doppler span : {freq_hz.min():.1f} Hz -> {freq_hz.max():.1f} Hz")
+print(f"Distance trajectory   : {dist_cm.min():.1f} cm -> {dist_cm.max():.1f} cm (±{disterr_cm.mean():.1f} cm)")
 ```
 
-### 3. Continuous Multi-Second Flight Recording
+### 3. Capture Single-Shot BFP-Immune Spectral Quadruple
 ```python
-# Record 5.0 seconds of continuous 50 kSPS dual-channel flight data
-t_axis, v_mic1, v_mic2 = ol.record_continuous(duration_sec=5.0)
+# Returns (f0, A_true, phase, timestamp) with zero BFP scaling error
+data = ol.capture_quadruple(source="A0", f_min=100.0, f_max=10000.0)
+q = data["quadruple"]
+
+print(f"Pitch (f0)  : {q['frequency_hz']:.2f} Hz")
+print(f"Amplitude   : {q['amplitude_v']*1000:.2f} mV RMS (Coherent In-Band)")
+print(f"Phase (φ)   : {q['phase_deg']:.1f}°")
+print(f"Timestamp   : {q['timestamp_sec']:.6f} s")
+```
+
+### 4. Continuous Multi-Second Flight Recording
+```python
+# Record 4.0 seconds of continuous 50 kSPS dual-channel flight data
+t_axis, v_mic1, v_mic2 = ol.record_continuous(duration_sec=4.0)
 
 # Listen to captured audio directly in Jupyter
-ol.play_audio(channel=1)
+ol.play_audio(channel=1, custom_data=v_mic1)
 ```
 
 ---
