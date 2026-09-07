@@ -375,7 +375,11 @@ class MicrophoneArrayOverlay(Overlay):
     def kinematics_dashboard(
         self,
         window_duration_sec: float = 10.0,
-        hop_ms: float = 10.0
+        hop_ms: float = 10.0,
+        profile: Optional[Union[Any, str, Path]] = None,
+        k_constant: Optional[float] = None,
+        estimator: Optional[Any] = None,
+        **kwargs
     ):
         """Launches the real-time 10-second rolling Multi-Tab Kinematics Dashboard."""
         from pynq_localizer.kinematics_dashboard import KinematicsDashboard
@@ -383,7 +387,11 @@ class MicrophoneArrayOverlay(Overlay):
             overlay=self,
             window_duration_sec=window_duration_sec,
             hop_ms=hop_ms,
-            fs_per_ch=self.fs_per_ch
+            fs_per_ch=self.fs_per_ch,
+            profile=profile,
+            k_constant=k_constant,
+            estimator=estimator,
+            **kwargs
         )
         dash.display()
         return dash
