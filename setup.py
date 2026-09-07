@@ -8,7 +8,7 @@ if os.path.exists("README.md"):
 
 setup(
     name="pynq-sound-localizer",
-    version="1.0.0",
+    version="1.1.0",
     author="Juan Pablo Sánchez (SiririComun)",
     description="FPGA-Accelerated Acoustic Kinematics, Doppler Tracking & Direction-of-Arrival Sound Localizer for PYNQ-Z2",
     long_description=long_description,

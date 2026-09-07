@@ -24,7 +24,7 @@ except (ImportError, ModuleNotFoundError):
     KinematicsDashboard = None
     _HAS_PYNQ = False
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __all__ = [
     "HardwareLoader",
     "HardwareTrigger",
