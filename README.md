@@ -1,7 +1,7 @@
 # Real-Time Acoustic Kinematics, Doppler Tracking & Sound Localizer on PYNQ-Z2
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Hardware Overlay](https://img.shields.io/badge/Hardware-hw--xadc--dma--overlays%20v1.5.1--rc2-orange.svg)](https://github.com/SiririComun/hw-xadc-dma-overlays)
+[![Hardware Overlay](https://img.shields.io/badge/Hardware-hw--xadc--dma--overlays%20v1.5.1-orange.svg)](https://github.com/SiririComun/hw-xadc-dma-overlays)
 [![Board Support](https://img.shields.io/badge/Board-PYNQ--Z2-green.svg)](https://tul.com.tw/ProductsPYNQ-Z2.html)
 [![Python Version](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
 
@@ -11,7 +11,7 @@ A high-performance FPGA-accelerated acoustic processing platform for the **PYNQ-
 
 ## 🏛 System Architecture
 
-The package automatically pulls its pre-compiled hardware bitstream (`v1.5.1-rc2`) and metadata from GitHub Releases into local cache and encapsulates dual DMA receivers, XADC parallel sequencers, hardware decimators, and telemetry engines into a clean Python API:
+The package automatically pulls its pre-compiled hardware bitstream (`v1.5.1`) and metadata from GitHub Releases into local cache and encapsulates dual DMA receivers, XADC parallel sequencers, hardware decimators, and telemetry engines into a clean Python API:
 
 ```
  [ MAX4466 Mic 1 ] ─────────────────────────> [ PYNQ-Z2 Pin A0 (Vaux1) ]
@@ -102,7 +102,7 @@ pynq-localizer-get-notebooks
 ```python
 from pynq_localizer import MicrophoneArrayOverlay
 
-# Auto-downloads and loads the pinned v1.5.1-rc2 bitstream
+# Auto-downloads and loads the pinned v1.5.1 bitstream
 ol = MicrophoneArrayOverlay()
 
 # Launch the live interactive 3-row dashboard (auto-loads calibrated profile if present)

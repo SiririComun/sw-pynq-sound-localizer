@@ -35,7 +35,7 @@ class MicrophoneArrayOverlay(Overlay):
     ):
         """
         Initializes the dual-microphone hardware overlay.
-        Auto-fetches the pinned v1.5.1-rc2 bitstream if bitfile_name is None.
+        Auto-fetches the pinned v1.5.1 bitstream if bitfile_name is None.
         """
         if bitfile_name is None:
             resolved_bit = str(HardwareLoader.get_overlay_path(version=version))

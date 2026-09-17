@@ -1,30 +1,32 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/fft-quadruple-telemetry-engine @ 25e1cc2
-• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1-rc2
+• Repository State    : feat/fft-quadruple-telemetry-engine @ 7ba0246
+• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1
 • Package Version     : v1.1.0
 ==============================================================================
 
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: feat/fft-quadruple-telemetry-engine | Working Tree: Dirty (3 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/fft-quadruple-telemetry-engine                25e1cc2 [origin/feat/fft-quadruple-telemetry-engine: ahead 1] docs: update README with v1.1.0 3-row dashboard architecture and distance inversion engine
+* feat/fft-quadruple-telemetry-engine                7ba0246 [origin/feat/fft-quadruple-telemetry-engine] chore(release): bump package version to v1.1.0
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab1de60 [origin/main] feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
-  remotes/origin/feat/fft-quadruple-telemetry-engine ca0bc19 docs(notebook): overhaul 01_realtime_kinematics_telemetry with 3-row dashboard and distance telemetry
+  remotes/origin/feat/fft-quadruple-telemetry-engine 7ba0246 chore(release): bump package version to v1.1.0
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab1de60 feat(context): integrate Cog v1.0.0 context engine and scaffold configuration
 
 Repository Tags & Release History:
+v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric distance inversion engine, and BFP-immune demodulation
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 25e1cc2  (HEAD -> feat/fft-quadruple-telemetry-engine) - 2026-09-07 : docs: update README with v1.1.0 3-row dashboard architecture and distance inversion engine (SiririComun)
-* ca0bc19  (origin/feat/fft-quadruple-telemetry-engine) - 2026-09-07 : docs(notebook): overhaul 01_realtime_kinematics_telemetry with 3-row dashboard and distance telemetry (SiririComun)
+* 7ba0246  (HEAD -> feat/fft-quadruple-telemetry-engine, tag: v1.1.0, origin/feat/fft-quadruple-telemetry-engine) - 2026-09-07 : chore(release): bump package version to v1.1.0 (SiririComun)
+* 25e1cc2  - 2026-09-07 : docs: update README with v1.1.0 3-row dashboard architecture and distance inversion engine (SiririComun)
+* ca0bc19  - 2026-09-07 : docs(notebook): overhaul 01_realtime_kinematics_telemetry with 3-row dashboard and distance telemetry (SiririComun)
 * c15bffa  - 2026-09-07 : docs(context): update repository summary and Cog configuration for 3-row dashboard telemetry (SiririComun)
 * 9bf3b22  - 2026-09-07 : test(dashboard): add unit verification suite for 3-row layout, buffer geometry, and CSV export (SiririComun)
 * 3bb793c  - 2026-09-07 : feat(dashboard): implement 3-row telemetry view with metric distance and BFP-immune demodulation (SiririComun)
@@ -37,7 +39,6 @@ Multi-Branch Git Commit Graph:
 * ced5821  - 2026-09-03 : docs(notebook): add standalone 02_acoustic_calibration_lab interactive notebook (SiririComun)
 * 5c882b5  - 2026-09-03 : test(calibration): add unit verification suite for 1/r regression and R^2 quality gate (SiririComun)
 * b4695b4  - 2026-09-03 : fix(calibration): add degenerate flat-line detection and slope bounds in AcousticCalibrationProtocol (SiririComun)
-* eb2872c  - 2026-09-03 : test(calibration): add unit verification suite for AcousticCalibrationProtocol regression and quality gating (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -72,7 +73,7 @@ README.md: (README.md)
 # Real-Time Acoustic Kinematics, Doppler Tracking & Sound Localizer on PYNQ-Z2
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Hardware Overlay](https://img.shields.io/badge/Hardware-hw--xadc--dma--overlays%20v1.5.1--rc2-orange.svg)](https://github.com/SiririComun/hw-xadc-dma-overlays)
+[![Hardware Overlay](https://img.shields.io/badge/Hardware-hw--xadc--dma--overlays%20v1.5.1-orange.svg)](https://github.com/SiririComun/hw-xadc-dma-overlays)
 [![Board Support](https://img.shields.io/badge/Board-PYNQ--Z2-green.svg)](https://tul.com.tw/ProductsPYNQ-Z2.html)
 [![Python Version](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
 
@@ -82,7 +83,7 @@ A high-performance FPGA-accelerated acoustic processing platform for the **PYNQ-
 
 ## 🏛 System Architecture
 
-The package automatically pulls its pre-compiled hardware bitstream (`v1.5.1-rc2`) and metadata from GitHub Releases into local cache and encapsulates dual DMA receivers, XADC parallel sequencers, hardware decimators, and telemetry engines into a clean Python API:
+The package automatically pulls its pre-compiled hardware bitstream (`v1.5.1`) and metadata from GitHub Releases into local cache and encapsulates dual DMA receivers, XADC parallel sequencers, hardware decimators, and telemetry engines into a clean Python API:
 
 ```
  [ MAX4466 Mic 1 ] ─────────────────────────> [ PYNQ-Z2 Pin A0 (Vaux1) ]
@@ -173,7 +174,7 @@ pynq-localizer-get-notebooks
 ```python
 from pynq_localizer import MicrophoneArrayOverlay
 
-# Auto-downloads and loads the pinned v1.5.1-rc2 bitstream
+# Auto-downloads and loads the pinned v1.5.1 bitstream
 ol = MicrophoneArrayOverlay()
 
 # Launch the live interactive 3-row dashboard (auto-loads calibrated profile if present)
@@ -302,7 +303,7 @@ class MicrophoneArrayOverlay(Overlay):
     ):
         """
         Initializes the dual-microphone hardware overlay.
-        Auto-fetches the pinned v1.5.1-rc2 bitstream if bitfile_name is None.
+        Auto-fetches the pinned v1.5.1 bitstream if bitfile_name is None.
         """
         if bitfile_name is None:
             resolved_bit = str(HardwareLoader.get_overlay_path(version=version))
