@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/multipath-acoustic-calibration @ 45f3015
+• Repository State    : main @ 575a95d
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1
 • Package Version     : v1.2.0
 ==============================================================================
@@ -9,29 +9,35 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/multipath-acoustic-calibration | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: main | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
-* feat/multipath-acoustic-calibration                45f3015 docs(notebook): overhaul 02_acoustic_calibration_lab with dual-regime and multi-tone calibration
+  feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
-  main                                               633b3f0 [origin/main] docs(notebook): refactor 02_acoustic_calibration_lab into single-carrier interactive wizard
+* main                                               575a95d [origin/main] Merge branch 'feat/multipath-acoustic-calibration' into main (Release v1.2.0)
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
+  remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
-  remotes/origin/main                                633b3f0 docs(notebook): refactor 02_acoustic_calibration_lab into single-carrier interactive wizard
+  remotes/origin/main                                575a95d Merge branch 'feat/multipath-acoustic-calibration' into main (Release v1.2.0)
 
 Repository Tags & Release History:
+v1.2.0          Release v1.2.0: Dual-regime acoustic calibration suite with reflection-tolerant spatial centroid solver
 v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric distance inversion engine, and BFP-immune demodulation
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 45f3015  (HEAD -> feat/multipath-acoustic-calibration) - 2026-09-23 : docs(notebook): overhaul 02_acoustic_calibration_lab with dual-regime and multi-tone calibration (SiririComun)
-* 0301c2a  - 2026-09-23 : test(calibration): add synthetic verification suite for MultipathCalibrationProtocol (SiririComun)
-* 375ccd9  - 2026-09-23 : docs(context): update repository summary with multipath profile exporter (SiririComun)
-* 3d47b9f  - 2026-09-23 : feat(calibration): add export_profile and save_profile_json to MultipathCalibrationProtocol (SiririComun)
-* 8c01eed  - 2026-09-23 : docs(context): update repository summary with multipath calibration protocol (SiririComun)
-* b82a16e  - 2026-09-23 : feat(calibration): implement MultipathCalibrationProtocol with spatial centroid solver (SiririComun)
-* 633b3f0  (origin/main, main) - 2026-09-23 : docs(notebook): refactor 02_acoustic_calibration_lab into single-carrier interactive wizard (SiririComun)
+*   575a95d  (HEAD -> main, tag: v1.2.0, origin/main) - 2026-09-23 : Merge branch 'feat/multipath-acoustic-calibration' into main (Release v1.2.0) (SiririComun)
+|\  
+| * bf3bdab  (origin/feat/multipath-acoustic-calibration, feat/multipath-acoustic-calibration) - 2026-09-23 : chore(release): bump package version to v1.2.0 (SiririComun)
+| * 45f3015  - 2026-09-23 : docs(notebook): overhaul 02_acoustic_calibration_lab with dual-regime and multi-tone calibration (SiririComun)
+| * 0301c2a  - 2026-09-23 : test(calibration): add synthetic verification suite for MultipathCalibrationProtocol (SiririComun)
+| * 375ccd9  - 2026-09-23 : docs(context): update repository summary with multipath profile exporter (SiririComun)
+| * 3d47b9f  - 2026-09-23 : feat(calibration): add export_profile and save_profile_json to MultipathCalibrationProtocol (SiririComun)
+| * 8c01eed  - 2026-09-23 : docs(context): update repository summary with multipath calibration protocol (SiririComun)
+| * b82a16e  - 2026-09-23 : feat(calibration): implement MultipathCalibrationProtocol with spatial centroid solver (SiririComun)
+|/  
+* 633b3f0  - 2026-09-23 : docs(notebook): refactor 02_acoustic_calibration_lab into single-carrier interactive wizard (SiririComun)
 *   04f10d8  (tag: v1.1.0) - 2026-09-17 : Merge branch 'feat/fft-quadruple-telemetry-engine' into main (Release v1.1.0) (SiririComun)
 |\  
 | * c8e76e9  (origin/feat/fft-quadruple-telemetry-engine, feat/fft-quadruple-telemetry-engine) - 2026-09-17 : chore(hw): pin hardware overlay dependency to stable v1.5.1 release (SiririComun)
@@ -39,8 +45,6 @@ Multi-Branch Git Commit Graph:
 | * 25e1cc2  - 2026-09-07 : docs: update README with v1.1.0 3-row dashboard architecture and distance inversion engine (SiririComun)
 | * ca0bc19  - 2026-09-07 : docs(notebook): overhaul 01_realtime_kinematics_telemetry with 3-row dashboard and distance telemetry (SiririComun)
 | * c15bffa  - 2026-09-07 : docs(context): update repository summary and Cog configuration for 3-row dashboard telemetry (SiririComun)
-| * 9bf3b22  - 2026-09-07 : test(dashboard): add unit verification suite for 3-row layout, buffer geometry, and CSV export (SiririComun)
-| * 3bb793c  - 2026-09-07 : feat(dashboard): implement 3-row telemetry view with metric distance and BFP-immune demodulation (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -3242,12 +3246,12 @@ class HardwareLoader:
     @classmethod
     def get_overlay_path(cls, version: str = None, download_dir: str = None) -> Path:
         """
-        Detects host board, downloads matching .bit and .hwh if missing,
+        Detects host board, downloads matching .bit and .hwh if missing or invalid,
         and returns the local Path to the .bit file.
         """
         config = cls.get_hardware_config()
         repo = config.get("repo", "SiririComun/hw-xadc-dma-overlays")
-        target_version = version or config.get("version", "v1.5.0")
+        target_version = version or config.get("version", "v1.5.1")
 
         board_name = cls.get_board_name()
         bit_filename = f"{board_name}.bit"
@@ -3267,16 +3271,40 @@ class HardwareLoader:
         url_bit = f"{base_url}{bit_filename}"
         url_hwh = f"{base_url}{hwh_filename}"
 
-        if not local_bit.exists() or not local_hwh.exists():
+        # Verify whether cached files exist and satisfy minimum size thresholds
+        bit_valid = local_bit.exists() and local_bit.stat().st_size > 100_000
+        hwh_valid = local_hwh.exists() and local_hwh.stat().st_size > 10_000
+
+        if not (bit_valid and hwh_valid):
             print(f"[HardwareLoader] Target board: '{board_name}'")
             print(f"[HardwareLoader] Fetching overlay '{target_version}' from {repo}...")
+
+            # Purge stale or corrupt partial files before redownloading
+            if local_bit.exists():
+                local_bit.unlink()
+            if local_hwh.exists():
+                local_hwh.unlink()
+
             try:
                 urllib.request.urlretrieve(url_bit, local_bit)
                 urllib.request.urlretrieve(url_hwh, local_hwh)
+
+                # Post-download sanity check on file sizes
+                if not (local_bit.stat().st_size > 100_000 and local_hwh.stat().st_size > 10_000):
+                    raise ValueError(
+                        f"Downloaded files are incomplete: .bit={local_bit.stat().st_size}B, "
+                        f".hwh={local_hwh.stat().st_size}B"
+                    )
+
                 print("[HardwareLoader] Bitstream and handoff metadata downloaded.")
             except Exception as e:
+                # Clean up incomplete files so subsequent runs don't cache broken assets
+                if local_bit.exists():
+                    local_bit.unlink()
+                if local_hwh.exists():
+                    local_hwh.unlink()
                 raise RuntimeError(
-                    f"Could not download {bit_filename} from {base_url}. Check internet connection."
+                    f"Could not download {bit_filename} from {base_url}. Check internet connection or release tag."
                 ) from e
 
         return local_bit
