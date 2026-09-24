@@ -1386,3 +1386,66 @@ class MultipathCalibrationProtocol:
             }
 
         return self._fit_results
+
+    def export_profile(
+        self,
+        name: str = "Multipath_Room_Profile",
+        description: str = "Acoustic profile calibrated via spatial centroid WLS in reflective environment",
+        only_passed: bool = True
+    ) -> AcousticProfile:
+        """Constructs an AcousticProfile with certified operating bounds and system metadata."""
+        if not self._fit_results:
+            self.fit()
+
+        freqs = []
+        k_vals = []
+        r2_vals = []
+        k_errs = []
+        bounds_dict = {}
+
+        sorted_freqs = sorted(self._fit_results.keys())
+        for f in sorted_freqs:
+            res = self._fit_results[f]
+            if only_passed and not res["passed_gate"]:
+                continue
+            freqs.append(f)
+            k_vals.append(res["k"])
+            r2_vals.append(res["r_squared"])
+            k_errs.append(res["delta_k"])
+            bounds_dict[str(f)] = {
+                "r_min_m": res["r_valid_min_m"],
+                "r_max_m": res["r_valid_max_m"],
+                "v_sat_v": res["v_sat_v"],
+                "v_min_v": res["v_min_v"],
+                "c_room_v": res["c_room"],
+                "rms_ripple_v": res.get("rms_ripple_v", 0.0),
+                "standing_wave_index": res.get("standing_wave_index", 0.0)
+            }
+
+        if len(freqs) == 0:
+            raise ValueError(
+                f"No calibration points passed the R^2 >= {self.r2_threshold} quality gate."
+            )
+
+        return AcousticProfile(
+            frequencies_hz=freqs,
+            k_values=k_vals,
+            r_squared=r2_vals,
+            k_uncertainty=k_errs,
+            operational_bounds=bounds_dict,
+            system_metadata=self.system_metadata,
+            name=name,
+            description=description
+        )
+
+    def save_profile_json(
+        self,
+        filepath: Union[str, Path],
+        name: str = "Multipath_Room_Profile",
+        description: str = "Acoustic profile calibrated via spatial centroid WLS in reflective environment"
+    ) -> Path:
+        """Fits, exports, and saves calibration profile with metadata and bounds to JSON."""
+        profile = self.export_profile(name=name, description=description)
+        out_path = Path(filepath).resolve()
+        profile.to_json(out_path)
+        return out_path
