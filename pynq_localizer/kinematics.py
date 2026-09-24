@@ -15,6 +15,7 @@ import numpy as np
 
 try:
     from scipy.interpolate import interp1d
+    from scipy.optimize import curve_fit
     _HAS_SCIPY = True
 except (ImportError, ModuleNotFoundError):
     _HAS_SCIPY = False
@@ -1184,3 +1185,267 @@ class AcousticCalibrationProtocol:
         """Clears all raw measurements and fit results."""
         self._measurements.clear()
         self._fit_results.clear()
+
+# =============================================================================
+# 7. Multipath / Reflection-Aware Calibration Protocol (Two-Ray Lloyd's Mirror)
+# =============================================================================
+
+class MultipathCalibrationProtocol:
+    """
+    Multipath & Reflection-Tolerant Acoustic Calibration Protocol.
+    Sister class to AcousticCalibrationProtocol designed for reflective indoor rooms.
+    Fits the spatial centroid of interference fringes across inverse-distance space:
+    
+    V_RMS(r) = k * (1 / r) + c_room + Ripple(r)
+    
+    Extracts the true direct-wave coupling constant k and reverberation baseline c_room
+    without being penalized by standing wave antinodes/nulls or requiring free-field monotonic decay.
+    """
+
+    def __init__(
+        self,
+        r2_threshold: float = 0.80,
+        temperature_c: float = 20.0,
+        system_metadata: Optional[Dict[str, Any]] = None
+    ):
+        self.r2_threshold = float(r2_threshold)
+        self.temperature_c = float(temperature_c)
+        self.c_sound = KinematicAnalytics.speed_of_sound(self.temperature_c)
+
+        self.system_metadata = system_metadata or {
+            "speaker_volume": 0.75,
+            "mic_gain": "+35dB",
+            "environment_label": "reflective_indoor_room",
+            "temperature_c": self.temperature_c
+        }
+        self.system_metadata["calibration_regime"] = "indoor_multipath_centroid"
+
+        # Data store: {frequency_hz: {distance_m: [v_1, v_2, ..., v_N]}}
+        self._measurements: Dict[float, Dict[float, List[float]]] = {}
+        self._fit_results: Dict[float, Dict[str, Any]] = {}
+
+    def add_measurement(
+        self,
+        distance_m: float,
+        frequency_hz: float,
+        amplitude_v: Union[float, List[float], np.ndarray]
+    ):
+        """Records burst observations for a distance station (identical API to AcousticCalibrationProtocol)."""
+        r = float(distance_m)
+        f = float(frequency_hz)
+
+        if r <= 0 or not np.isfinite(r) or not np.isfinite(f):
+            return
+
+        if f not in self._measurements:
+            self._measurements[f] = {}
+        if r not in self._measurements[f]:
+            self._measurements[f][r] = []
+
+        if isinstance(amplitude_v, (list, tuple, np.ndarray)):
+            for v in amplitude_v:
+                v_flt = float(v)
+                if np.isfinite(v_flt) and v_flt > 0:
+                    self._measurements[f][r].append(v_flt)
+        else:
+            v_flt = float(amplitude_v)
+            if np.isfinite(v_flt) and v_flt > 0:
+                self._measurements[f][r].append(v_flt)
+
+    def add_dataset(
+        self,
+        distances_m: Union[List[float], np.ndarray],
+        frequencies_hz: Union[List[float], np.ndarray],
+        amplitude_matrix_v: Union[List[List[float]], np.ndarray]
+    ):
+        """Ingests a complete 2D calibration grid of distances x frequencies."""
+        r_arr = np.asarray(distances_m, dtype=np.float64)
+        f_arr = np.asarray(frequencies_hz, dtype=np.float64)
+        v_mat = np.asarray(amplitude_matrix_v, dtype=np.float64)
+
+        if v_mat.shape != (len(r_arr), len(f_arr)):
+            raise ValueError(
+                f"Shape mismatch: amplitude_matrix shape {v_mat.shape} != ({len(r_arr)}, {len(f_arr)})"
+            )
+
+        for i, r in enumerate(r_arr):
+            for j, f in enumerate(f_arr):
+                self.add_measurement(r, f, v_mat[i, j])
+
+    def clear(self):
+        """Clears all raw measurements and fit results."""
+        self._measurements.clear()
+        self._fit_results.clear()
+
+    def fit(self) -> Dict[float, Dict[str, Any]]:
+        """
+        Computes multi-sample statistics and solves for the direct-wave constant k
+        through the spatial centroid of interference fringes across inverse-distance space:
+        V(r) = k * (1 / r) + c_room
+        """
+        self._fit_results.clear()
+
+        for f, dist_dict in self._measurements.items():
+            if len(dist_dict) < 2:
+                continue
+
+            r_sorted = np.array(sorted(dist_dict.keys()), dtype=np.float64)
+            v_means = []
+            v_stds = []
+            v_sems = []
+            sample_counts = []
+
+            for r in r_sorted:
+                samples = np.array(dist_dict[r], dtype=np.float64)
+                n = len(samples)
+                mean_val = float(np.mean(samples)) if n > 0 else 0.0
+                std_val = float(np.std(samples, ddof=1)) if n > 1 else max(0.001 * mean_val, 1e-5)
+                sem_val = float(std_val / np.sqrt(n)) if n > 0 else std_val
+
+                v_means.append(mean_val)
+                v_stds.append(std_val)
+                v_sems.append(sem_val)
+                sample_counts.append(n)
+
+            v_means = np.array(v_means, dtype=np.float64)
+            v_sems = np.array(v_sems, dtype=np.float64)
+
+            # Linearized inverse domain: x = 1 / r
+            x_wls = 1.0 / r_sorted
+            y_wls = v_means
+            w_wls = 1.0 / np.maximum(v_sems ** 2, 1e-10)
+
+            # Weighted Least Squares regression for centroid slope k and intercept c_room
+            w_sum = np.sum(w_wls)
+            x_bar = np.sum(w_wls * x_wls) / w_sum
+            y_bar = np.sum(w_wls * y_wls) / w_sum
+
+            s_xx = np.sum(w_wls * (x_wls - x_bar) ** 2)
+            s_xy = np.sum(w_wls * (x_wls - x_bar) * (y_wls - y_bar))
+
+            if s_xx > 1e-12:
+                slope = float(s_xy / s_xx)
+                intercept = float(y_bar - slope * x_bar)
+            else:
+                slope = 0.0
+                intercept = float(y_bar)
+
+            # Model predictions and residuals
+            y_pred = slope * x_wls + intercept
+            ss_res = np.sum(w_wls * (y_wls - y_pred) ** 2)
+            ss_tot = np.sum(w_wls * (y_wls - y_bar) ** 2)
+
+            n_pts = len(r_sorted)
+            if ss_tot < 1e-9 or slope <= 1e-4:
+                r2 = 0.0
+                passed_gate = False
+                slope_err = float(0.05 * abs(slope))
+            else:
+                r2 = float(1.0 - (ss_res / (ss_tot + 1e-12)))
+                r2 = max(0.0, min(1.0, r2))
+                passed_gate = bool(r2 >= self.r2_threshold and slope > 1e-4)
+                s_sq = ss_res / max(n_pts - 2, 1)
+                slope_err = float(np.sqrt(s_sq / max(s_xx, 1e-12)))
+
+            # Multipath Standing Wave Severity Index (SWI) & ripple metrics
+            residuals = y_wls - y_pred
+            rms_ripple = float(np.sqrt(np.mean(residuals ** 2)))
+            max_ripple = float(np.max(np.abs(residuals)))
+            swi_ratio = float(max_ripple / max(np.mean(y_pred), 1e-6))
+
+            self._fit_results[f] = {
+                "k": float(slope),
+                "delta_k": float(slope_err),
+                "c_room": float(intercept),
+                "r_squared": float(r2),
+                "passed_gate": passed_gate,
+                "rms_ripple_v": rms_ripple,
+                "max_ripple_v": max_ripple,
+                "standing_wave_index": swi_ratio,
+                "n_points": n_pts,
+                "n_pruned_points": n_pts,  # All points retained in centroid fit
+                "n_total_points": n_pts,
+                "r_valid_min_m": float(np.min(r_sorted)),
+                "r_valid_max_m": float(np.max(r_sorted)),
+                "v_sat_v": float(np.max(v_means)),
+                "v_min_v": float(np.min(v_means)),
+                "calibration_regime": "indoor_multipath_centroid",
+                "raw_stations": [
+                    {
+                        "r_m": float(r_sorted[idx]),
+                        "mean_v": float(v_means[idx]),
+                        "std_v": float(v_stds[idx]),
+                        "sem_v": float(v_sems[idx]),
+                        "n_samples": int(sample_counts[idx]),
+                        "model_pred_v": float(y_pred[idx]),
+                        "residual_v": float(residuals[idx]),
+                        "is_pruned_in": True  # All points active
+                    }
+                    for idx in range(len(r_sorted))
+                ]
+            }
+
+        return self._fit_results
+
+    def export_profile(
+        self,
+        name: str = "Multipath_Room_Profile",
+        description: str = "Acoustic profile calibrated via spatial centroid WLS in reflective environment",
+        only_passed: bool = True
+    ) -> AcousticProfile:
+        """Constructs an AcousticProfile with certified operating bounds and system metadata."""
+        if not self._fit_results:
+            self.fit()
+
+        freqs = []
+        k_vals = []
+        r2_vals = []
+        k_errs = []
+        bounds_dict = {}
+
+        sorted_freqs = sorted(self._fit_results.keys())
+        for f in sorted_freqs:
+            res = self._fit_results[f]
+            if only_passed and not res["passed_gate"]:
+                continue
+            freqs.append(f)
+            k_vals.append(res["k"])
+            r2_vals.append(res["r_squared"])
+            k_errs.append(res["delta_k"])
+            bounds_dict[str(f)] = {
+                "r_min_m": res["r_valid_min_m"],
+                "r_max_m": res["r_valid_max_m"],
+                "v_sat_v": res["v_sat_v"],
+                "v_min_v": res["v_min_v"],
+                "c_room_v": res["c_room"],
+                "rms_ripple_v": res.get("rms_ripple_v", 0.0),
+                "standing_wave_index": res.get("standing_wave_index", 0.0)
+            }
+
+        if len(freqs) == 0:
+            raise ValueError(
+                f"No calibration points passed the R^2 >= {self.r2_threshold} quality gate."
+            )
+
+        return AcousticProfile(
+            frequencies_hz=freqs,
+            k_values=k_vals,
+            r_squared=r2_vals,
+            k_uncertainty=k_errs,
+            operational_bounds=bounds_dict,
+            system_metadata=self.system_metadata,
+            name=name,
+            description=description
+        )
+
+    def save_profile_json(
+        self,
+        filepath: Union[str, Path],
+        name: str = "Multipath_Room_Profile",
+        description: str = "Acoustic profile calibrated via spatial centroid WLS in reflective environment"
+    ) -> Path:
+        """Fits, exports, and saves calibration profile with metadata and bounds to JSON."""
+        profile = self.export_profile(name=name, description=description)
+        out_path = Path(filepath).resolve()
+        profile.to_json(out_path)
+        return out_path

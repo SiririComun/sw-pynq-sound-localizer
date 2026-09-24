@@ -8,6 +8,7 @@ from pynq_localizer.kinematics import (
     AcousticProfile,
     DistanceEstimator,
     AcousticCalibrationProtocol,
+    MultipathCalibrationProtocol,
 )
 from pynq_localizer.notebooks import copy_notebooks
 
@@ -24,7 +25,7 @@ except (ImportError, ModuleNotFoundError):
     KinematicsDashboard = None
     _HAS_PYNQ = False
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __all__ = [
     "HardwareLoader",
     "HardwareTrigger",
@@ -34,6 +35,7 @@ __all__ = [
     "AcousticProfile",
     "DistanceEstimator",
     "AcousticCalibrationProtocol",
+    "MultipathCalibrationProtocol",
     "KinematicsDashboard",
     "copy_notebooks",
 ]
