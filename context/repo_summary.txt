@@ -1,19 +1,19 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/multipath-acoustic-calibration @ 0301c2a
+• Repository State    : feat/multipath-acoustic-calibration @ 45f3015
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1
-• Package Version     : v1.1.0
+• Package Version     : v1.2.0
 ==============================================================================
 
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/multipath-acoustic-calibration | Working Tree: Dirty (1 modified/untracked files)
+Current Branch: feat/multipath-acoustic-calibration | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
-* feat/multipath-acoustic-calibration                0301c2a test(calibration): add synthetic verification suite for MultipathCalibrationProtocol
+* feat/multipath-acoustic-calibration                45f3015 docs(notebook): overhaul 02_acoustic_calibration_lab with dual-regime and multi-tone calibration
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               633b3f0 [origin/main] docs(notebook): refactor 02_acoustic_calibration_lab into single-carrier interactive wizard
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
@@ -25,7 +25,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 0301c2a  (HEAD -> feat/multipath-acoustic-calibration) - 2026-09-23 : test(calibration): add synthetic verification suite for MultipathCalibrationProtocol (SiririComun)
+* 45f3015  (HEAD -> feat/multipath-acoustic-calibration) - 2026-09-23 : docs(notebook): overhaul 02_acoustic_calibration_lab with dual-regime and multi-tone calibration (SiririComun)
+* 0301c2a  - 2026-09-23 : test(calibration): add synthetic verification suite for MultipathCalibrationProtocol (SiririComun)
 * 375ccd9  - 2026-09-23 : docs(context): update repository summary with multipath profile exporter (SiririComun)
 * 3d47b9f  - 2026-09-23 : feat(calibration): add export_profile and save_profile_json to MultipathCalibrationProtocol (SiririComun)
 * 8c01eed  - 2026-09-23 : docs(context): update repository summary with multipath calibration protocol (SiririComun)
@@ -40,7 +41,6 @@ Multi-Branch Git Commit Graph:
 | * c15bffa  - 2026-09-07 : docs(context): update repository summary and Cog configuration for 3-row dashboard telemetry (SiririComun)
 | * 9bf3b22  - 2026-09-07 : test(dashboard): add unit verification suite for 3-row layout, buffer geometry, and CSV export (SiririComun)
 | * 3bb793c  - 2026-09-07 : feat(dashboard): implement 3-row telemetry view with metric distance and BFP-immune demodulation (SiririComun)
-| * a6bb1b5  - 2026-09-05 : docs(notebook): overhaul 02_acoustic_calibration_lab with WLS diagnostics, N=30 statistics, and 14x26 master grid (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -251,7 +251,7 @@ except (ImportError, ModuleNotFoundError):
     KinematicsDashboard = None
     _HAS_PYNQ = False
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __all__ = [
     "HardwareLoader",
     "HardwareTrigger",
@@ -3356,7 +3356,7 @@ if os.path.exists("README.md"):
 
 setup(
     name="pynq-sound-localizer",
-    version="1.1.0",
+    version="1.2.0",
     author="Juan Pablo Sánchez (SiririComun)",
     description="FPGA-Accelerated Acoustic Kinematics, Doppler Tracking & Direction-of-Arrival Sound Localizer for PYNQ-Z2",
     long_description=long_description,
