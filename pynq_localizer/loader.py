@@ -62,12 +62,12 @@ class HardwareLoader:
     @classmethod
     def get_overlay_path(cls, version: str = None, download_dir: str = None) -> Path:
         """
-        Detects host board, downloads matching .bit and .hwh if missing,
+        Detects host board, downloads matching .bit and .hwh if missing or invalid,
         and returns the local Path to the .bit file.
         """
         config = cls.get_hardware_config()
         repo = config.get("repo", "SiririComun/hw-xadc-dma-overlays")
-        target_version = version or config.get("version", "v1.5.0")
+        target_version = version or config.get("version", "v1.5.1")
 
         board_name = cls.get_board_name()
         bit_filename = f"{board_name}.bit"
@@ -87,16 +87,40 @@ class HardwareLoader:
         url_bit = f"{base_url}{bit_filename}"
         url_hwh = f"{base_url}{hwh_filename}"
 
-        if not local_bit.exists() or not local_hwh.exists():
+        # Verify whether cached files exist and satisfy minimum size thresholds
+        bit_valid = local_bit.exists() and local_bit.stat().st_size > 100_000
+        hwh_valid = local_hwh.exists() and local_hwh.stat().st_size > 10_000
+
+        if not (bit_valid and hwh_valid):
             print(f"[HardwareLoader] Target board: '{board_name}'")
             print(f"[HardwareLoader] Fetching overlay '{target_version}' from {repo}...")
+
+            # Purge stale or corrupt partial files before redownloading
+            if local_bit.exists():
+                local_bit.unlink()
+            if local_hwh.exists():
+                local_hwh.unlink()
+
             try:
                 urllib.request.urlretrieve(url_bit, local_bit)
                 urllib.request.urlretrieve(url_hwh, local_hwh)
+
+                # Post-download sanity check on file sizes
+                if not (local_bit.stat().st_size > 100_000 and local_hwh.stat().st_size > 10_000):
+                    raise ValueError(
+                        f"Downloaded files are incomplete: .bit={local_bit.stat().st_size}B, "
+                        f".hwh={local_hwh.stat().st_size}B"
+                    )
+
                 print("[HardwareLoader] Bitstream and handoff metadata downloaded.")
             except Exception as e:
+                # Clean up incomplete files so subsequent runs don't cache broken assets
+                if local_bit.exists():
+                    local_bit.unlink()
+                if local_hwh.exists():
+                    local_hwh.unlink()
                 raise RuntimeError(
-                    f"Could not download {bit_filename} from {base_url}. Check internet connection."
+                    f"Could not download {bit_filename} from {base_url}. Check internet connection or release tag."
                 ) from e
 
         return local_bit
