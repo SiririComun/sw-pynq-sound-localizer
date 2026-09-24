@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : main @ 704ee75
+• Repository State    : main @ dac6836
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1
 • Package Version     : v1.2.0
 ==============================================================================
@@ -9,17 +9,17 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: main | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: main | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
-* main                                               704ee75 [origin/main] chore(context): regenerate repository summary after loader hardening
+* main                                               dac6836 [origin/main: ahead 1] feat(profiles): add certified active buzzer 2610 Hz characterization profile
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
-  remotes/origin/main                                704ee75 chore(context): regenerate repository summary after loader hardening
+  remotes/origin/main                                ffb0838 chore(context): regenerate repository summary after sinc scale fix
 
 Repository Tags & Release History:
 v1.2.0          Release v1.2.0: Dual-regime acoustic calibration suite with reflection-tolerant spatial centroid solver
@@ -27,7 +27,10 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 704ee75  (HEAD -> main, origin/main) - 2026-09-24 : chore(context): regenerate repository summary after loader hardening (SiririComun)
+* dac6836  (HEAD -> main) - 2026-09-24 : feat(profiles): add certified active buzzer 2610 Hz characterization profile (SiririComun)
+* ffb0838  (origin/main) - 2026-09-24 : chore(context): regenerate repository summary after sinc scale fix (SiririComun)
+* a534058  - 2026-09-24 : fix(dashboard): rectify sinc peak estimator input scale to linear magnitude (SiririComun)
+* 704ee75  - 2026-09-24 : chore(context): regenerate repository summary after loader hardening (SiririComun)
 * 86ec8c5  - 2026-09-24 : fix(loader): harden overlay retrieval with file size guards and bump fallback to v1.5.1 (SiririComun)
 *   575a95d  (tag: v1.2.0) - 2026-09-23 : Merge branch 'feat/multipath-acoustic-calibration' into main (Release v1.2.0) (SiririComun)
 |\  
@@ -41,10 +44,7 @@ Multi-Branch Git Commit Graph:
 |/  
 * 633b3f0  - 2026-09-23 : docs(notebook): refactor 02_acoustic_calibration_lab into single-carrier interactive wizard (SiririComun)
 *   04f10d8  (tag: v1.1.0) - 2026-09-17 : Merge branch 'feat/fft-quadruple-telemetry-engine' into main (Release v1.1.0) (SiririComun)
-|\  
-| * c8e76e9  (origin/feat/fft-quadruple-telemetry-engine, feat/fft-quadruple-telemetry-engine) - 2026-09-17 : chore(hw): pin hardware overlay dependency to stable v1.5.1 release (SiririComun)
-| * 7ba0246  - 2026-09-07 : chore(release): bump package version to v1.1.0 (SiririComun)
-| * 25e1cc2  - 2026-09-07 : docs: update README with v1.1.0 3-row dashboard architecture and distance inversion engine (SiririComun)
+|\
 ```
 
 LICENSE: (LICENSE)
