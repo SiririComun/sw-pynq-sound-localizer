@@ -32,7 +32,6 @@ def generate_synthetic_polar_frame(
 
     return freq_axis, magnitude, phase_rad
 
-
 class TestQuadrupleEngine:
 
     def test_sub_hertz_pitch_accuracy(self):
@@ -57,6 +56,49 @@ class TestQuadrupleEngine:
         print(f"\n[Test] True f={f_true} Hz | Estimated f={f_est:.3f} Hz | Error={freq_error:.3f} Hz")
         # Sub-Hertz precision threshold (< 0.25 Hz error with N=2048 at 50 kSPS)
         assert freq_error < 0.25, f"Pitch error too high: {freq_error} Hz"
+
+    def test_sinc_pitch_linear_vs_db_scale_accuracy(self):
+        """
+        Verify that feeding linear magnitude to track_sub_hertz_pitch() achieves
+        sub-Hertz accuracy (< 0.05 Hz), while feeding decibel (dB) magnitude introduces
+        significant non-linear estimation bias.
+        """
+        fs = 50_000.0
+        n_fft = 2048
+        delta_f = fs / n_fft  # 24.4140625 Hz
+        bin_center = 100
+        # Synthesize tone at fractional offset delta = +0.35 bins (~2449.61 Hz)
+        f_true = (bin_center + 0.35) * delta_f
+
+        t = np.arange(n_fft) / fs
+        tone = 0.5 * np.cos(2.0 * np.pi * f_true * t)
+
+        # Compute linear spectrum
+        X = np.fft.rfft(tone)
+        mag_linear = np.abs(X) / (n_fft / 2.0)
+        freq_axis = np.fft.rfftfreq(n_fft, d=1.0 / fs)
+
+        # 1. Estimate using linear magnitude (CORRECT)
+        f_est_linear, _ = KinematicAnalytics.track_sub_hertz_pitch(
+            freq_axis, mag_linear, min_freq_hz=2000.0, max_freq_hz=3000.0, interpolate=True
+        )
+        err_linear = abs(f_est_linear - f_true)
+
+        # 2. Estimate using decibel magnitude (THE BUGGY S-CURVE BIAS)
+        mag_db = 20.0 * np.log10(np.maximum(mag_linear, 1e-6))
+        f_est_db, _ = KinematicAnalytics.track_sub_hertz_pitch(
+            freq_axis, mag_db, min_freq_hz=2000.0, max_freq_hz=3000.0, interpolate=True
+        )
+        err_db = abs(f_est_db - f_true)
+
+        print(f"\n[Sinc Test] True f: {f_true:.3f} Hz")
+        print(f"[Sinc Test] Linear error: {err_linear:.4f} Hz")
+        print(f"[Sinc Test] dB scale error: {err_db:.4f} Hz")
+
+        # Linear magnitude must achieve sub-Hertz precision
+        assert err_linear < 0.05, f"Linear estimation error too high: {err_linear} Hz"
+        # Demonstrate that dB scale produces substantially worse distortion
+        assert err_db > err_linear, "Expected dB scale to have higher estimation error than linear!"
 
     def test_phase_extraction_accuracy(self):
         """Verify phase angle recovery across multiple quadrants."""

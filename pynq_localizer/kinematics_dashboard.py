@@ -504,18 +504,16 @@ class KinematicsDashboard:
                     f_min = float(self.f_min_input.value)
                     f_max = float(self.f_max_input.value)
 
-                    # 1. Channel 1 (A0) Pitch Tracking (2048-point STFT)
+                    # 1. Channel 1 (A0) Pitch Tracking (Linear 2048-point STFT)
                     if amp_a0 >= squelch and len(x_ac_a0) >= 128:
                         pad_len = self.win_len - len(x_ac_a0)
                         p0 = np.pad(x_ac_a0, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a0[:self.win_len]
-                        mag_db0 = 20.0 * np.log10(
-                            np.maximum(
-                                (np.abs(np.fft.rfft(p0 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4),
-                                1e-6
-                            )
-                        )
+                        
+                        # Correct: Extract linear magnitude for exact sinc ratio peak estimator
+                        mag_linear0 = (np.abs(np.fft.rfft(p0 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4)
+                        
                         raw_f0_a0, _ = KinematicAnalytics.track_sub_hertz_pitch(
-                            self.freq_axis, mag_db0, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True
+                            self.freq_axis, mag_linear0, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True
                         )
 
                         # Moving Median Filter
@@ -549,18 +547,16 @@ class KinematicsDashboard:
                         st_a0 = "SILENCE"
                         self._hist_f0_a0.clear()
 
-                    # 2. Channel 2 (A1) Pitch Tracking (2048-point STFT)
+                    # 2. Channel 2 (A1) Pitch Tracking (Linear 2048-point STFT)
                     if amp_a1 >= squelch and len(x_ac_a1) >= 128:
                         pad_len = self.win_len - len(x_ac_a1)
                         p1 = np.pad(x_ac_a1, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a1[:self.win_len]
-                        mag_db1 = 20.0 * np.log10(
-                            np.maximum(
-                                (np.abs(np.fft.rfft(p1 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4),
-                                1e-6
-                            )
-                        )
+                        
+                        # Correct: Extract linear magnitude for exact sinc ratio peak estimator
+                        mag_linear1 = (np.abs(np.fft.rfft(p1 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4)
+                        
                         raw_f0_a1, _ = KinematicAnalytics.track_sub_hertz_pitch(
-                            self.freq_axis, mag_db1, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True
+                            self.freq_axis, mag_linear1, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True
                         )
 
                         # Moving Median Filter
@@ -637,7 +633,7 @@ class KinematicsDashboard:
             dma.mmio.write(0x30, 0x04)
             if trig:
                 trig.disarm()
-
+                
     # =========================================================================
     # Thread 2: UI Consumer (Smart Active-Tab 30 FPS Render)
     # =========================================================================
