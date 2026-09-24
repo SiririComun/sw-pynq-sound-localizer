@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/multipath-acoustic-calibration @ 633b3f0
+• Repository State    : feat/multipath-acoustic-calibration @ 8c01eed
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1
 • Package Version     : v1.1.0
 ==============================================================================
@@ -9,11 +9,11 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/multipath-acoustic-calibration | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: feat/multipath-acoustic-calibration | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
-* feat/multipath-acoustic-calibration                633b3f0 docs(notebook): refactor 02_acoustic_calibration_lab into single-carrier interactive wizard
+* feat/multipath-acoustic-calibration                8c01eed docs(context): update repository summary with multipath calibration protocol
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               633b3f0 [origin/main] docs(notebook): refactor 02_acoustic_calibration_lab into single-carrier interactive wizard
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
@@ -25,7 +25,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 633b3f0  (HEAD -> feat/multipath-acoustic-calibration, origin/main, main) - 2026-09-23 : docs(notebook): refactor 02_acoustic_calibration_lab into single-carrier interactive wizard (SiririComun)
+* 8c01eed  (HEAD -> feat/multipath-acoustic-calibration) - 2026-09-23 : docs(context): update repository summary with multipath calibration protocol (SiririComun)
+* b82a16e  - 2026-09-23 : feat(calibration): implement MultipathCalibrationProtocol with spatial centroid solver (SiririComun)
+* 633b3f0  (origin/main, main) - 2026-09-23 : docs(notebook): refactor 02_acoustic_calibration_lab into single-carrier interactive wizard (SiririComun)
 *   04f10d8  (tag: v1.1.0) - 2026-09-17 : Merge branch 'feat/fft-quadruple-telemetry-engine' into main (Release v1.1.0) (SiririComun)
 |\  
 | * c8e76e9  (origin/feat/fft-quadruple-telemetry-engine, feat/fft-quadruple-telemetry-engine) - 2026-09-17 : chore(hw): pin hardware overlay dependency to stable v1.5.1 release (SiririComun)
@@ -39,8 +41,6 @@ Multi-Branch Git Commit Graph:
 | * 0c5c057  - 2026-09-05 : docs(context): update repository summary with calibrated WLS and power-law pruner (SiririComun)
 | * e3a4a26  - 2026-09-05 : test(calibration): update unit test suites for WLS regression, power-law pruning, and operational bounds (SiririComun)
 | * 53b30e6  - 2026-09-05 : feat(dsp): implement power-law penalty scoring in dynamic boundary pruner for AcousticCalibrationProtocol (SiririComun)
-| * d482201  - 2026-09-05 : feat(dsp): refactor AcousticCalibrationProtocol with WLS regression, dynamic boundary pruning, and metadata tracking (SiririComun)
-| * a2acb8c  - 2026-09-03 : docs(context): update repository summary and Cog configuration with calibration suite (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -2355,6 +2355,69 @@ class MultipathCalibrationProtocol:
             }
 
         return self._fit_results
+
+    def export_profile(
+        self,
+        name: str = "Multipath_Room_Profile",
+        description: str = "Acoustic profile calibrated via spatial centroid WLS in reflective environment",
+        only_passed: bool = True
+    ) -> AcousticProfile:
+        """Constructs an AcousticProfile with certified operating bounds and system metadata."""
+        if not self._fit_results:
+            self.fit()
+
+        freqs = []
+        k_vals = []
+        r2_vals = []
+        k_errs = []
+        bounds_dict = {}
+
+        sorted_freqs = sorted(self._fit_results.keys())
+        for f in sorted_freqs:
+            res = self._fit_results[f]
+            if only_passed and not res["passed_gate"]:
+                continue
+            freqs.append(f)
+            k_vals.append(res["k"])
+            r2_vals.append(res["r_squared"])
+            k_errs.append(res["delta_k"])
+            bounds_dict[str(f)] = {
+                "r_min_m": res["r_valid_min_m"],
+                "r_max_m": res["r_valid_max_m"],
+                "v_sat_v": res["v_sat_v"],
+                "v_min_v": res["v_min_v"],
+                "c_room_v": res["c_room"],
+                "rms_ripple_v": res.get("rms_ripple_v", 0.0),
+                "standing_wave_index": res.get("standing_wave_index", 0.0)
+            }
+
+        if len(freqs) == 0:
+            raise ValueError(
+                f"No calibration points passed the R^2 >= {self.r2_threshold} quality gate."
+            )
+
+        return AcousticProfile(
+            frequencies_hz=freqs,
+            k_values=k_vals,
+            r_squared=r2_vals,
+            k_uncertainty=k_errs,
+            operational_bounds=bounds_dict,
+            system_metadata=self.system_metadata,
+            name=name,
+            description=description
+        )
+
+    def save_profile_json(
+        self,
+        filepath: Union[str, Path],
+        name: str = "Multipath_Room_Profile",
+        description: str = "Acoustic profile calibrated via spatial centroid WLS in reflective environment"
+    ) -> Path:
+        """Fits, exports, and saves calibration profile with metadata and bounds to JSON."""
+        profile = self.export_profile(name=name, description=description)
+        out_path = Path(filepath).resolve()
+        profile.to_json(out_path)
+        return out_path
 ```
 
 kinematics_dashboard.py: (pynq_localizer/kinematics_dashboard.py)
