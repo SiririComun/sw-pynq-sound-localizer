@@ -52,6 +52,8 @@ class KinematicsDashboard:
         profile: Optional[Union[AcousticProfile, str, Path]] = None,
         k_constant: Optional[float] = None,
         estimator: Optional[DistanceEstimator] = None,
+        aoa_mic_distance_m: float = 0.05,
+        aoa_estimator: Optional[Any] = None,
     ):
         self.overlay = overlay
         self.window_duration_sec = float(window_duration_sec)
@@ -62,7 +64,7 @@ class KinematicsDashboard:
         self.pts_per_sec = int(1000.0 / self.hop_ms)
         self.buffer_len = int(self.window_duration_sec * self.pts_per_sec)
 
-        # Thread-safe rolling ring buffers for BOTH channels (Amplitudes stored in Volts)
+        # Thread-safe rolling ring buffers for BOTH channels (Amplitudes in Volts)
         self.t_axis = np.linspace(-self.window_duration_sec, 0.0, self.buffer_len)
         self.buf_amp_a0 = np.zeros(self.buffer_len, dtype=np.float64)
         self.buf_freq_a0 = np.full(self.buffer_len, np.nan, dtype=np.float64)
@@ -73,6 +75,11 @@ class KinematicsDashboard:
         self.buf_freq_a1 = np.full(self.buffer_len, np.nan, dtype=np.float64)
         self.buf_dist_a1 = np.full(self.buffer_len, np.nan, dtype=np.float64)       # in cm
         self.buf_disterr_a1 = np.full(self.buffer_len, np.nan, dtype=np.float64)    # in cm
+
+        # Thread-safe rolling ring buffers for Angle of Arrival (AoA in degrees)
+        self.buf_aoa_deg = np.full(self.buffer_len, np.nan, dtype=np.float64)
+        self.buf_aoa_err = np.full(self.buffer_len, np.nan, dtype=np.float64)
+        self.aoa_mic_distance_m = float(aoa_mic_distance_m)
 
         self._buf_lock = threading.Lock()
 
@@ -114,6 +121,21 @@ class KinematicsDashboard:
         else:
             self.estimator = DistanceEstimator(k_constant=0.050, noise_gate_v=0.003)
 
+        # Angle of Arrival Estimator Initialization
+        from pynq_localizer.kinematics import AngleOfArrivalEstimator
+        if aoa_estimator is not None:
+            self.aoa_estimator = aoa_estimator
+        elif Path("profiles/active_buzzer_2610hz.json").exists():
+            self.aoa_estimator = AngleOfArrivalEstimator(
+                mic_distance_m=self.aoa_mic_distance_m,
+                profile="profiles/active_buzzer_2610hz.json"
+            )
+        else:
+            self.aoa_estimator = AngleOfArrivalEstimator(
+                mic_distance_m=self.aoa_mic_distance_m,
+                target_freq_hz=2609.73
+            )
+
         # Threading state
         self._is_running = False
         self._dsp_thread: Optional[threading.Thread] = None
@@ -129,6 +151,9 @@ class KinematicsDashboard:
         self._cur_f0_a1 = np.nan
         self._cur_dist_a1 = np.nan
         self._cur_disterr_a1 = np.nan
+
+        self._cur_aoa_deg = np.nan
+        self._cur_aoa_err = np.nan
 
         if self.overlay and hasattr(self.overlay, "trigger"):
             self.trigger = self.overlay.trigger
@@ -294,6 +319,38 @@ class KinematicsDashboard:
         self.tabs.set_title(1, "🎙 Mic 2 (A1)")
         self.tabs.set_title(2, "🔀 Dual Overlay")
 
+        # ---------------------------------------------------------------------
+        # Tab 4: Direction of Arrival (AoA Bearing Angle)
+        # ---------------------------------------------------------------------
+        self.fig_aoa = make_subplots(
+            rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
+            subplot_titles=(
+                "<b>Real-Time Incident Bearing Angle θ(t) [Degrees]</b>",
+                "<b>Dual-Channel Complex Coherence γ_01(t) [0.0 - 1.0]</b>"
+            )
+        )
+        self.fig_aoa = go.FigureWidget(self.fig_aoa)
+        # Row 1: Angle + Confidence Band
+        self.fig_aoa.add_scatter(x=self.t_axis, y=self.buf_aoa_deg, mode="lines", line=dict(width=0.5, color="rgba(0, 229, 255, 0.3)", dash="dot"), showlegend=False, name="+δθ", row=1, col=1)
+        self.fig_aoa.add_scatter(x=self.t_axis, y=self.buf_aoa_deg, mode="lines", line=dict(width=0.5, color="rgba(0, 229, 255, 0.3)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 229, 255, 0.18)", name="±δθ Band", row=1, col=1)
+        self.fig_aoa.add_scatter(x=self.t_axis, y=self.buf_aoa_deg, mode="lines+markers", line=dict(color="#00E5FF", width=2.0), marker=dict(size=4), name="Bearing θ (deg)", row=1, col=1)
+        self.fig_aoa.add_hline(y=0.0, line=dict(color="gray", dash="dash"), annotation_text="Broadside (0°)", row=1, col=1)
+
+        # Row 2: Coherence
+        self.fig_aoa.add_scatter(x=self.t_axis, y=np.zeros_like(self.t_axis), mode="lines", line=dict(color="#76FF03", width=1.8), name="Coherence γ", row=2, col=1)
+
+        self.fig_aoa.update_layout(template="plotly_dark", height=700, margin=dict(l=55, r=25, t=40, b=30), uirevision="aoa")
+        self.fig_aoa.update_yaxes(range=[-90, 90], title="Bearing Angle (°)", row=1, col=1)
+        self.fig_aoa.update_yaxes(range=[0, 1.05], title="Coherence", row=2, col=1)
+        self.fig_aoa.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=2, col=1)
+
+        # Assemble Tabs Container
+        self.tabs = widgets.Tab(children=[self.fig_mic1, self.fig_mic2, self.fig_dual, self.fig_aoa])
+        self.tabs.set_title(0, "🎙 Mic 1 (A0)")
+        self.tabs.set_title(1, "🎙 Mic 2 (A1)")
+        self.tabs.set_title(2, "🔀 Dual Overlay")
+        self.tabs.set_title(3, "🧭 Direction of Arrival")
+
     def _setup_callbacks(self):
         self.start_btn.on_click(lambda _: self.start())
         self.stop_btn.on_click(lambda _: self.stop())
@@ -342,10 +399,21 @@ class KinematicsDashboard:
         valid = np.isfinite(dist)
         return t[valid], dist[valid], disterr[valid]
 
+    def get_aoa_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Retrieves clean, non-NaN (time_sec, aoa_bearing_deg, aoa_err_deg) arrays.
+        """
+        with self._buf_lock:
+            t = np.copy(self.t_axis)
+            aoa = np.copy(self.buf_aoa_deg)
+            err = np.copy(self.buf_aoa_err)
+        valid = np.isfinite(aoa)
+        return t[valid], aoa[valid], err[valid]
+
     def export_csv(self, filename: Optional[str] = None, clean_silence: bool = True) -> str:
         """
         Exports the synchronized 10-second rolling buffer to a CSV file.
-        Includes amplitudes, frequencies, and inverted metric distances for both channels.
+        Includes amplitudes, frequencies, inverted metric distances, and AoA bearings.
         """
         if filename is None:
             ts = time.strftime("%Y%m%d_%H%M%S")
@@ -365,9 +433,12 @@ class KinematicsDashboard:
             a1_dist = np.copy(self.buf_dist_a1)
             a1_disterr = np.copy(self.buf_disterr_a1)
 
+            aoa_deg = np.copy(self.buf_aoa_deg)
+            aoa_err = np.copy(self.buf_aoa_err)
+
         if clean_silence:
-            # Keep rows where at least one channel detected active pitch
-            valid_mask = np.isfinite(a0_freq) | np.isfinite(a1_freq)
+            # Keep rows where at least one channel detected active pitch or AoA
+            valid_mask = np.isfinite(a0_freq) | np.isfinite(a1_freq) | np.isfinite(aoa_deg)
             if np.sum(valid_mask) == 0:
                 valid_mask = (a0_amp >= float(self.squelch_slider.value)) | (a1_amp >= float(self.squelch_slider.value))
 
@@ -382,12 +453,16 @@ class KinematicsDashboard:
             a1_dist = a1_dist[valid_mask]
             a1_disterr = a1_disterr[valid_mask]
 
+            aoa_deg = aoa_deg[valid_mask]
+            aoa_err = aoa_err[valid_mask]
+
         data_matrix = np.column_stack([
             t,
             a0_amp, a0_freq, a0_dist, a0_disterr,
-            a1_amp, a1_freq, a1_dist, a1_disterr
+            a1_amp, a1_freq, a1_dist, a1_disterr,
+            aoa_deg, aoa_err
         ])
-        header = "time_sec,a0_amp_v,a0_freq_hz,a0_dist_cm,a0_dist_err_cm,a1_amp_v,a1_freq_hz,a1_dist_cm,a1_dist_err_cm"
+        header = "time_sec,a0_amp_v,a0_freq_hz,a0_dist_cm,a0_dist_err_cm,a1_amp_v,a1_freq_hz,a1_dist_cm,a1_dist_err_cm,aoa_deg,aoa_err_deg"
 
         np.savetxt(
             out_path,
@@ -395,7 +470,7 @@ class KinematicsDashboard:
             delimiter=",",
             header=header,
             comments="",
-            fmt="%.4f,%.4f,%.2f,%.2f,%.2f,%.4f,%.2f,%.2f,%.2f"
+            fmt="%.4f,%.4f,%.2f,%.2f,%.2f,%.4f,%.2f,%.2f,%.2f,%.2f,%.2f"
         )
 
         tag = "Clean (No NaNs)" if clean_silence else "Full Rolling Buffer"
@@ -418,6 +493,9 @@ class KinematicsDashboard:
             self.buf_freq_a1.fill(np.nan)
             self.buf_dist_a1.fill(np.nan)
             self.buf_disterr_a1.fill(np.nan)
+
+            self.buf_aoa_deg.fill(np.nan)
+            self.buf_aoa_err.fill(np.nan)
 
             self._hist_f0_a0.clear()
             self._hist_f0_a1.clear()
@@ -449,6 +527,11 @@ class KinematicsDashboard:
                 self.fig_dual.data[8].y = self.buf_dist_a1
                 self.fig_dual.data[9].y = self.buf_dist_a1
                 self.fig_dual.data[10].y = self.buf_dist_a1
+        elif active_tab == 3 and hasattr(self, "fig_aoa"):
+            with self.fig_aoa.batch_update():
+                self.fig_aoa.data[0].y = self.buf_aoa_deg
+                self.fig_aoa.data[1].y = self.buf_aoa_deg
+                self.fig_aoa.data[2].y = self.buf_aoa_deg
 
     # =========================================================================
     # Thread 1: Fast Producer (Drains Hardware DMA & Computes DSP at 100 Hz)
@@ -508,10 +591,7 @@ class KinematicsDashboard:
                     if amp_a0 >= squelch and len(x_ac_a0) >= 128:
                         pad_len = self.win_len - len(x_ac_a0)
                         p0 = np.pad(x_ac_a0, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a0[:self.win_len]
-                        
-                        # Correct: Extract linear magnitude for exact sinc ratio peak estimator
                         mag_linear0 = (np.abs(np.fft.rfft(p0 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4)
-                        
                         raw_f0_a0, _ = KinematicAnalytics.track_sub_hertz_pitch(
                             self.freq_axis, mag_linear0, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True
                         )
@@ -551,10 +631,7 @@ class KinematicsDashboard:
                     if amp_a1 >= squelch and len(x_ac_a1) >= 128:
                         pad_len = self.win_len - len(x_ac_a1)
                         p1 = np.pad(x_ac_a1, (0, pad_len), mode="constant") if pad_len > 0 else x_ac_a1[:self.win_len]
-                        
-                        # Correct: Extract linear magnitude for exact sinc ratio peak estimator
                         mag_linear1 = (np.abs(np.fft.rfft(p1 * self.stft_win)) / (self.win_len / 2.0)) / max(self.coherent_gain, 1e-4)
-                        
                         raw_f0_a1, _ = KinematicAnalytics.track_sub_hertz_pitch(
                             self.freq_axis, mag_linear1, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True
                         )
@@ -590,6 +667,21 @@ class KinematicsDashboard:
                         st_a1 = "SILENCE"
                         self._hist_f0_a1.clear()
 
+                    # 3. Angle of Arrival (AoA) Extraction
+                    if (amp_a0 >= squelch or amp_a1 >= squelch) and len(v_a0) >= 128:
+                        f_aoa = f0_a0 if np.isfinite(f0_a0) else f0_a1
+                        aoa_res = self.aoa_estimator.estimate_angle(
+                            v_a0=v_a0,
+                            v_a1=v_a1,
+                            fs=self.fs_per_ch,
+                            f_target=f_aoa
+                        )
+                        cur_aoa_deg = aoa_res["theta_deg"]
+                        cur_aoa_err = aoa_res["theta_err_deg"]
+                    else:
+                        cur_aoa_deg = np.nan
+                        cur_aoa_err = np.nan
+
                     self._cur_amp_a0 = a_true_a0
                     self._cur_f0_a0 = f0_a0
                     self._cur_dist_a0 = r_cm_a0
@@ -599,6 +691,9 @@ class KinematicsDashboard:
                     self._cur_f0_a1 = f0_a1
                     self._cur_dist_a1 = r_cm_a1
                     self._cur_disterr_a1 = r_err_cm_a1
+
+                    self._cur_aoa_deg = cur_aoa_deg
+                    self._cur_aoa_err = cur_aoa_err
 
                     with self._buf_lock:
                         self.buf_amp_a0[:-1] = self.buf_amp_a0[1:]
@@ -624,6 +719,12 @@ class KinematicsDashboard:
 
                         self.buf_disterr_a1[:-1] = self.buf_disterr_a1[1:]
                         self.buf_disterr_a1[-1] = r_err_cm_a1
+
+                        self.buf_aoa_deg[:-1] = self.buf_aoa_deg[1:]
+                        self.buf_aoa_deg[-1] = cur_aoa_deg
+
+                        self.buf_aoa_err[:-1] = self.buf_aoa_err[1:]
+                        self.buf_aoa_err[-1] = cur_aoa_err
                 else:
                     time.sleep(0.001)
 
