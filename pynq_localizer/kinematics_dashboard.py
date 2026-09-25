@@ -313,14 +313,8 @@ class KinematicsDashboard:
         self.fig_dual.update_yaxes(range=[0, 150], title="Distance (cm)", row=3, col=1)
         self.fig_dual.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=3, col=1)
 
-        # Assemble Tabs Container
-        self.tabs = widgets.Tab(children=[self.fig_mic1, self.fig_mic2, self.fig_dual])
-        self.tabs.set_title(0, "🎙 Mic 1 (A0)")
-        self.tabs.set_title(1, "🎙 Mic 2 (A1)")
-        self.tabs.set_title(2, "🔀 Dual Overlay")
-
         # ---------------------------------------------------------------------
-        # Tab 4: Direction of Arrival (AoA Bearing Angle)
+        # Tab 4: Direction of Arrival (AoA Bearing Angle θ)
         # ---------------------------------------------------------------------
         self.fig_aoa = make_subplots(
             rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
@@ -330,13 +324,13 @@ class KinematicsDashboard:
             )
         )
         self.fig_aoa = go.FigureWidget(self.fig_aoa)
-        # Row 1: Angle + Confidence Band
+        # Row 1: Bearing Angle + Confidence Band (Traces 0, 1, 2)
         self.fig_aoa.add_scatter(x=self.t_axis, y=self.buf_aoa_deg, mode="lines", line=dict(width=0.5, color="rgba(0, 229, 255, 0.3)", dash="dot"), showlegend=False, name="+δθ", row=1, col=1)
         self.fig_aoa.add_scatter(x=self.t_axis, y=self.buf_aoa_deg, mode="lines", line=dict(width=0.5, color="rgba(0, 229, 255, 0.3)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 229, 255, 0.18)", name="±δθ Band", row=1, col=1)
         self.fig_aoa.add_scatter(x=self.t_axis, y=self.buf_aoa_deg, mode="lines+markers", line=dict(color="#00E5FF", width=2.0), marker=dict(size=4), name="Bearing θ (deg)", row=1, col=1)
         self.fig_aoa.add_hline(y=0.0, line=dict(color="gray", dash="dash"), annotation_text="Broadside (0°)", row=1, col=1)
 
-        # Row 2: Coherence
+        # Row 2: Coherence (Trace 3)
         self.fig_aoa.add_scatter(x=self.t_axis, y=np.zeros_like(self.t_axis), mode="lines", line=dict(color="#76FF03", width=1.8), name="Coherence γ", row=2, col=1)
 
         self.fig_aoa.update_layout(template="plotly_dark", height=700, margin=dict(l=55, r=25, t=40, b=30), uirevision="aoa")
@@ -344,7 +338,7 @@ class KinematicsDashboard:
         self.fig_aoa.update_yaxes(range=[0, 1.05], title="Coherence", row=2, col=1)
         self.fig_aoa.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=2, col=1)
 
-        # Assemble Tabs Container
+        # Assemble Tabs Container (4 Tabs)
         self.tabs = widgets.Tab(children=[self.fig_mic1, self.fig_mic2, self.fig_dual, self.fig_aoa])
         self.tabs.set_title(0, "🎙 Mic 1 (A0)")
         self.tabs.set_title(1, "🎙 Mic 2 (A1)")
@@ -755,6 +749,9 @@ class KinematicsDashboard:
                 dist_a1 = np.copy(self.buf_dist_a1)
                 disterr_a1 = np.copy(self.buf_disterr_a1)
 
+                aoa_deg = np.copy(self.buf_aoa_deg)
+                aoa_err = np.copy(self.buf_aoa_err)
+
             squelch_mv = float(self.squelch_slider.value) * 1000.0
             active_tab = self.tabs.selected_index
 
@@ -792,6 +789,13 @@ class KinematicsDashboard:
                     self.fig_dual.data[8].y = dist_upper_a1
                     self.fig_dual.data[9].y = dist_lower_a1
                     self.fig_dual.data[10].y = dist_a1
+            elif active_tab == 3 and hasattr(self, "fig_aoa"):
+                aoa_upper = np.clip(aoa_deg + aoa_err, -90.0, 90.0)
+                aoa_lower = np.clip(aoa_deg - aoa_err, -90.0, 90.0)
+                with self.fig_aoa.batch_update():
+                    self.fig_aoa.data[0].y = aoa_upper
+                    self.fig_aoa.data[1].y = aoa_lower
+                    self.fig_aoa.data[2].y = aoa_deg
 
             f0_str_a0 = f"{self._cur_f0_a0:.1f}Hz" if np.isfinite(self._cur_f0_a0) else "---"
             f0_str_a1 = f"{self._cur_f0_a1:.1f}Hz" if np.isfinite(self._cur_f0_a1) else "---"
@@ -799,11 +803,13 @@ class KinematicsDashboard:
             dist_str_a0 = f"{self._cur_dist_a0:.1f}cm" if np.isfinite(self._cur_dist_a0) else "---"
             dist_str_a1 = f"{self._cur_dist_a1:.1f}cm" if np.isfinite(self._cur_dist_a1) else "---"
 
+            aoa_str = f"{self._cur_aoa_deg:+.1f}°" if np.isfinite(self._cur_aoa_deg) else "---"
+
             self.readout_metrics.value = (
                 f"<span style='color:#00FFCC; font-family:monospace; font-size:12px; font-weight:bold;'>"
                 f"A0: {self._cur_amp_a0*1000.0:.1f}mV ({f0_str_a0} → <b>{dist_str_a0}</b>) | "
                 f"A1: {self._cur_amp_a1*1000.0:.1f}mV ({f0_str_a1} → <b>{dist_str_a1}</b>) | "
-                f"Live: 30 FPS"
+                f"🧭 Bearing: <b>{aoa_str}</b> | Live: 30 FPS"
                 f"</span>"
             )
 

@@ -1,5 +1,5 @@
 """
-tests/test_dashboard.py: Verification Suite for KinematicsDashboard 3-Row Telemetry View.
+tests/test_dashboard.py: Verification Suite for KinematicsDashboard 4-Tab Telemetry View.
 """
 
 import tempfile
@@ -12,7 +12,7 @@ from pynq_localizer.kinematics_dashboard import KinematicsDashboard
 class TestKinematicsDashboard:
 
     def test_dashboard_initialization_and_buffer_geometry(self):
-        """Verify dashboard buffers and distance estimator initialization."""
+        """Verify dashboard buffers and distance/aoa estimator initialization."""
         dash = KinematicsDashboard(
             overlay=None,
             window_duration_sec=10.0,
@@ -31,20 +31,29 @@ class TestKinematicsDashboard:
         assert len(dash.buf_dist_a1) == 1000
         assert len(dash.buf_disterr_a1) == 1000
 
-        # Estimator was properly configured
+        # AoA buffers
+        assert len(dash.buf_aoa_deg) == 1000
+        assert len(dash.buf_aoa_err) == 1000
+
+        # Estimators were properly configured
         k_eval, _ = dash.estimator.profile.evaluate(1000.0)
         assert abs(k_eval - 0.050) < 1e-6
+        assert hasattr(dash, "aoa_estimator")
 
     def test_figure_trace_counts_and_subplot_geometry(self):
-        """Verify 3-row layout and exact trace counts for all tabs."""
+        """Verify 4-tab layout and exact trace counts for all tabs."""
         dash = KinematicsDashboard(overlay=None, k_constant=0.040)
 
-        # Tab 1: Mic 1 (6 traces: Amp, Gate, Pitch, Dist+err, Dist-err, Dist)
+        # Tab 1: Mic 1 (6 traces)
         assert len(dash.fig_mic1.data) == 6
         # Tab 2: Mic 2 (6 traces)
         assert len(dash.fig_mic2.data) == 6
-        # Tab 3: Dual Overlay (11 traces: A0/A1 amp, gate, A0/A1 pitch, A0 upper/lower/dist, A1 upper/lower/dist)
+        # Tab 3: Dual Overlay (11 traces)
         assert len(dash.fig_dual.data) == 11
+        # Tab 4: AoA Bearing (4 traces: +δθ, -δθ, θ, coherence)
+        assert len(dash.fig_aoa.data) == 4
+        # Tab container has 4 tabs
+        assert len(dash.tabs.children) == 4
 
     def test_get_clean_data_and_distance_handoff(self):
         """Verify clean telemetry extraction with and without distance arrays."""
@@ -71,14 +80,27 @@ class TestKinematicsDashboard:
         assert np.allclose(dist_clean, 100.0)
         assert np.allclose(disterr_clean, 4.0)
 
-        # Convenience helper
+        # Convenience distance helper
         t_dist, r_cm, r_err_cm = dash.get_distance_data(channel=1)
         assert len(t_dist) == 100
         assert np.allclose(r_cm, 100.0)
         assert np.allclose(r_err_cm, 4.0)
 
-    def test_export_csv_with_distance_columns(self):
-        """Verify CSV export includes distance and uncertainty headers and data."""
+    def test_get_aoa_data_handoff(self):
+        """Verify clean AoA bearing extraction helper."""
+        dash = KinematicsDashboard(overlay=None, k_constant=0.050)
+
+        with dash._buf_lock:
+            dash.buf_aoa_deg[200:250] = 22.5
+            dash.buf_aoa_err[200:250] = 0.8
+
+        t_aoa, aoa_deg, aoa_err = dash.get_aoa_data()
+        assert len(t_aoa) == 50
+        assert np.allclose(aoa_deg, 22.5)
+        assert np.allclose(aoa_err, 0.8)
+
+    def test_export_csv_with_distance_and_aoa_columns(self):
+        """Verify CSV export includes distance and AoA bearing columns."""
         dash = KinematicsDashboard(overlay=None, k_constant=0.050)
 
         with dash._buf_lock:
@@ -86,6 +108,8 @@ class TestKinematicsDashboard:
             dash.buf_freq_a0[10:20] = 1500.0
             dash.buf_dist_a0[10:20] = 62.5
             dash.buf_disterr_a0[10:20] = 2.5
+            dash.buf_aoa_deg[10:20] = -14.2
+            dash.buf_aoa_err[10:20] = 0.5
 
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
             tmp_csv = Path(tmp.name)
@@ -97,7 +121,8 @@ class TestKinematicsDashboard:
 
             assert len(lines) == 11  # 1 header + 10 data rows
             header = lines[0].strip()
-            assert header == "time_sec,a0_amp_v,a0_freq_hz,a0_dist_cm,a0_dist_err_cm,a1_amp_v,a1_freq_hz,a1_dist_cm,a1_dist_err_cm"
+            assert "aoa_deg,aoa_err_deg" in header
+            assert "a0_dist_cm" in header
         finally:
             if tmp_csv.exists():
                 tmp_csv.unlink()
