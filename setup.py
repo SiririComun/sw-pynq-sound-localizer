@@ -8,7 +8,7 @@ if os.path.exists("README.md"):
 
 setup(
     name="pynq-sound-localizer",
-    version="1.2.0",
+    version="1.3.0",
     author="Juan Pablo Sánchez (SiririComun)",
     description="FPGA-Accelerated Acoustic Kinematics, Doppler Tracking & Direction-of-Arrival Sound Localizer for PYNQ-Z2",
     long_description=long_description,
@@ -29,8 +29,8 @@ setup(
         "plotly>=5.10.0,<6.0.0",
         "ipywidgets>=8.0.0",
     ],
-    package_data={
-        "pynq_localizer": ["../notebooks/*.ipynb", "../hardware.json"],
+    ppackage_data={
+        "pynq_localizer": ["../notebooks/*.ipynb", "../hardware.json", "../profiles/*.json"],
     },
     include_package_data=True,
     entry_points={
