@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/phase-angle-of-arrival @ 5c1dd6b
+• Repository State    : feat/phase-angle-of-arrival @ ec5dd2d
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1
 • Package Version     : v1.2.0
 ==============================================================================
@@ -14,12 +14,12 @@ Current Branch: feat/phase-angle-of-arrival | Working Tree: Dirty (2 modified/un
 Branch Tracking & Divergence Status:
 feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
-* feat/phase-angle-of-arrival                        5c1dd6b [origin/feat/phase-angle-of-arrival] chore(context): update repository summary after dashboard AoA backend additions
+* feat/phase-angle-of-arrival                        ec5dd2d [origin/feat/phase-angle-of-arrival] chore(context): update repository summary with 4-tab dashboard
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
-  remotes/origin/feat/phase-angle-of-arrival         5c1dd6b chore(context): update repository summary after dashboard AoA backend additions
+  remotes/origin/feat/phase-angle-of-arrival         ec5dd2d chore(context): update repository summary with 4-tab dashboard
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -29,7 +29,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 5c1dd6b  (HEAD -> feat/phase-angle-of-arrival, origin/feat/phase-angle-of-arrival) - 2026-09-24 : chore(context): update repository summary after dashboard AoA backend additions (SiririComun)
+* ec5dd2d  (HEAD -> feat/phase-angle-of-arrival, origin/feat/phase-angle-of-arrival) - 2026-09-24 : chore(context): update repository summary with 4-tab dashboard (SiririComun)
+* cdf76dd  - 2026-09-24 : feat(dashboard): add Tab 4 Direction-of-Arrival Plotly UI and unit tests (SiririComun)
+* 5c1dd6b  - 2026-09-24 : chore(context): update repository summary after dashboard AoA backend additions (SiririComun)
 * dcd36ae  - 2026-09-24 : feat(dashboard): add AoA rolling ring buffers, 100 Hz worker thread, and CSV export (SiririComun)
 * c0f60fe  - 2026-09-24 : chore(context): update repository context with capture_aoa_frame (SiririComun)
 * 23cf3a3  - 2026-09-24 : feat(array): implement capture_aoa_frame and add offline pynq fallbacks (SiririComun)
@@ -42,9 +44,6 @@ Multi-Branch Git Commit Graph:
 * ffb0838  - 2026-09-24 : chore(context): regenerate repository summary after sinc scale fix (SiririComun)
 * a534058  - 2026-09-24 : fix(dashboard): rectify sinc peak estimator input scale to linear magnitude (SiririComun)
 * 704ee75  - 2026-09-24 : chore(context): regenerate repository summary after loader hardening (SiririComun)
-* 86ec8c5  - 2026-09-24 : fix(loader): harden overlay retrieval with file size guards and bump fallback to v1.5.1 (SiririComun)
-*   575a95d  (tag: v1.2.0) - 2026-09-23 : Merge branch 'feat/multipath-acoustic-calibration' into main (Release v1.2.0) (SiririComun)
-|\
 ```
 
 LICENSE: (LICENSE)
@@ -5553,4 +5552,225 @@ class TestAngleOfArrivalEngine:
 
         assert abs(res["theta_deg"] - (-35.0)) < 0.02
         assert res["status"] == "ACTIVE_VALID"
+```
+
+03_phase_angle_of_arrival_lab.ipynb: (notebooks/03_phase_angle_of_arrival_lab.ipynb)
+
+```python
+# %% [markdown] Cell 1
+# 🧭 Notebook 3: Acoustic Phase Interferometry & Direction of Arrival (AoA)
+# Welcome to the **Acoustic Angle of Arrival (AoA) Laboratory** (`v1.2.0`).
+# This notebook demonstrates real-time acoustic direction-finding on the **PYNQ-Z2 board (`xc7z020clg400-1`)**:
+# * **Simultaneous Dual-ADC Sampling:** $0.00\,\mu\text{s}$ inter-channel skew across MAX4466 microphones on pins A0 (`Vaux1`) and A1 (`Vaux9`).
+# * **Hann-Windowed Single-Bin Coherent Projection:** Sub-degree phase extraction ($\Delta \phi = \phi_1 - \phi_0$) immune to boundary edge splatter and harmonic distortion ($2f_0$).
+# * **Trigonometric Bearing Inversion:**
+# $$\theta = \arcsin\left(\frac{c(T) \cdot \Delta \phi}{2\pi f_0 \cdot d}\right)$$
+# strictly bounded by the spatial aliasing limit ($d \le \lambda / 2$).
+# * **Interactive Protractor Calibration:** Multi-station ground-truth bench verification and spatial beam plotting.
+# * **Real-Time 100 Hz Live Dashboard:** Continuous bearing tracking with dynamic $\pm \delta\theta$ confidence envelope.
+
+# %% [markdown] Cell 2
+## 1. Physical Protractor Benchmark Experiment
+# Mount your two MAX4466 microphones on a protractor baseline ($d = 5.0\,\text{cm}$) and test the target stations:
+# $$\theta_{\text{target}} \in \{-45^\circ, -30^\circ, 0^\circ, +30^\circ, +45^\circ\}$$
+# Run the guided cell below to collect multi-burst statistics, evaluate against the $\le 3.0^\circ$ quality gate, and render the interactive spatial beam dashboard.
+
+# %% [code] Cell 3
+import json
+import time
+from pathlib import Path
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from IPython.display import display, HTML
+
+from pynq_localizer import MicrophoneArrayOverlay
+
+print("=" * 76)
+print("🧭 STEP 1.6: PHYSICAL PROTRACTOR ANGLE OF ARRIVAL (AoA) BENCH LAB")
+print("=" * 76)
+
+ol = None
+try:
+    # 1. Initialize Hardware Overlay
+    print("⏳ [1/3] Initializing FPGA Hardware Overlay (Profile: 'audio')...")
+    ol = MicrophoneArrayOverlay()
+    
+    # Physical array parameters
+    mic_distance_m = 0.05  # 5.0 cm center-to-center baseline
+    profile_path = Path("profiles/active_buzzer_2610hz.json")
+    
+    if profile_path.exists():
+        with open(profile_path, "r", encoding="utf-8") as f:
+            p_data = json.load(f)
+        f0 = p_data.get("f_res_hz", 2609.73)
+        d_max_aliasing = p_data.get("max_mic_spacing_aoa_cm", 6.58)
+    else:
+        f0 = 2609.73
+        d_max_aliasing = 6.58
+
+    print(f"      • Center Carrier f0     : {f0:.2f} Hz")
+    print(f"      • Microphone Baseline d : {mic_distance_m * 100.0:.1f} cm")
+    print(f"      • Max Aliasing Bound    : <= {d_max_aliasing:.2f} cm")
+
+    # Target test stations along the protractor semicircle
+    test_stations_deg = [-45.0, -30.0, 0.0, +30.0, +45.0]
+    n_bursts = 20
+    results = {}
+
+    print("\n" + "-" * 76)
+    print("📍 [2/3] GUIDED PROTRACTOR MEASUREMENT PROTOCOL")
+    print("   1. Keep the buzzer sounding steadily (wire plugged into 3.3V via 2N2222A).")
+    print("   2. Place the buzzer at radial distance r ≈ 30 cm for each angle mark.")
+    print("-" * 76)
+
+    for target_deg in test_stations_deg:
+        # Interactive Jupyter Prompt
+        input(f"👉 Move buzzer to {target_deg:+5.1f}° mark (r ≈ 30 cm) and press [Enter]...")
+        
+        measured_angles = []
+        measured_coherences = []
+        
+        for b in range(n_bursts):
+            frame = ol.capture_aoa_frame(
+                f_target=f0,
+                mic_distance_m=mic_distance_m,
+                noise_gate_v=0.010,
+                timeout=0.5
+            )
+            if frame["status"] == "ACTIVE_VALID":
+                measured_angles.append(frame["theta_deg"])
+                measured_coherences.append(frame["coherence"])
+            time.sleep(0.01)
+            
+        if len(measured_angles) < 5:
+            print(f"   ⚠️ Weak signal at {target_deg}°! Check buzzer power and line of sight.")
+            continue
+            
+        mean_theta = float(np.mean(measured_angles))
+        std_theta = float(np.std(measured_angles))
+        mean_coh = float(np.mean(measured_coherences))
+        abs_err = abs(mean_theta - target_deg)
+        
+        results[str(target_deg)] = {
+            "target_deg": target_deg,
+            "measured_mean_deg": mean_theta,
+            "measured_std_deg": std_theta,
+            "abs_error_deg": abs_err,
+            "coherence": mean_coh,
+            "n_samples": len(measured_angles)
+        }
+        
+        tag = "✅" if abs_err <= 3.0 else "⚠️"
+        print(f"   {tag} Target: {target_deg:+5.1f}° ──► Measured: {mean_theta:+5.2f}° ± {std_theta:4.2f}° "
+              f"| Err: {abs_err:4.2f}° | Coherence: {mean_coh:.2f}")
+
+    # =========================================================================
+    # PART 3: Statistical Evaluation & Interactive Dashboard Plot
+    # =========================================================================
+    print("\n" + "=" * 76)
+    print("📊 PHYSICAL PROTRACTOR TEST RESULTS SUMMARY")
+    print("=" * 76)
+    print(f"{'Target Station':<18} | {'Measured Mean':<18} | {'Std Dev (σ)':<14} | {'Abs Error':<12} | {'Gate (<= 3.0°)'}")
+    print("-" * 76)
+    
+    all_passed = True
+    targets = []
+    measured_means = []
+    measured_stds = []
+    errors = []
+    
+    for st_str, d in results.items():
+        err = d["abs_error_deg"]
+        targets.append(d["target_deg"])
+        measured_means.append(d["measured_mean_deg"])
+        measured_stds.append(d["measured_std_deg"])
+        errors.append(err)
+        
+        passed = (err <= 3.0)
+        if not passed:
+            all_passed = False
+        status_tag = "✅ PASS" if passed else "❌ FAIL"
+        print(f"{d['target_deg']:+6.1f}°{'':<11} | {d['measured_mean_deg']:+6.2f}°{'':<11} | "
+              f"±{d['measured_std_deg']:4.2f}°{'':<8} | {err:4.2f}°{'':<7} | {status_tag}")
+
+    print("-" * 76)
+    overall_mean_err = float(np.mean(errors)) if errors else 999.0
+    print(f"  • Overall Mean Absolute Angular Error: {overall_mean_err:.2f}° across all stations")
+
+    # Save artifact
+    out_file = Path("aoa_bench_results.json").resolve()
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2)
+    print(f"💾 Saved bench verification to: {out_file.name}")
+
+    if all_passed:
+        print("\n🎉 PHASE 1 OFFICIALLY CERTIFIED: Direction of Arrival (AoA) PASSED.")
+    else:
+        print("\n⚠️ PHASE 1 GATE INCOMPLETE: Error exceeded 3.0° on one or more stations.")
+
+    # Render Two-Panel Interactive Diagnostic Plotly Figure
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=(
+            f"<b>1. Angular Linearity (Mean Err = {overall_mean_err:.2f}°, Gate <= 3.0°)</b>",
+            "<b>2. Spatial Directional Beams (Broadside at 0°)</b>"
+        ),
+        horizontal_spacing=0.12
+    )
+
+    # Panel 1: Measured vs Expected Linearity Curve with ±3° Corridor
+    x_ideal = np.linspace(-60, 60, 100)
+    fig.add_scatter(x=x_ideal, y=x_ideal + 3.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), showlegend=False, row=1, col=1)
+    fig.add_scatter(x=x_ideal, y=x_ideal - 3.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.12)", name="±3.0° Gate Corridor", row=1, col=1)
+    fig.add_scatter(x=x_ideal, y=x_ideal, mode="lines", line=dict(color="gray", dash="dash"), name="Ideal (y = x)", row=1, col=1)
+    fig.add_scatter(x=targets, y=measured_means, error_y=dict(type="data", array=measured_stds, visible=True), mode="markers", marker=dict(size=10, color="#00FFCC"), name="Measured Angles", row=1, col=1)
+
+    # Panel 2: Spatial Directional Ray Vectors
+    fig.add_scatter(x=[-0.025, 0.025], y=[0, 0], mode="lines+markers", marker=dict(size=8, color=["#00FFCC", "#FF007F"]), line=dict(color="white", width=3), name="Mic Baseline (d=5cm)", row=1, col=2)
+    
+    r_beam = 0.30  # 30 cm beam length
+    colors = ["#FFA500", "#00E5FF", "#76FF03", "#E040FB", "#FFD600"]
+    for idx, (t_target, t_meas) in enumerate(zip(targets, measured_means)):
+        c = colors[idx % len(colors)]
+        # Target ray (dashed)
+        rad_target = np.radians(t_target)
+        x_tgt = r_beam * np.sin(rad_target)
+        y_tgt = r_beam * np.cos(rad_target)
+        fig.add_scatter(x=[0, x_tgt], y=[0, y_tgt], mode="lines", line=dict(color=c, dash="dot", width=1.5), showlegend=False, row=1, col=2)
+        # Measured ray (solid)
+        rad_meas = np.radians(t_meas)
+        x_meas = r_beam * np.sin(rad_meas)
+        y_meas = r_beam * np.cos(rad_meas)
+        fig.add_scatter(x=[0, x_meas], y=[0, y_meas], mode="lines+markers", line=dict(color=c, width=2.5), marker=dict(size=[0, 7]), name=f"Beam {t_target:+.0f}°", row=1, col=2)
+
+    fig.update_layout(template="plotly_dark", height=500, margin=dict(l=40, r=20, t=50, b=40))
+    fig.update_xaxes(title="Target Angle (°)", range=[-60, 60], row=1, col=1)
+    fig.update_yaxes(title="Measured Angle (°)", range=[-60, 60], row=1, col=1)
+    fig.update_xaxes(title="Horizontal Position X (m)", range=[-0.25, 0.25], row=1, col=2)
+    fig.update_yaxes(title="Forward Distance Y (m)", range=[-0.02, 0.35], row=1, col=2)
+    fig.show()
+
+finally:
+    if ol is not None:
+        ol.close()
+        print("🔒 FPGA hardware resources cleanly released.")
+
+# %% [markdown] Cell 4
+## 2. Launch the 4-Tab Real-Time Direction-of-Arrival Dashboard
+# Run the cell below to launch the **100 Hz real-time dashboard**.
+# Click **Tab 4 (🧭 Direction of Arrival)** and move your sound source left and right to observe the live incident bearing trajectory $\theta(t)$.
+
+# %% [code] Cell 5
+from pynq_localizer import MicrophoneArrayOverlay
+
+ol = MicrophoneArrayOverlay()
+
+# Launch the live 4-tab dashboard with AoA tracking enabled
+app = ol.kinematics_dashboard(
+    window_duration_sec=10.0,
+    hop_ms=10.0,
+    aoa_mic_distance_m=0.05
+)
+
 ```
