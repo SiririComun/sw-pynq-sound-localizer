@@ -128,6 +128,133 @@ class KinematicAnalytics:
         v_rms = float(np.abs(x_f0) / np.sqrt(2.0))
         return v_rms
 
+    # =========================================================================
+    # Dual-Channel Coherent Phase Extraction & Angle of Arrival (AoA)
+    # =========================================================================
+
+    @staticmethod
+    def extract_dual_coherent_phase(
+        signal_a0_v: np.ndarray,
+        signal_a1_v: np.ndarray,
+        fs: float,
+        target_freq_hz: float,
+        remove_dc: bool = True
+    ) -> Dict[str, float]:
+        """
+        Simultaneously projects both synchronous ADC channels (A0 and A1) onto a
+        common Fourier phasor e^(-j 2π f0 t) to extract individual phases, in-band
+        RMS voltages, and the unambiguous wrapped phase difference Δφ = φ1 - φ0.
+
+        Sign Convention:
+          • Δφ = 0      => Broadside (Wavefront arrives at A0 and A1 simultaneously)
+          • Δφ > 0      => Wavefront reaches Mic 2 (A1) before Mic 1 (A0) [Right / +θ]
+          • Δφ < 0      => Wavefront reaches Mic 1 (A0) before Mic 2 (A1) [Left / -θ]
+
+        :param signal_a0_v: 1D voltage array from Channel A0 (Mic 1).
+        :param signal_a1_v: 1D voltage array from Channel A1 (Mic 2).
+        :param fs: Sampling frequency in Hz (e.g. 50000.0).
+        :param target_freq_hz: Tone frequency f0 in Hz (e.g. 2609.73).
+        :param remove_dc: If True, subtracts channel means before projection.
+        :return: Dict with delta_phi_rad, delta_phi_deg, phi_a0_rad, phi_a1_rad,
+                 amp_a0_v, amp_a1_v, and complex coherence.
+        """
+        v0 = np.asarray(signal_a0_v, dtype=np.float64)
+        v1 = np.asarray(signal_a1_v, dtype=np.float64)
+        n = min(len(v0), len(v1))
+
+        if n == 0 or not np.isfinite(target_freq_hz) or target_freq_hz <= 0:
+            return {
+                "delta_phi_rad": 0.0,
+                "delta_phi_deg": 0.0,
+                "phi_a0_rad": 0.0,
+                "phi_a1_rad": 0.0,
+                "amp_a0_v": 0.0,
+                "amp_a1_v": 0.0,
+                "coherence": 0.0
+            }
+
+        v0_ac = v0[:n] - np.mean(v0[:n]) if remove_dc else v0[:n]
+        v1_ac = v1[:n] - np.mean(v1[:n]) if remove_dc else v1[:n]
+
+        t = np.arange(n) / float(fs)
+        phasor = np.exp(-2.0j * np.pi * float(target_freq_hz) * t)
+
+        # Single-bin discrete Fourier projections
+        x0 = (2.0 / n) * np.dot(v0_ac, phasor)
+        x1 = (2.0 / n) * np.dot(v1_ac, phasor)
+
+        # In-band RMS physical voltages
+        v_rms_0 = float(np.abs(x0) / np.sqrt(2.0))
+        v_rms_1 = float(np.abs(x1) / np.sqrt(2.0))
+
+        # Four-quadrant phase angles
+        phi_0 = float(np.angle(x0))
+        phi_1 = float(np.angle(x1))
+
+        # Relative phase difference wrapped strictly to [-π, +π]
+        dphi_raw = phi_1 - phi_0
+        delta_phi = float(np.arctan2(np.sin(dphi_raw), np.cos(dphi_raw)))
+
+        # Magnitude-squared coherence approximation across the dual projection
+        denom = (np.abs(x0) * np.abs(x1))
+        coherence = float(np.abs(x0 * np.conj(x1)) / denom) if denom > 1e-12 else 0.0
+
+        return {
+            "delta_phi_rad": delta_phi,
+            "delta_phi_deg": float(np.degrees(delta_phi)),
+            "phi_a0_rad": phi_0,
+            "phi_a1_rad": phi_1,
+            "amp_a0_v": v_rms_0,
+            "amp_a1_v": v_rms_1,
+            "coherence": coherence
+        }
+
+    @classmethod
+    def calculate_angle_of_arrival(
+        cls,
+        delta_phi_rad: float,
+        f0: float,
+        mic_distance_m: float,
+        temperature_c: float = 20.0,
+        delta_phi_err_rad: float = 0.05
+    ) -> Tuple[float, float, float, bool]:
+        """
+        Inverts wrapped acoustic phase difference Δφ to incident bearing angle θ:
+          sin(θ) = (c(T) · Δφ) / (2π · f0 · d)
+          θ = arcsin(clip(sin(θ), -1.0, 1.0))
+
+        :param delta_phi_rad: Wrapped phase difference (φ1 - φ0) in radians [-π, +π].
+        :param f0: Fundamental carrier frequency in Hz.
+        :param mic_distance_m: Center-to-center microphone baseline d in meters.
+        :param temperature_c: Ambient air temperature in Celsius.
+        :param delta_phi_err_rad: Phase measurement uncertainty in radians.
+        :return: (theta_deg, theta_rad, theta_err_deg, is_aliased)
+        """
+        c = cls.speed_of_sound(temperature_c)
+        f_val = float(f0)
+        d_val = float(mic_distance_m)
+
+        if f_val <= 0 or d_val <= 0 or not np.isfinite(delta_phi_rad):
+            return np.nan, np.nan, np.nan, False
+
+        # Spatial aliasing bound: d <= c / (2 * f0)
+        d_max_aliasing = c / (2.0 * f_val)
+        is_aliased = bool(d_val > d_max_aliasing)
+
+        # Inversion ratio
+        ratio = (c * float(delta_phi_rad)) / (2.0 * np.pi * f_val * d_val)
+        clamped_ratio = float(np.clip(ratio, -1.0, 1.0))
+
+        theta_rad = float(np.arcsin(clamped_ratio))
+        theta_deg = float(np.degrees(theta_rad))
+
+        # Angular uncertainty propagation: dθ = (c / (2π f0 d cos θ)) · d(Δφ)
+        cos_theta = max(abs(np.cos(theta_rad)), 0.05)  # Avoid division by zero at endfire
+        theta_err_rad = float((c / (2.0 * np.pi * f_val * d_val * cos_theta)) * float(delta_phi_err_rad))
+        theta_err_deg = float(np.degrees(theta_err_rad))
+
+        return theta_deg, theta_rad, theta_err_deg, is_aliased
+
     @classmethod
     def extract_hybrid_quadruple(
         cls,
@@ -1449,3 +1576,131 @@ class MultipathCalibrationProtocol:
         out_path = Path(filepath).resolve()
         profile.to_json(out_path)
         return out_path
+
+# =============================================================================
+# 8. Angle of Arrival (AoA) Phase Interferometry Estimator
+# =============================================================================
+
+class AngleOfArrivalEstimator:
+    """
+    Real-Time Dual-Channel Angle of Arrival (AoA) Interferometric Solver.
+    Computes continuous bearing angle θ(t) from synchronous dual-microphone time streams
+    using coherent single-bin Fourier projection:
+      sin(θ) = (c(T) · Δφ) / (2π · f0 · d)
+    """
+
+    def __init__(
+        self,
+        mic_distance_m: float = 0.05,
+        target_freq_hz: Optional[float] = None,
+        profile: Optional[Union[AcousticProfile, str, Path]] = None,
+        temperature_c: float = 20.0,
+        noise_gate_v: float = 0.010,
+        phase_uncertainty_rad: float = 0.04
+    ):
+        self.mic_distance_m = float(mic_distance_m)
+        self.temperature_c = float(temperature_c)
+        self.noise_gate_v = float(noise_gate_v)
+        self.phase_uncertainty_rad = float(phase_uncertainty_rad)
+
+        # Resolve carrier frequency f0 from profile, parameter, or default
+        if target_freq_hz is not None:
+            self.target_freq_hz = float(target_freq_hz)
+        elif profile is not None:
+            if isinstance(profile, (str, Path)):
+                p_path = Path(profile).resolve()
+                with open(p_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self.target_freq_hz = float(data.get("f_res_hz", data.get("frequencies_hz", [2609.73])[0]))
+                if "max_mic_spacing_aoa_cm" in data:
+                    recommended_d = float(data["max_mic_spacing_aoa_cm"]) / 100.0
+                    if self.mic_distance_m > recommended_d:
+                        self.mic_distance_m = recommended_d * 0.75
+            elif isinstance(profile, AcousticProfile):
+                self.target_freq_hz = float(profile.frequencies[0])
+            else:
+                self.target_freq_hz = 2609.73
+        else:
+            self.target_freq_hz = 2609.73
+
+    def estimate_angle(
+        self,
+        v_a0: np.ndarray,
+        v_a1: np.ndarray,
+        fs: float,
+        f_target: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """
+        Estimates incident bearing angle θ from synchronized ADC raw time arrays.
+
+        :param v_a0: Raw voltage array from Mic 1 (A0).
+        :param v_a1: Raw voltage array from Mic 2 (A1).
+        :param fs: Sampling frequency in Hz.
+        :param f_target: Optional override for target carrier frequency.
+        :return: Dict containing theta_deg, theta_rad, theta_err_deg, delta_phi_rad,
+                 amp_a0_v, amp_a1_v, coherence, and status string.
+        """
+        f0 = float(f_target) if f_target is not None else self.target_freq_hz
+
+        # Extract coherent phase difference and in-band amplitudes
+        phase_data = KinematicAnalytics.extract_dual_coherent_phase(
+            signal_a0_v=v_a0,
+            signal_a1_v=v_a1,
+            fs=fs,
+            target_freq_hz=f0,
+            remove_dc=True
+        )
+
+        amp_min = min(phase_data["amp_a0_v"], phase_data["amp_a1_v"])
+
+        # Squelch noise floor check
+        if amp_min < self.noise_gate_v:
+            return {
+                "theta_deg": np.nan,
+                "theta_rad": np.nan,
+                "theta_err_deg": np.nan,
+                "delta_phi_rad": phase_data["delta_phi_rad"],
+                "delta_phi_deg": phase_data["delta_phi_deg"],
+                "amp_a0_v": phase_data["amp_a0_v"],
+                "amp_a1_v": phase_data["amp_a1_v"],
+                "coherence": phase_data["coherence"],
+                "f0_evaluated": f0,
+                "status": "SILENCE"
+            }
+
+        theta_deg, theta_rad, theta_err, is_aliased = KinematicAnalytics.calculate_angle_of_arrival(
+            delta_phi_rad=phase_data["delta_phi_rad"],
+            f0=f0,
+            mic_distance_m=self.mic_distance_m,
+            temperature_c=self.temperature_c,
+            delta_phi_err_rad=self.phase_uncertainty_rad
+        )
+
+        status = "OUT_OF_BOUNDS_SPATIAL_ALIASING" if is_aliased else "ACTIVE_VALID"
+
+        return {
+            "theta_deg": theta_deg,
+            "theta_rad": theta_rad,
+            "theta_err_deg": theta_err,
+            "delta_phi_rad": phase_data["delta_phi_rad"],
+            "delta_phi_deg": phase_data["delta_phi_deg"],
+            "amp_a0_v": phase_data["amp_a0_v"],
+            "amp_a1_v": phase_data["amp_a1_v"],
+            "coherence": phase_data["coherence"],
+            "f0_evaluated": f0,
+            "status": status
+        }
+
+    def process_frame(
+        self,
+        frame_dict: Dict[str, Any],
+        fs: float = 50000.0,
+        f_target: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """Convenience method to process frame output from capture_spectral_frame()."""
+        return self.estimate_angle(
+            v_a0=frame_dict["v_a0"],
+            v_a1=frame_dict["v_a1"],
+            fs=fs,
+            f_target=f_target
+        )
