@@ -55,6 +55,52 @@ class KinematicAnalytics:
         return float(v) if np.isscalar(f_observed) else v
 
     @classmethod
+    def calculate_differential_doppler_velocity(
+        cls,
+        f_mic1: Union[float, np.ndarray],
+        f_mic2: Union[float, np.ndarray],
+        temperature_c: float = 20.0
+    ) -> Tuple[Union[float, np.ndarray], Union[float, np.ndarray]]:
+        """
+        Calculates instantaneous glider velocity v(t) along a 1D air track using two
+        counter-positioned microphones at opposite ends (Mic 1 at x=0, Mic 2 at x=L):
+
+          v(t) = c(T) · (f2(t) - f1(t)) / (f1(t) + f2(t))
+          f0(t) = (f1(t) + f2(t)) / 2
+
+        Sign Convention:
+          • v > 0  => Glider moving RIGHT towards Mic 2 (Mic 2 is Blue, Mic 1 is Red)
+          • v < 0  => Glider moving LEFT towards Mic 1  (Mic 1 is Blue, Mic 2 is Red)
+          • v = 0  => Glider is stationary (f1 = f2 = f0)
+
+        Mathematical Property:
+          Completely eliminates buzzer oscillator frequency drift (thermal or battery sag)
+          because drift is common-mode to both microphones and cancels out identically.
+
+        :param f_mic1: Observed frequency at Mic 1 in Hz (scalar or 1D array).
+        :param f_mic2: Observed frequency at Mic 2 in Hz (scalar or 1D array).
+        :param temperature_c: Ambient temperature in Celsius.
+        :return: (velocity_mps, f0_common_hz)
+        """
+        c = cls.speed_of_sound(temperature_c)
+        is_scalar = np.isscalar(f_mic1) and np.isscalar(f_mic2)
+
+        f1 = np.asarray(f_mic1, dtype=np.float64)
+        f2 = np.asarray(f_mic2, dtype=np.float64)
+
+        denom = f1 + f2
+        diff = f2 - f1
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            valid = (denom > 0.0) & np.isfinite(f1) & np.isfinite(f2)
+            v = np.where(valid, c * (diff / denom), np.nan)
+            f0_common = np.where(valid, 0.5 * denom, np.nan)
+
+        if is_scalar:
+            return float(v.item()), float(f0_common.item())
+        return v, f0_common
+
+    @classmethod
     def calculate_gravity_acceleration(
         cls,
         time_sec: np.ndarray,
@@ -1712,3 +1758,226 @@ class AngleOfArrivalEstimator:
             fs=fs,
             f_target=f_target
         )
+
+# =============================================================================
+# 9. Dual-Ended Differential Doppler Air Track Tracker
+# =============================================================================
+
+class DifferentialDopplerTracker:
+    """
+    High-Precision Dual-Ended Differential Doppler Kinematic Tracker for 1D Air Tracks.
+    Tracks moving acoustic sources (gliders) with common-mode oscillator drift cancellation,
+    sub-millimeter/sec velocity resolution, acceleration, position, drag, and bumper rebound analysis.
+    """
+
+    def __init__(
+        self,
+        nominal_f0_hz: float = 2609.73,
+        profile: Optional[Union[AcousticProfile, str, Path]] = None,
+        temperature_c: float = 20.0,
+        track_length_m: float = 2.0,
+        initial_position_m: Optional[float] = None,
+        noise_gate_v: float = 0.010,
+        tracking_half_bandwidth_hz: float = 100.0,
+        velocity_deadband_mps: float = 0.003
+    ):
+        self.temperature_c = float(temperature_c)
+        self.track_length_m = float(track_length_m)
+        self.position_m = float(initial_position_m) if initial_position_m is not None else (self.track_length_m / 2.0)
+        self.noise_gate_v = float(noise_gate_v)
+        self.tracking_half_bw = float(tracking_half_bandwidth_hz)
+        self.velocity_deadband = float(velocity_deadband_mps)
+
+        # Resolve nominal f0 from profile or parameter
+        if profile is not None:
+            if isinstance(profile, (str, Path)):
+                p_path = Path(profile).resolve()
+                with open(p_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self.nominal_f0_hz = float(data.get("f_res_hz", data.get("frequencies_hz", [2609.73])[0]))
+            elif isinstance(profile, AcousticProfile):
+                self.nominal_f0_hz = float(profile.frequencies[0])
+            else:
+                self.nominal_f0_hz = float(nominal_f0_hz)
+        else:
+            self.nominal_f0_hz = float(nominal_f0_hz)
+
+        # State memory
+        self.last_velocity_mps = 0.0
+        self.last_f0_common_hz = self.nominal_f0_hz
+
+    def process_stereo_frame(
+        self,
+        v_a0: np.ndarray,
+        v_a1: np.ndarray,
+        fs: float,
+        dt_sec: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """
+        Processes a simultaneous stereo ADC frame, extracts instantaneous frequencies
+        from Mic 1 and Mic 2 via linear-scale sinc interpolation, and updates kinematics.
+
+        :param v_a0: Raw voltage array from Mic 1 (A0, left bumper).
+        :param v_a1: Raw voltage array from Mic 2 (A1, right bumper).
+        :param fs: Sampling frequency in Hz.
+        :param dt_sec: Elapsed time step since last frame.
+        :return: Kinematics telemetry dictionary.
+        """
+        n = min(len(v_a0), len(v_a1))
+        dt = float(dt_sec) if dt_sec is not None else (float(n) / float(fs))
+
+        # 1. AC decouple and compute RMS physical voltages
+        v0_ac = v_a0[:n] - np.mean(v_a0[:n])
+        v1_ac = v_a1[:n] - np.mean(v_a1[:n])
+
+        amp_0 = float(np.sqrt(np.mean(v0_ac ** 2)))
+        amp_1 = float(np.sqrt(np.mean(v1_ac ** 2)))
+
+        # Squelch noise gate check
+        if max(amp_0, amp_1) < self.noise_gate_v:
+            return {
+                "velocity_mps": 0.0,
+                "velocity_cmps": 0.0,
+                "acceleration_mps2": 0.0,
+                "position_m": self.position_m,
+                "f_mic1_hz": np.nan,
+                "f_mic2_hz": np.nan,
+                "f0_common_hz": self.last_f0_common_hz,
+                "delta_f_hz": 0.0,
+                "amp_mic1_v": amp_0,
+                "amp_mic2_v": amp_1,
+                "motion_state": "SILENCE",
+                "status": "SILENCE"
+            }
+
+        # 2. Extract linear spectra (unwindowed to match Dirichlet sinc estimator)
+        freq_axis = np.fft.rfftfreq(n, d=1.0 / fs)
+        scale_lin = 2.0 / float(n)
+
+        # Narrowband tracking band around the current common-mode center
+        f_min = max(20.0, self.last_f0_common_hz - self.tracking_half_bw)
+        f_max = self.last_f0_common_hz + self.tracking_half_bw
+
+        # Mic 1 Spectrum
+        X0 = np.fft.rfft(v0_ac)
+        mag_lin0 = np.abs(X0) * scale_lin
+        f1, _ = KinematicAnalytics.track_sub_hertz_pitch(
+            freq_axis, mag_lin0, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True
+        )
+
+        # Mic 2 Spectrum
+        X1 = np.fft.rfft(v1_ac)
+        mag_lin1 = np.abs(X1) * scale_lin
+        f2, _ = KinematicAnalytics.track_sub_hertz_pitch(
+            freq_axis, mag_lin1, min_freq_hz=f_min, max_freq_hz=f_max, interpolate=True
+        )
+
+        # 3. Calculate Differential Velocity & Common-Mode Drift Cancellation
+        v_raw, f0_est = KinematicAnalytics.calculate_differential_doppler_velocity(
+            f_mic1=f1, f_mic2=f2, temperature_c=self.temperature_c
+        )
+
+        # Apply deadband threshold
+        v_mps = 0.0 if abs(v_raw) < self.velocity_deadband else v_raw
+
+        # Instantaneous acceleration: a = dv / dt
+        accel_mps2 = (v_mps - self.last_velocity_mps) / max(dt, 1e-6)
+
+        # Integrate 1D position along track: x(t) = clip(x + v·dt, 0, L)
+        self.position_m = float(np.clip(self.position_m + v_mps * dt, 0.0, self.track_length_m))
+        self.last_velocity_mps = v_mps
+        if np.isfinite(f0_est):
+            self.last_f0_common_hz = f0_est
+
+        # Motion state classification
+        if abs(v_mps) < self.velocity_deadband:
+            motion_state = "STATIONARY"
+        elif v_mps > 0:
+            motion_state = "TOWARD_MIC2"
+        else:
+            motion_state = "TOWARD_MIC1"
+
+        return {
+            "velocity_mps": float(v_mps),
+            "velocity_cmps": float(v_mps * 100.0),
+            "acceleration_mps2": float(accel_mps2),
+            "position_m": float(self.position_m),
+            "f_mic1_hz": float(f1),
+            "f_mic2_hz": float(f2),
+            "f0_common_hz": float(f0_est),
+            "delta_f_hz": float(f2 - f1),
+            "amp_mic1_v": amp_0,
+            "amp_mic2_v": amp_1,
+            "motion_state": motion_state,
+            "status": "ACTIVE_VALID"
+        }
+
+    @classmethod
+    def analyze_glider_kinematics(
+        cls,
+        time_sec: np.ndarray,
+        velocity_mps: np.ndarray
+    ) -> Dict[str, Any]:
+        """
+        Analyzes a multi-second velocity trajectory from an air track experiment:
+        1. Identifies coasting deceleration phases and fits viscous drag γ (v(t) = v0·e^(-γt)).
+        2. Detects bumper collisions and calculates coefficient of restitution e.
+        """
+        t = np.asarray(time_sec, dtype=np.float64)
+        v = np.asarray(velocity_mps, dtype=np.float64)
+
+        valid = np.isfinite(t) & np.isfinite(v)
+        t_clean = t[valid]
+        v_clean = v[valid]
+
+        if len(t_clean) < 10:
+            return {"status": "INSUFFICIENT_DATA"}
+
+        # 1. Detect bumper collision bounces (rapid velocity sign reversals)
+        sign_changes = np.where(np.diff(np.sign(v_clean)))[0]
+        restitutions = []
+
+        for idx in sign_changes:
+            # Look ±5 points around the collision
+            if idx >= 5 and idx + 6 < len(v_clean):
+                v_before = abs(v_clean[idx - 2])
+                v_after = abs(v_clean[idx + 3])
+                if v_before > 0.05 and v_after > 0.05:
+                    restitutions.append(float(v_after / v_before))
+
+        mean_restitution = float(np.mean(restitutions)) if restitutions else np.nan
+
+        # 2. Fit viscous drag coefficient γ on the longest continuous coasting segment
+        # dv/dt = -γ · v => ln|v(t)| = ln|v0| - γ · t
+        coast_mask = abs(v_clean) > 0.05
+        if np.sum(coast_mask) > 15:
+            # Find contiguous block
+            indices = np.where(coast_mask)[0]
+            longest_seg = np.split(indices, np.where(np.diff(indices) != 1)[0] + 1)
+            seg = max(longest_seg, key=len)
+
+            if len(seg) > 10:
+                t_seg = t_clean[seg] - t_clean[seg[0]]
+                log_v_seg = np.log(abs(v_clean[seg]))
+                # Linear fit: log|v| = -gamma · t + intercept
+                slope, intercept = np.polyfit(t_seg, log_v_seg, 1)
+                gamma_drag = float(-slope)
+            else:
+                gamma_drag = 0.0
+        else:
+            gamma_drag = 0.0
+
+        return {
+            "max_forward_velocity_mps": float(np.max(v_clean)),
+            "max_reverse_velocity_mps": float(np.min(v_clean)),
+            "total_collisions_detected": len(restitutions),
+            "mean_coefficient_of_restitution": mean_restitution,
+            "viscous_drag_gamma": max(0.0, gamma_drag),
+            "status": "ANALYSIS_COMPLETE"
+        }
+
+    def reset(self, initial_position_m: Optional[float] = None):
+        """Resets the tracker's internal kinematic state."""
+        self.position_m = float(initial_position_m) if initial_position_m is not None else (self.track_length_m / 2.0)
+        self.last_velocity_mps = 0.0
+        self.last_f0_common_hz = self.nominal_f0_hz

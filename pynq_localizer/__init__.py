@@ -9,7 +9,9 @@ from pynq_localizer.kinematics import (
     DistanceEstimator,
     AcousticCalibrationProtocol,
     MultipathCalibrationProtocol,
-    AngleOfArrivalEstimator,  
+    AngleOfArrivalEstimator, 
+    DifferentialDopplerTracker,
+     
 )
 from pynq_localizer.notebooks import copy_notebooks
 
@@ -38,6 +40,7 @@ __all__ = [
     "AcousticCalibrationProtocol",
     "MultipathCalibrationProtocol",
     "AngleOfArrivalEstimator",
+    "DifferentialDopplerTracker",
     "KinematicsDashboard",
     "copy_notebooks",
 ]
