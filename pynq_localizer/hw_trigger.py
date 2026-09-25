@@ -1,14 +1,14 @@
 """
 pynq_localizer.hw_trigger: High-Level Driver for FPGA 'axis_trigger_unit' IP.
-Acts as the central Timing & Configuration Controller for Triggering, Decimation, and Packet Limits.
+Acts as the central Timing & Configuration Controller for Triggering, Decimation,
+FFT configuration, and Hardware Active Buzzer Pulse Generation.
 """
 
-from typing import Union
+from typing import Union, Optional
 try:
     from pynq import MMIO
 except (ImportError, ModuleNotFoundError):
     MMIO = None
-
 
 class HardwareTrigger:
     """
@@ -17,18 +17,19 @@ class HardwareTrigger:
     Interfaces via AXI4-Lite registers to configure hardware-level edge detection,
     trigger channel source selection (CH1/A0 vs CH2/A1), FFT channel routing (A0 vs A1),
     voltage thresholds, decimation factors (M=1, 10, 20, 50), FFT transform length (N=512, 1024, 2048),
-    and packetizer boundaries.
+    packetizer boundaries, and hardware pulse generation for active buzzer ToA sounding.
     """
 
-    # Register Byte Offsets matching axis_trigger_unit.vhd
-    REG_CONTROL     = 0x00
-    REG_STATUS      = 0x04
-    REG_THRESHOLD   = 0x08
-    REG_TIMEOUT     = 0x0C
-    REG_HYSTERESIS  = 0x10
-    REG_DECIMATION  = 0x14  # [1:0] 00=M=1, 01=M=10, 10=M=20, 11=M=50
+    # Register Byte Offsets matching axis_trigger_unit.vhd (6-bit address decoder)
+    REG_CONTROL     = 0x00  # [0]=Arm, [1]=Auto, [2]=Fall, [3]=Single, [4]=Force, [5]=TrigSrc, [6]=FFTSrc, [7]=FIRE_PULSE
+    REG_STATUS      = 0x04  # [0]=Armed, [1]=Triggered, [2]=Streaming, [3]=PulseActive
+    REG_THRESHOLD   = 0x08  # [15:0] 12-bit left-aligned comparator threshold
+    REG_TIMEOUT     = 0x0C  # [31:0] Auto-trigger timeout in clock cycles
+    REG_HYSTERESIS  = 0x10  # [15:0] Noise rejection band
+    REG_DECIMATION  = 0x14  # [1:0]  00=M=1, 01=M=10, 10=M=20, 11=M=50
     REG_FFT_CONFIG  = 0x18  # [15:0] (FWD_INV << 8) | NFFT (PG109 Format)
     REG_PACKET_SIZE = 0x1C  # [15:0] Samples per DMA frame
+    REG_PULSE_WIDTH = 0x20  # [31:0] Hardware pulse duration in 100 MHz clock cycles (default 500,000 = 5.0 ms)
 
     # Bit masks for REG_CONTROL (0x00)
     BIT_ARM          = 1 << 0  # Bit 0: Arm trigger unit
@@ -38,11 +39,13 @@ class HardwareTrigger:
     BIT_FORCE_TRIG   = 1 << 4  # Bit 4: Software force trigger pulse
     BIT_TRIG_SRC_CH2 = 1 << 5  # Bit 5: 0 = Trigger on CH1 (A0), 1 = Trigger on CH2 (A1)
     BIT_FFT_SRC_CH2  = 1 << 6  # Bit 6: 0 = Route CH1 (A0) to FFT, 1 = Route CH2 (A1) to FFT
+    BIT_FIRE_PULSE   = 1 << 7  # Bit 7: Strobe hardware buzzer pulse & sync acquisition
 
     # Bit masks for REG_STATUS (0x04)
-    STATUS_ARMED     = 1 << 0
-    STATUS_TRIGGERED = 1 << 1
-    STATUS_STREAMING = 1 << 2
+    STATUS_ARMED        = 1 << 0
+    STATUS_TRIGGERED    = 1 << 1
+    STATUS_STREAMING    = 1 << 2
+    STATUS_PULSE_ACTIVE = 1 << 3  # Bit 3: 1 while buzzer pulse pin is actively firing HIGH
 
     DECIMATION_MAP = {
         1: 0,   # "00" -> M = 1 (Bypass: 500 kSPS Lab Scope)
@@ -56,7 +59,8 @@ class HardwareTrigger:
         self.clock_freq_hz = clock_freq_hz
         self.max_voltage = 3.3
 
-        if isinstance(overlay_or_mmio, MMIO):
+        # Duck-typing: If it has read() and write(), it is an MMIO instance or MMIO test mock
+        if hasattr(overlay_or_mmio, "read") and hasattr(overlay_or_mmio, "write"):
             self.mmio = overlay_or_mmio
         elif hasattr(overlay_or_mmio, "axis_trigger_unit_0"):
             self.mmio = overlay_or_mmio.axis_trigger_unit_0.mmio
@@ -65,20 +69,22 @@ class HardwareTrigger:
             if trigger_ips:
                 self.mmio = getattr(overlay_or_mmio, trigger_ips[0]).mmio
             else:
-                self.mmio = MMIO(0x43C10000, 65536)
+                self.mmio = MMIO(0x43C10000, 65536) if MMIO is not None else None
         else:
-            self.mmio = MMIO(0x43C10000, 65536)
+            self.mmio = MMIO(0x43C10000, 65536) if MMIO is not None else None
 
-        # Default initialization: 1.65V Threshold, Auto Mode, Rising Edge, CH1 (A0), M=10, N=2048
-        self.configure(
-            mode="Auto",
-            edge="Rising",
-            source="CH1",
-            threshold_volts=1.65,
-            timeout_ms=50.0,
-            hysteresis_volts=0.02
-        )
-        self.set_fft_channel("CH1")
+        # Default initialization: 1.65V Threshold, Auto Mode, Rising Edge, CH1 (A0), M=10, N=2048, 5.0ms Pulse
+        if self.mmio is not None:
+            self.configure(
+                mode="Auto",
+                edge="Rising",
+                source="CH1",
+                threshold_volts=1.65,
+                timeout_ms=50.0,
+                hysteresis_volts=0.02
+            )
+            self.set_fft_channel("CH1")
+            self.set_pulse_width_ms(5.0)
 
     def configure(
         self,
@@ -246,6 +252,48 @@ class HardwareTrigger:
         """Reads active hardware TLAST packet size."""
         return self.mmio.read(self.REG_PACKET_SIZE) & 0xFFFF
 
+    # =========================================================================
+    # Hardware Active Buzzer Pulse Generator Methods (Offset 0x20 & Bit 7)
+    # =========================================================================
+
+    def set_pulse_width_cycles(self, cycles: int):
+        """
+        Sets hardware pulse duration in 100 MHz clock cycles.
+        :param cycles: Clock cycle count (e.g. 500,000 cycles = 5.0 ms).
+        """
+        clamped = max(10, min(100_000_000, int(cycles)))
+        self.mmio.write(self.REG_PULSE_WIDTH, clamped)
+
+    def get_pulse_width_cycles(self) -> int:
+        """Reads active hardware pulse duration in 100 MHz clock cycles."""
+        return self.mmio.read(self.REG_PULSE_WIDTH)
+
+    def set_pulse_width_ms(self, duration_ms: float):
+        """
+        Sets hardware pulse duration in milliseconds.
+        :param duration_ms: Pulse width in ms (e.g. 5.0 ms).
+        """
+        cycles = int((float(duration_ms) / 1000.0) * self.clock_freq_hz)
+        self.set_pulse_width_cycles(cycles)
+
+    def get_pulse_width_ms(self) -> float:
+        """Reads active hardware pulse duration in milliseconds."""
+        cycles = self.get_pulse_width_cycles()
+        return (cycles / self.clock_freq_hz) * 1000.0
+
+    def fire_pulse(self):
+        """
+        Strobes the hardware active buzzer pulse on Arduino pin AR2 (Pin U13)
+        and synchronously triggers the XADC acquisition pipeline on cycle 0.
+        """
+        ctrl = self.mmio.read(self.REG_CONTROL)
+        self.mmio.write(self.REG_CONTROL, ctrl | self.BIT_FIRE_PULSE)
+
+    @property
+    def is_pulse_active(self) -> bool:
+        """True while the hardware pulse output pin is actively firing HIGH."""
+        return bool(self.mmio.read(self.REG_STATUS) & self.STATUS_PULSE_ACTIVE)
+
     @property
     def is_armed(self) -> bool:
         return bool(self.mmio.read(self.REG_STATUS) & self.STATUS_ARMED)
@@ -255,13 +303,14 @@ class HardwareTrigger:
         return bool(self.mmio.read(self.REG_STATUS) & self.STATUS_TRIGGERED)
 
     def __repr__(self) -> str:
-        ctrl = self.mmio.read(self.REG_CONTROL)
+        ctrl = self.mmio.read(self.REG_CONTROL) if self.mmio else 0
         src = "CH2 (A1)" if (ctrl & self.BIT_TRIG_SRC_CH2) else "CH1 (A0)"
         fft_src = "CH2 (A1)" if (ctrl & self.BIT_FFT_SRC_CH2) else "CH1 (A0)"
         edge = "Falling" if (ctrl & self.BIT_EDGE_FALLING) else "Rising"
         mode = "Auto" if (ctrl & self.BIT_AUTO_MODE) else ("Single" if (ctrl & self.BIT_SINGLE_SHOT) else "Normal")
         armed = "ARMED" if (ctrl & self.BIT_ARM) else "DISARMED"
-        m = self.get_decimation()
-        n = self.get_fft_length()
-        pkt = self.get_packet_size()
-        return f"<HardwareTrigger: {armed}, TrigSrc={src}, FFTSrc={fft_src}, Mode={mode}, Edge={edge}, M={m}x, N={n}, Pkt={pkt}>"
+        m = self.get_decimation() if self.mmio else 10
+        n = self.get_fft_length() if self.mmio else 2048
+        pkt = self.get_packet_size() if self.mmio else 2048
+        pulse_ms = self.get_pulse_width_ms() if self.mmio else 5.0
+        return f"<HardwareTrigger: {armed}, TrigSrc={src}, FFTSrc={fft_src}, Mode={mode}, Edge={edge}, M={m}x, N={n}, Pkt={pkt}, Pulse={pulse_ms:.1f}ms>"
