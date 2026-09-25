@@ -638,6 +638,77 @@ class KinematicAnalytics:
 
         return times_sec, amp_traj, freq_traj
 
+    @staticmethod
+    def detect_pulse_arrival_time(
+        signal_v: np.ndarray,
+        fs: float,
+        target_freq_hz: float = 2609.73,
+        threshold_ratio: float = 0.50,
+        band_half_width_hz: float = 250.0
+    ) -> Dict[str, Any]:
+        """
+        Extracts the sub-sample arrival timestamp of an acoustic pulse burst using
+        Hilbert analytic envelope tracking and linear threshold interpolation.
+
+        :param signal_v: 1D raw voltage array from the microphone.
+        :param fs: Sampling frequency in Hz.
+        :param target_freq_hz: Nominal pulse carrier frequency (e.g. 2609.73 Hz).
+        :param threshold_ratio: Onset milestone ratio (default 0.50 = half-power).
+        :param band_half_width_hz: Bandpass half-bandwidth around carrier.
+        :return: Dict containing t_arrival_sec, amp_peak_v, snr_db, and is_detected.
+        """
+        import scipy.signal as signal
+
+        v = np.asarray(signal_v, dtype=np.float64)
+        n = len(v)
+        if n < 32 or not np.isfinite(target_freq_hz) or target_freq_hz <= 0:
+            return {"t_arrival_sec": np.nan, "amp_peak_v": 0.0, "snr_db": 0.0, "is_detected": False}
+
+        # 1. Zero-phase bandpass filter around carrier to reject clicks and ambient rumble
+        nyq = fs / 2.0
+        low = max(20.0, target_freq_hz - band_half_width_hz) / nyq
+        high = min(nyq - 20.0, target_freq_hz + band_half_width_hz) / nyq
+
+        b, a = signal.butter(N=3, Wn=[low, high], btype="bandpass")
+        v_clean = signal.filtfilt(b, a, v - np.mean(v))
+
+        # 2. Extract Hilbert analytic envelope A(t) = |v(t) + j·H{v(t)}|
+        env = np.abs(signal.hilbert(v_clean))
+
+        amp_peak = float(np.max(env))
+        if amp_peak < 1e-4:
+            return {"t_arrival_sec": np.nan, "amp_peak_v": 0.0, "snr_db": 0.0, "is_detected": False}
+
+        # 3. Estimate pre-trigger noise floor from first 100 samples
+        noise_sigma = float(np.std(v_clean[: min(100, n // 4)]))
+        snr_db = float(20.0 * np.log10(max(amp_peak, 1e-6) / max(noise_sigma, 1e-6)))
+
+        # 4. Locate first crossing of the milestone threshold with SUB-SAMPLE INTERPOLATION
+        v_thresh = float(threshold_ratio * amp_peak)
+        crossing_indices = np.where(env >= v_thresh)[0]
+
+        if len(crossing_indices) == 0 or snr_db < 6.0:
+            return {"t_arrival_sec": np.nan, "amp_peak_v": amp_peak, "snr_db": snr_db, "is_detected": False}
+
+        idx_arr = crossing_indices[0]
+
+        # Sub-sample linear interpolation between sample (idx-1) and (idx)
+        if idx_arr > 0:
+            y_prev = env[idx_arr - 1]
+            y_curr = env[idx_arr]
+            denom = y_curr - y_prev
+            frac = (v_thresh - y_prev) / denom if denom > 1e-12 else 0.0
+            frac = max(0.0, min(1.0, frac))
+            t_sub_sample = (float(idx_arr - 1) + frac) / float(fs)
+        else:
+            t_sub_sample = float(idx_arr) / float(fs)
+
+        return {
+            "t_arrival_sec": t_sub_sample,
+            "amp_peak_v": amp_peak,
+            "snr_db": snr_db,
+            "is_detected": True
+        }
 
 class MultiSourceTracker:
     """
@@ -1989,3 +2060,141 @@ class DifferentialDopplerTracker:
         self.position_m = float(initial_position_m) if initial_position_m is not None else (self.track_length_m / 2.0)
         self.last_velocity_mps = 0.0
         self.last_f0_common_hz = self.nominal_f0_hz
+
+# =============================================================================
+# 10. Time of Arrival (ToA) & Time Difference of Arrival (TDOA) Estimator
+# =============================================================================
+
+class TimeOfArrivalEstimator:
+    """
+    Precision Acoustic Time-of-Arrival (ToA) and Time-Difference-of-Arrival (TDOA) Solver.
+    Inverts pulse time of flight to absolute metric distance r and bearing angle θ
+    with calibrated piezo mechanical turn-on delay compensation (t_offset = 1.1400 ms).
+    """
+
+    def __init__(
+        self,
+        nominal_f0_hz: float = 2609.73,
+        profile: Optional[Union[AcousticProfile, str, Path]] = None,
+        mic_distance_m: float = 0.05,
+        temperature_c: float = 20.0,
+        calibrated_offset_ms: Optional[float] = None,
+        threshold_ratio: float = 0.50,
+        noise_gate_v: float = 0.010
+    ):
+        self.mic_distance_m = float(mic_distance_m)
+        self.temperature_c = float(temperature_c)
+        self.threshold_ratio = float(threshold_ratio)
+        self.noise_gate_v = float(noise_gate_v)
+
+        # Resolve carrier frequency and calibrated piezo rise-time offset
+        if profile is not None:
+            if isinstance(profile, (str, Path)):
+                p_path = Path(profile).resolve()
+                with open(p_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self.f0_hz = float(data.get("f_res_hz", 2609.73))
+                offset_from_prof = float(data.get("calibrated_toa_offset_ms", 1.1400))
+                self.offset_ms = offset_from_prof if calibrated_offset_ms is None else float(calibrated_offset_ms)
+            else:
+                self.f0_hz = float(nominal_f0_hz)
+                self.offset_ms = 1.1400 if calibrated_offset_ms is None else float(calibrated_offset_ms)
+        else:
+            self.f0_hz = float(nominal_f0_hz)
+            self.offset_ms = 1.1400 if calibrated_offset_ms is None else float(calibrated_offset_ms)
+
+        self.offset_sec = self.offset_ms / 1000.0
+
+    def estimate_distance_and_tdoa(
+        self,
+        v_a0: np.ndarray,
+        v_a1: np.ndarray,
+        fs: float,
+        t_emission_sec: float = 0.0
+    ) -> Dict[str, Any]:
+        """
+        Estimates absolute distance r and TDOA bearing angle θ from synchronized stereo ADC frames.
+
+        :param v_a0: Raw voltage array from Mic 1 (A0, reference).
+        :param v_a1: Raw voltage array from Mic 2 (A1).
+        :param fs: Sampling frequency in Hz.
+        :param t_emission_sec: Known hardware pulse emission timestamp (default 0.0s).
+        :return: Telemetry dictionary.
+        """
+        c = KinematicAnalytics.speed_of_sound(self.temperature_c)
+
+        # 1. Detect pulse arrival times at both microphones
+        arr0 = KinematicAnalytics.detect_pulse_arrival_time(
+            signal_v=v_a0,
+            fs=fs,
+            target_freq_hz=self.f0_hz,
+            threshold_ratio=self.threshold_ratio
+        )
+        arr1 = KinematicAnalytics.detect_pulse_arrival_time(
+            signal_v=v_a1,
+            fs=fs,
+            target_freq_hz=self.f0_hz,
+            threshold_ratio=self.threshold_ratio
+        )
+
+        # Check detection validity and noise gates
+        if not (arr0["is_detected"] and arr1["is_detected"]) or (
+            arr0["amp_peak_v"] < self.noise_gate_v or arr1["amp_peak_v"] < self.noise_gate_v
+        ):
+            return {
+                "distance_m": np.nan,
+                "distance_cm": np.nan,
+                "t_flight_sec": np.nan,
+                "t_arrival_a0_sec": arr0.get("t_arrival_sec", np.nan),
+                "t_arrival_a1_sec": arr1.get("t_arrival_sec", np.nan),
+                "delta_t12_sec": np.nan,
+                "theta_tdoa_deg": np.nan,
+                "amp_a0_v": arr0.get("amp_peak_v", 0.0),
+                "amp_a1_v": arr1.get("amp_peak_v", 0.0),
+                "status": "SILENCE"
+            }
+
+        t_arr0 = arr0["t_arrival_sec"]
+        t_arr1 = arr1["t_arrival_sec"]
+
+        # 2. Compute absolute acoustic flight time and metric distance (from Mic 1 / A0)
+        # t_flight = t_arrival - t_emission - t_transducer_offset
+        t_flight = max(0.0, (t_arr0 - float(t_emission_sec)) - self.offset_sec)
+        dist_m = float(c * t_flight)
+
+        # 3. Compute Time Difference of Arrival (TDOA) between Mic 2 and Mic 1
+        delta_t12 = float(t_arr1 - t_arr0)
+
+        # Invert TDOA to bearing angle: sin(θ) = (c · Δt12) / d
+        ratio_tdoa = (c * delta_t12) / self.mic_distance_m
+        clamped_ratio = float(np.clip(ratio_tdoa, -1.0, 1.0))
+        theta_tdoa_deg = float(np.degrees(np.arcsin(clamped_ratio)))
+
+        return {
+            "distance_m": dist_m,
+            "distance_cm": float(dist_m * 100.0),
+            "t_flight_sec": float(t_flight),
+            "t_arrival_a0_sec": float(t_arr0),
+            "t_arrival_a1_sec": float(t_arr1),
+            "delta_t12_sec": delta_t12,
+            "theta_tdoa_deg": theta_tdoa_deg,
+            "amp_a0_v": arr0["amp_peak_v"],
+            "amp_a1_v": arr1["amp_peak_v"],
+            "snr_a0_db": arr0["snr_db"],
+            "snr_a1_db": arr1["snr_db"],
+            "status": "ACTIVE_VALID"
+        }
+
+    def process_frame(
+        self,
+        frame_dict: Dict[str, Any],
+        fs: float = 50000.0,
+        t_emission_sec: float = 0.0
+    ) -> Dict[str, Any]:
+        """Convenience wrapper for output from capture_spectral_frame() or capture_pulsed_frame()."""
+        return self.estimate_distance_and_tdoa(
+            v_a0=frame_dict["v_a0"],
+            v_a1=frame_dict["v_a1"],
+            fs=fs,
+            t_emission_sec=t_emission_sec
+        )
