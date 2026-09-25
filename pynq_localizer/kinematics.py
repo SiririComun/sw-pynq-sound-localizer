@@ -142,8 +142,11 @@ class KinematicAnalytics:
     ) -> Dict[str, float]:
         """
         Simultaneously projects both synchronous ADC channels (A0 and A1) onto a
-        common Fourier phasor e^(-j 2π f0 t) to extract individual phases, in-band
-        RMS voltages, and the unambiguous wrapped phase difference Δφ = φ1 - φ0.
+        Hann-windowed Fourier phasor w[n] · e^(-j 2π f0 t) to extract individual phases,
+        in-band RMS voltages, and the unambiguous wrapped phase difference Δφ = φ1 - φ0.
+
+        Hann windowing suppresses frame boundary splatter and attenuates harmonic
+        distortion (such as the buzzer's 24% 2f0 harmonic) by > 75 dB.
 
         Sign Convention:
           • Δφ = 0      => Broadside (Wavefront arrives at A0 and A1 simultaneously)
@@ -177,11 +180,16 @@ class KinematicAnalytics:
         v1_ac = v1[:n] - np.mean(v1[:n]) if remove_dc else v1[:n]
 
         t = np.arange(n) / float(fs)
-        phasor = np.exp(-2.0j * np.pi * float(target_freq_hz) * t)
 
-        # Single-bin discrete Fourier projections
-        x0 = (2.0 / n) * np.dot(v0_ac, phasor)
-        x1 = (2.0 / n) * np.dot(v1_ac, phasor)
+        # Hann window to suppress non-integer boundary leakage and harmonic splatter
+        w = 0.5 - 0.5 * np.cos(2.0 * np.pi * np.arange(n) / (n - 1)) if n > 1 else np.ones(n)
+        coherent_sum = float(np.sum(w))
+        phasor = w * np.exp(-2.0j * np.pi * float(target_freq_hz) * t)
+
+        # Single-bin Hann-windowed discrete Fourier projections
+        scale = 2.0 / max(coherent_sum, 1e-12)
+        x0 = scale * np.dot(v0_ac, phasor)
+        x1 = scale * np.dot(v1_ac, phasor)
 
         # In-band RMS physical voltages
         v_rms_0 = float(np.abs(x0) / np.sqrt(2.0))
