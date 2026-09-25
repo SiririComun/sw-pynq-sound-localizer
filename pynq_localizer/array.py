@@ -9,7 +9,11 @@ import time
 from pathlib import Path
 from typing import Union, Optional, Tuple, Dict, Any
 import numpy as np
-from pynq import Overlay, allocate
+try:
+    from pynq import Overlay, allocate
+except (ImportError, ModuleNotFoundError):
+    Overlay = object
+    allocate = None
 
 from pynq_localizer.loader import HardwareLoader
 from pynq_localizer.hw_trigger import HardwareTrigger
@@ -280,6 +284,81 @@ class MicrophoneArrayOverlay(Overlay):
         """Legacy wrapper: Captures a single synchronous dual-channel audio frame from A0 and A1."""
         res = self.capture_spectral_frame(crop_startup_samples=crop_startup_samples, timeout=timeout)
         return res["v_a0"], res["v_a1"]
+
+    def capture_aoa_frame(
+        self,
+        f_target: Optional[float] = None,
+        mic_distance_m: float = 0.05,
+        profile: Optional[Union[Any, str, Path]] = None,
+        temperature_c: float = 20.0,
+        noise_gate_v: float = 0.010,
+        crop_startup_samples: int = 8,
+        timeout: float = 0.5
+    ) -> Dict[str, Any]:
+        """
+        Captures a simultaneous dual-channel audio frame (0.00 µs skew via DMA 0)
+        and computes the incident acoustic Angle of Arrival (AoA) bearing angle θ.
+
+        :param f_target: Specific carrier frequency to track (if None, auto-detected).
+        :param mic_distance_m: Center-to-center microphone baseline d in meters.
+        :param profile: Path to JSON profile or AcousticProfile object (e.g. 'profiles/active_buzzer_2610hz.json').
+        :param temperature_c: Ambient temperature in °C for c(T) computation.
+        :param noise_gate_v: Minimum in-band RMS voltage squelch threshold.
+        :param crop_startup_samples: Boundary samples to discard from frame edges.
+        :param timeout: Maximum DMA transfer wait time in seconds.
+        :return: Telemetry dictionary containing:
+                 - 'theta_deg': Incident bearing angle in degrees [-90°, +90°] (NaN if silent).
+                 - 'theta_rad': Incident bearing angle in radians.
+                 - 'theta_err_deg': Analytical uncertainty propagation ±δθ in degrees.
+                 - 'delta_phi_rad': Wrapped relative phase difference Δφ in radians.
+                 - 'amp_a0_v': Physical in-band RMS voltage of Mic 1 (A0).
+                 - 'amp_a1_v': Physical in-band RMS voltage of Mic 2 (A1).
+                 - 'coherence': Dual-channel complex coherence metric [0.0 to 1.0].
+                 - 'f0_evaluated': Center carrier frequency used for inversion.
+                 - 'status': 'ACTIVE_VALID', 'SILENCE', or 'OUT_OF_BOUNDS_SPATIAL_ALIASING'.
+                 - 'v_a0': Raw ADC voltage array of Mic 1.
+                 - 'v_a1': Raw ADC voltage array of Mic 2.
+        """
+        from pynq_localizer.kinematics import AngleOfArrivalEstimator, KinematicAnalytics
+
+        # 1. Capture synchronized dual-channel frame
+        frame = self.capture_spectral_frame(
+            fft_source="A0",
+            crop_startup_samples=crop_startup_samples,
+            timeout=timeout
+        )
+        v_a0 = frame["v_a0"]
+        v_a1 = frame["v_a1"]
+
+        # 2. Determine target frequency: explicit override -> profile -> auto-detect
+        if f_target is not None:
+            f_eval = float(f_target)
+        elif profile is not None:
+            f_eval = None  # Handled by AngleOfArrivalEstimator constructor
+        else:
+            # Auto-detect loudest carrier peak
+            f_detected, _ = KinematicAnalytics.track_sub_hertz_pitch(
+                frame["freqs"], frame["mag"], min_freq_hz=100.0, max_freq_hz=15000.0, interpolate=True
+            )
+            f_eval = f_detected if (np.isfinite(f_detected) and f_detected > 0) else 2609.73
+
+        # 3. Instantiate solver and compute bearing
+        estimator = AngleOfArrivalEstimator(
+            mic_distance_m=mic_distance_m,
+            target_freq_hz=f_eval,
+            profile=profile,
+            temperature_c=temperature_c,
+            noise_gate_v=noise_gate_v
+        )
+
+        aoa_res = estimator.estimate_angle(v_a0=v_a0, v_a1=v_a1, fs=self.fs_per_ch, f_target=f_eval)
+
+        # 4. Augment with raw signals and hardware timer
+        aoa_res["timer_cycles"] = frame.get("timer_cycles", 0)
+        aoa_res["v_a0"] = v_a0
+        aoa_res["v_a1"] = v_a1
+
+        return aoa_res
 
     # =========================================================================
     # 3. Continuous Multi-Second Flight Recorder
