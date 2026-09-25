@@ -54,6 +54,7 @@ class KinematicsDashboard:
         estimator: Optional[DistanceEstimator] = None,
         aoa_mic_distance_m: float = 0.05,
         aoa_estimator: Optional[Any] = None,
+        doppler_tracker: Optional[Any] = None,
     ):
         self.overlay = overlay
         self.window_duration_sec = float(window_duration_sec)
@@ -81,6 +82,10 @@ class KinematicsDashboard:
         self.buf_aoa_err = np.full(self.buffer_len, np.nan, dtype=np.float64)
         self.aoa_mic_distance_m = float(aoa_mic_distance_m)
 
+        # Thread-safe rolling ring buffers for Differential Doppler Kinematics
+        self.buf_diff_vel = np.full(self.buffer_len, 0.0, dtype=np.float64)         # in m/s
+        self.buf_common_f0 = np.full(self.buffer_len, np.nan, dtype=np.float64)     # in Hz
+
         self._buf_lock = threading.Lock()
 
         # Moving median history deques for reflection noise rejection
@@ -99,7 +104,7 @@ class KinematicsDashboard:
         self.coherent_gain = np.sum(self.stft_win) / self.win_len
         self.freq_axis = np.fft.rfftfreq(self.win_len, d=1.0 / self.fs_per_ch)
 
-        # Distance Estimator Initialization
+        # 1. Distance Estimator Initialization
         if estimator is not None:
             self.estimator = estimator
         elif profile is not None:
@@ -121,7 +126,7 @@ class KinematicsDashboard:
         else:
             self.estimator = DistanceEstimator(k_constant=0.050, noise_gate_v=0.003)
 
-        # Angle of Arrival Estimator Initialization
+        # 2. Angle of Arrival Estimator Initialization
         from pynq_localizer.kinematics import AngleOfArrivalEstimator
         if aoa_estimator is not None:
             self.aoa_estimator = aoa_estimator
@@ -135,6 +140,17 @@ class KinematicsDashboard:
                 mic_distance_m=self.aoa_mic_distance_m,
                 target_freq_hz=2609.73
             )
+
+        # 3. Differential Doppler Tracker Initialization
+        from pynq_localizer.kinematics import DifferentialDopplerTracker
+        if doppler_tracker is not None:
+            self.doppler_tracker = doppler_tracker
+        elif Path("profiles/active_buzzer_2610hz.json").exists():
+            self.doppler_tracker = DifferentialDopplerTracker(
+                profile="profiles/active_buzzer_2610hz.json"
+            )
+        else:
+            self.doppler_tracker = DifferentialDopplerTracker(nominal_f0_hz=2609.73)
 
         # Threading state
         self._is_running = False
@@ -155,6 +171,9 @@ class KinematicsDashboard:
         self._cur_aoa_deg = np.nan
         self._cur_aoa_err = np.nan
 
+        self._cur_diff_vel = 0.0
+        self._cur_common_f0 = np.nan
+
         if self.overlay and hasattr(self.overlay, "trigger"):
             self.trigger = self.overlay.trigger
         elif self.overlay and HardwareTrigger:
@@ -165,7 +184,6 @@ class KinematicsDashboard:
         self._build_ui()
         self._build_plots()
         self._setup_callbacks()
-
     def _build_ui(self):
         # 1. Action Row
         self.start_btn = widgets.Button(
@@ -404,10 +422,21 @@ class KinematicsDashboard:
         valid = np.isfinite(aoa)
         return t[valid], aoa[valid], err[valid]
 
+    def get_doppler_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Retrieves clean, non-zero (time_sec, diff_velocity_mps, f0_common_hz) arrays.
+        """
+        with self._buf_lock:
+            t = np.copy(self.t_axis)
+            vel = np.copy(self.buf_diff_vel)
+            f0 = np.copy(self.buf_common_f0)
+        valid = np.isfinite(vel) & (abs(vel) > 0.001)
+        return t[valid], vel[valid], f0[valid]
+
     def export_csv(self, filename: Optional[str] = None, clean_silence: bool = True) -> str:
         """
         Exports the synchronized 10-second rolling buffer to a CSV file.
-        Includes amplitudes, frequencies, inverted metric distances, and AoA bearings.
+        Includes amplitudes, frequencies, distances, AoA bearings, and differential Doppler velocities.
         """
         if filename is None:
             ts = time.strftime("%Y%m%d_%H%M%S")
@@ -430,9 +459,12 @@ class KinematicsDashboard:
             aoa_deg = np.copy(self.buf_aoa_deg)
             aoa_err = np.copy(self.buf_aoa_err)
 
+            diff_vel = np.copy(self.buf_diff_vel)
+            f0_comm = np.copy(self.buf_common_f0)
+
         if clean_silence:
-            # Keep rows where at least one channel detected active pitch or AoA
-            valid_mask = np.isfinite(a0_freq) | np.isfinite(a1_freq) | np.isfinite(aoa_deg)
+            # Keep rows where at least one channel detected active pitch, AoA, or velocity
+            valid_mask = np.isfinite(a0_freq) | np.isfinite(a1_freq) | np.isfinite(aoa_deg) | (abs(diff_vel) > 0.002)
             if np.sum(valid_mask) == 0:
                 valid_mask = (a0_amp >= float(self.squelch_slider.value)) | (a1_amp >= float(self.squelch_slider.value))
 
@@ -450,13 +482,17 @@ class KinematicsDashboard:
             aoa_deg = aoa_deg[valid_mask]
             aoa_err = aoa_err[valid_mask]
 
+            diff_vel = diff_vel[valid_mask]
+            f0_comm = f0_comm[valid_mask]
+
         data_matrix = np.column_stack([
             t,
             a0_amp, a0_freq, a0_dist, a0_disterr,
             a1_amp, a1_freq, a1_dist, a1_disterr,
-            aoa_deg, aoa_err
+            aoa_deg, aoa_err,
+            diff_vel, f0_comm
         ])
-        header = "time_sec,a0_amp_v,a0_freq_hz,a0_dist_cm,a0_dist_err_cm,a1_amp_v,a1_freq_hz,a1_dist_cm,a1_dist_err_cm,aoa_deg,aoa_err_deg"
+        header = "time_sec,a0_amp_v,a0_freq_hz,a0_dist_cm,a0_dist_err_cm,a1_amp_v,a1_freq_hz,a1_dist_cm,a1_dist_err_cm,aoa_deg,aoa_err_deg,diff_velocity_mps,f0_common_hz"
 
         np.savetxt(
             out_path,
@@ -464,7 +500,7 @@ class KinematicsDashboard:
             delimiter=",",
             header=header,
             comments="",
-            fmt="%.4f,%.4f,%.2f,%.2f,%.2f,%.4f,%.2f,%.2f,%.2f,%.2f,%.2f"
+            fmt="%.4f,%.4f,%.2f,%.2f,%.2f,%.4f,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,%.2f"
         )
 
         tag = "Clean (No NaNs)" if clean_silence else "Full Rolling Buffer"
@@ -475,7 +511,6 @@ class KinematicsDashboard:
         )
         print(f"[KinematicsDashboard] Exported telemetry to: {out_path}")
         return str(out_path)
-
     def reset_buffers(self):
         with self._buf_lock:
             self.buf_amp_a0.fill(0.0)
@@ -490,6 +525,9 @@ class KinematicsDashboard:
 
             self.buf_aoa_deg.fill(np.nan)
             self.buf_aoa_err.fill(np.nan)
+
+            self.buf_diff_vel.fill(0.0)
+            self.buf_common_f0.fill(np.nan)
 
             self._hist_f0_a0.clear()
             self._hist_f0_a1.clear()
@@ -676,6 +714,20 @@ class KinematicsDashboard:
                         cur_aoa_deg = np.nan
                         cur_aoa_err = np.nan
 
+                    # 4. Differential Doppler Velocity Extraction
+                    if (amp_a0 >= squelch or amp_a1 >= squelch) and len(v_a0) >= 128:
+                        dopp_res = self.doppler_tracker.process_stereo_frame(
+                            v_a0=v_a0,
+                            v_a1=v_a1,
+                            fs=self.fs_per_ch,
+                            dt_sec=float(chunk_pts) / float(self.fs_per_ch)
+                        )
+                        cur_diff_vel = dopp_res["velocity_mps"]
+                        cur_common_f0 = dopp_res["f0_common_hz"]
+                    else:
+                        cur_diff_vel = 0.0
+                        cur_common_f0 = np.nan
+
                     self._cur_amp_a0 = a_true_a0
                     self._cur_f0_a0 = f0_a0
                     self._cur_dist_a0 = r_cm_a0
@@ -689,7 +741,11 @@ class KinematicsDashboard:
                     self._cur_aoa_deg = cur_aoa_deg
                     self._cur_aoa_err = cur_aoa_err
 
+                    self._cur_diff_vel = cur_diff_vel
+                    self._cur_common_f0 = cur_common_f0
+
                     with self._buf_lock:
+                        # Existing buffer shifts
                         self.buf_amp_a0[:-1] = self.buf_amp_a0[1:]
                         self.buf_amp_a0[-1] = a_true_a0
 
@@ -719,6 +775,13 @@ class KinematicsDashboard:
 
                         self.buf_aoa_err[:-1] = self.buf_aoa_err[1:]
                         self.buf_aoa_err[-1] = cur_aoa_err
+
+                        # Differential Doppler buffer shifts
+                        self.buf_diff_vel[:-1] = self.buf_diff_vel[1:]
+                        self.buf_diff_vel[-1] = cur_diff_vel
+
+                        self.buf_common_f0[:-1] = self.buf_common_f0[1:]
+                        self.buf_common_f0[-1] = cur_common_f0
                 else:
                     time.sleep(0.001)
 

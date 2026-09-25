@@ -429,6 +429,106 @@ class MicrophoneArrayOverlay(Overlay):
             dummy_fft_buf.close()
             self.trigger.set_packet_size(self.packet_size)
 
+    def record_differential_flight(
+        self,
+        duration_sec: float = 4.0,
+        track_length_m: float = 2.0,
+        f0_nominal: Optional[float] = None,
+        profile: Optional[Union[Any, str, Path]] = None,
+        temperature_c: float = 20.0,
+        window_ms: float = 40.0,
+        hop_ms: float = 10.0,
+        chunk_size: int = 4096
+    ) -> Dict[str, Any]:
+        """
+        Continuously records dual-channel flight data (0.00 µs inter-channel skew)
+        and extracts instantaneous velocity v(t), acceleration a(t), position x(t),
+        common-mode carrier drift f0(t), and aerodynamic air-track damping.
+
+        :param duration_sec: Total duration to record in seconds (e.g. 4.0, 6.0, 10.0).
+        :param track_length_m: Physical length of the air track in meters (default 2.0m).
+        :param f0_nominal: Nominal carrier frequency (if None, loaded from profile or baseline).
+        :param profile: Optional device profile (e.g. 'profiles/active_buzzer_2610hz.json').
+        :param temperature_c: Air temperature in °C for c(T) calculation.
+        :param window_ms: STFT analysis window duration in ms (default 40.0 ms = 2000 samples).
+        :param hop_ms: Sliding hop step in ms (default 10.0 ms = 100 Hz trajectory rate).
+        :param chunk_size: Hardware DMA streaming packet size.
+        :return: Comprehensive flight dictionary containing:
+                 - 'times_sec': 1D array of time stamps at 100 Hz.
+                 - 'velocity_mps': 1D velocity trajectory in m/s.
+                 - 'velocity_cmps': 1D velocity trajectory in cm/s.
+                 - 'acceleration_mps2': 1D acceleration trajectory in m/s².
+                 - 'position_m': 1D integrated position trajectory along the track.
+                 - 'f_mic1_hz': Instantaneous frequency observed at Mic 1 (left).
+                 - 'f_mic2_hz': Instantaneous frequency observed at Mic 2 (right).
+                 - 'f0_common_hz': Real-time drifting center frequency of the buzzer.
+                 - 'kinematics_summary': Viscous drag γ, restitution e, and peak speeds.
+                 - 'raw_t_sec': Full-rate continuous time axis.
+                 - 'raw_v_a0': Full-rate raw ADC voltage from Mic 1.
+                 - 'raw_v_a1': Full-rate raw ADC voltage from Mic 2.
+        """
+        from pynq_localizer.kinematics import DifferentialDopplerTracker
+
+        # 1. Capture continuous stereo stream directly to DDR
+        t_raw, v_a0, v_a1 = self.record_continuous(duration_sec=duration_sec, chunk_size=chunk_size)
+
+        # 2. Instantiate Differential Doppler Tracker
+        tracker = DifferentialDopplerTracker(
+            nominal_f0_hz=f0_nominal if f0_nominal is not None else 2609.73,
+            profile=profile,
+            temperature_c=temperature_c,
+            track_length_m=track_length_m
+        )
+
+        # 3. Slide analysis window across the captured stream (100 Hz trajectory rate)
+        win_len = int((float(window_ms) / 1000.0) * self.fs_per_ch)
+        hop_len = max(1, int((float(hop_ms) / 1000.0) * self.fs_per_ch))
+        dt_hop = float(hop_len) / float(self.fs_per_ch)
+
+        n_samples = len(v_a0)
+        indices = np.arange(0, n_samples - win_len + 1, hop_len)
+        n_frames = len(indices)
+
+        times_sec = np.zeros(n_frames, dtype=np.float64)
+        vel_mps = np.zeros(n_frames, dtype=np.float64)
+        accel_mps2 = np.zeros(n_frames, dtype=np.float64)
+        pos_m = np.zeros(n_frames, dtype=np.float64)
+        f1_arr = np.zeros(n_frames, dtype=np.float64)
+        f2_arr = np.zeros(n_frames, dtype=np.float64)
+        f0_arr = np.zeros(n_frames, dtype=np.float64)
+
+        for i, idx in enumerate(indices):
+            chunk0 = v_a0[idx : idx + win_len]
+            chunk1 = v_a1[idx : idx + win_len]
+
+            res = tracker.process_stereo_frame(v_a0=chunk0, v_a1=chunk1, fs=self.fs_per_ch, dt_sec=dt_hop)
+
+            times_sec[i] = (idx + (win_len / 2.0)) / float(self.fs_per_ch)
+            vel_mps[i] = res["velocity_mps"]
+            accel_mps2[i] = res["acceleration_mps2"]
+            pos_m[i] = res["position_m"]
+            f1_arr[i] = res["f_mic1_hz"]
+            f2_arr[i] = res["f_mic2_hz"]
+            f0_arr[i] = res["f0_common_hz"]
+
+        # 4. Extract aerodynamic drag and bumper collision metrics
+        summary = DifferentialDopplerTracker.analyze_glider_kinematics(time_sec=times_sec, velocity_mps=vel_mps)
+
+        return {
+            "times_sec": times_sec,
+            "velocity_mps": vel_mps,
+            "velocity_cmps": vel_mps * 100.0,
+            "acceleration_mps2": accel_mps2,
+            "position_m": pos_m,
+            "f_mic1_hz": f1_arr,
+            "f_mic2_hz": f2_arr,
+            "f0_common_hz": f0_arr,
+            "kinematics_summary": summary,
+            "raw_t_sec": t_raw,
+            "raw_v_a0": v_a0,
+            "raw_v_a1": v_a1
+        }
+
     # =========================================================================
     # 4. Jupyter Audio Playback & Interactive Dashboard
     # =========================================================================
