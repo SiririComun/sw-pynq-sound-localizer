@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/phase-angle-of-arrival @ c0f60fe
+• Repository State    : feat/phase-angle-of-arrival @ 5c1dd6b
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1
 • Package Version     : v1.2.0
 ==============================================================================
@@ -9,17 +9,17 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/phase-angle-of-arrival | Working Tree: Dirty (1 modified/untracked files)
+Current Branch: feat/phase-angle-of-arrival | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
-* feat/phase-angle-of-arrival                        c0f60fe [origin/feat/phase-angle-of-arrival] chore(context): update repository context with capture_aoa_frame
+* feat/phase-angle-of-arrival                        5c1dd6b [origin/feat/phase-angle-of-arrival] chore(context): update repository summary after dashboard AoA backend additions
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
-  remotes/origin/feat/phase-angle-of-arrival         c0f60fe chore(context): update repository context with capture_aoa_frame
+  remotes/origin/feat/phase-angle-of-arrival         5c1dd6b chore(context): update repository summary after dashboard AoA backend additions
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -29,7 +29,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* c0f60fe  (HEAD -> feat/phase-angle-of-arrival, origin/feat/phase-angle-of-arrival) - 2026-09-24 : chore(context): update repository context with capture_aoa_frame (SiririComun)
+* 5c1dd6b  (HEAD -> feat/phase-angle-of-arrival, origin/feat/phase-angle-of-arrival) - 2026-09-24 : chore(context): update repository summary after dashboard AoA backend additions (SiririComun)
+* dcd36ae  - 2026-09-24 : feat(dashboard): add AoA rolling ring buffers, 100 Hz worker thread, and CSV export (SiririComun)
+* c0f60fe  - 2026-09-24 : chore(context): update repository context with capture_aoa_frame (SiririComun)
 * 23cf3a3  - 2026-09-24 : feat(array): implement capture_aoa_frame and add offline pynq fallbacks (SiririComun)
 * 7e64ad7  - 2026-09-24 : chore(context): update Cog configuration and context with test_aoa (SiririComun)
 * 1b11a18  - 2026-09-24 : test(aoa): add strict unit verification suite with Hann-windowed precision (SiririComun)
@@ -42,9 +44,7 @@ Multi-Branch Git Commit Graph:
 * 704ee75  - 2026-09-24 : chore(context): regenerate repository summary after loader hardening (SiririComun)
 * 86ec8c5  - 2026-09-24 : fix(loader): harden overlay retrieval with file size guards and bump fallback to v1.5.1 (SiririComun)
 *   575a95d  (tag: v1.2.0) - 2026-09-23 : Merge branch 'feat/multipath-acoustic-calibration' into main (Release v1.2.0) (SiririComun)
-|\  
-| * bf3bdab  (origin/feat/multipath-acoustic-calibration, feat/multipath-acoustic-calibration) - 2026-09-23 : chore(release): bump package version to v1.2.0 (SiririComun)
-| * 45f3015  - 2026-09-23 : docs(notebook): overhaul 02_acoustic_calibration_lab with dual-regime and multi-tone calibration (SiririComun)
+|\
 ```
 
 LICENSE: (LICENSE)
@@ -3085,14 +3085,8 @@ class KinematicsDashboard:
         self.fig_dual.update_yaxes(range=[0, 150], title="Distance (cm)", row=3, col=1)
         self.fig_dual.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=3, col=1)
 
-        # Assemble Tabs Container
-        self.tabs = widgets.Tab(children=[self.fig_mic1, self.fig_mic2, self.fig_dual])
-        self.tabs.set_title(0, "🎙 Mic 1 (A0)")
-        self.tabs.set_title(1, "🎙 Mic 2 (A1)")
-        self.tabs.set_title(2, "🔀 Dual Overlay")
-
         # ---------------------------------------------------------------------
-        # Tab 4: Direction of Arrival (AoA Bearing Angle)
+        # Tab 4: Direction of Arrival (AoA Bearing Angle θ)
         # ---------------------------------------------------------------------
         self.fig_aoa = make_subplots(
             rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
@@ -3102,13 +3096,13 @@ class KinematicsDashboard:
             )
         )
         self.fig_aoa = go.FigureWidget(self.fig_aoa)
-        # Row 1: Angle + Confidence Band
+        # Row 1: Bearing Angle + Confidence Band (Traces 0, 1, 2)
         self.fig_aoa.add_scatter(x=self.t_axis, y=self.buf_aoa_deg, mode="lines", line=dict(width=0.5, color="rgba(0, 229, 255, 0.3)", dash="dot"), showlegend=False, name="+δθ", row=1, col=1)
         self.fig_aoa.add_scatter(x=self.t_axis, y=self.buf_aoa_deg, mode="lines", line=dict(width=0.5, color="rgba(0, 229, 255, 0.3)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 229, 255, 0.18)", name="±δθ Band", row=1, col=1)
         self.fig_aoa.add_scatter(x=self.t_axis, y=self.buf_aoa_deg, mode="lines+markers", line=dict(color="#00E5FF", width=2.0), marker=dict(size=4), name="Bearing θ (deg)", row=1, col=1)
         self.fig_aoa.add_hline(y=0.0, line=dict(color="gray", dash="dash"), annotation_text="Broadside (0°)", row=1, col=1)
 
-        # Row 2: Coherence
+        # Row 2: Coherence (Trace 3)
         self.fig_aoa.add_scatter(x=self.t_axis, y=np.zeros_like(self.t_axis), mode="lines", line=dict(color="#76FF03", width=1.8), name="Coherence γ", row=2, col=1)
 
         self.fig_aoa.update_layout(template="plotly_dark", height=700, margin=dict(l=55, r=25, t=40, b=30), uirevision="aoa")
@@ -3116,7 +3110,7 @@ class KinematicsDashboard:
         self.fig_aoa.update_yaxes(range=[0, 1.05], title="Coherence", row=2, col=1)
         self.fig_aoa.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=2, col=1)
 
-        # Assemble Tabs Container
+        # Assemble Tabs Container (4 Tabs)
         self.tabs = widgets.Tab(children=[self.fig_mic1, self.fig_mic2, self.fig_dual, self.fig_aoa])
         self.tabs.set_title(0, "🎙 Mic 1 (A0)")
         self.tabs.set_title(1, "🎙 Mic 2 (A1)")
@@ -3527,6 +3521,9 @@ class KinematicsDashboard:
                 dist_a1 = np.copy(self.buf_dist_a1)
                 disterr_a1 = np.copy(self.buf_disterr_a1)
 
+                aoa_deg = np.copy(self.buf_aoa_deg)
+                aoa_err = np.copy(self.buf_aoa_err)
+
             squelch_mv = float(self.squelch_slider.value) * 1000.0
             active_tab = self.tabs.selected_index
 
@@ -3564,6 +3561,13 @@ class KinematicsDashboard:
                     self.fig_dual.data[8].y = dist_upper_a1
                     self.fig_dual.data[9].y = dist_lower_a1
                     self.fig_dual.data[10].y = dist_a1
+            elif active_tab == 3 and hasattr(self, "fig_aoa"):
+                aoa_upper = np.clip(aoa_deg + aoa_err, -90.0, 90.0)
+                aoa_lower = np.clip(aoa_deg - aoa_err, -90.0, 90.0)
+                with self.fig_aoa.batch_update():
+                    self.fig_aoa.data[0].y = aoa_upper
+                    self.fig_aoa.data[1].y = aoa_lower
+                    self.fig_aoa.data[2].y = aoa_deg
 
             f0_str_a0 = f"{self._cur_f0_a0:.1f}Hz" if np.isfinite(self._cur_f0_a0) else "---"
             f0_str_a1 = f"{self._cur_f0_a1:.1f}Hz" if np.isfinite(self._cur_f0_a1) else "---"
@@ -3571,11 +3575,13 @@ class KinematicsDashboard:
             dist_str_a0 = f"{self._cur_dist_a0:.1f}cm" if np.isfinite(self._cur_dist_a0) else "---"
             dist_str_a1 = f"{self._cur_dist_a1:.1f}cm" if np.isfinite(self._cur_dist_a1) else "---"
 
+            aoa_str = f"{self._cur_aoa_deg:+.1f}°" if np.isfinite(self._cur_aoa_deg) else "---"
+
             self.readout_metrics.value = (
                 f"<span style='color:#00FFCC; font-family:monospace; font-size:12px; font-weight:bold;'>"
                 f"A0: {self._cur_amp_a0*1000.0:.1f}mV ({f0_str_a0} → <b>{dist_str_a0}</b>) | "
                 f"A1: {self._cur_amp_a1*1000.0:.1f}mV ({f0_str_a1} → <b>{dist_str_a1}</b>) | "
-                f"Live: 30 FPS"
+                f"🧭 Bearing: <b>{aoa_str}</b> | Live: 30 FPS"
                 f"</span>"
             )
 
@@ -5117,7 +5123,7 @@ test_dashboard.py: (tests/test_dashboard.py)
 
 ```python
 """
-tests/test_dashboard.py: Verification Suite for KinematicsDashboard 3-Row Telemetry View.
+tests/test_dashboard.py: Verification Suite for KinematicsDashboard 4-Tab Telemetry View.
 """
 
 import tempfile
@@ -5130,7 +5136,7 @@ from pynq_localizer.kinematics_dashboard import KinematicsDashboard
 class TestKinematicsDashboard:
 
     def test_dashboard_initialization_and_buffer_geometry(self):
-        """Verify dashboard buffers and distance estimator initialization."""
+        """Verify dashboard buffers and distance/aoa estimator initialization."""
         dash = KinematicsDashboard(
             overlay=None,
             window_duration_sec=10.0,
@@ -5149,20 +5155,29 @@ class TestKinematicsDashboard:
         assert len(dash.buf_dist_a1) == 1000
         assert len(dash.buf_disterr_a1) == 1000
 
-        # Estimator was properly configured
+        # AoA buffers
+        assert len(dash.buf_aoa_deg) == 1000
+        assert len(dash.buf_aoa_err) == 1000
+
+        # Estimators were properly configured
         k_eval, _ = dash.estimator.profile.evaluate(1000.0)
         assert abs(k_eval - 0.050) < 1e-6
+        assert hasattr(dash, "aoa_estimator")
 
     def test_figure_trace_counts_and_subplot_geometry(self):
-        """Verify 3-row layout and exact trace counts for all tabs."""
+        """Verify 4-tab layout and exact trace counts for all tabs."""
         dash = KinematicsDashboard(overlay=None, k_constant=0.040)
 
-        # Tab 1: Mic 1 (6 traces: Amp, Gate, Pitch, Dist+err, Dist-err, Dist)
+        # Tab 1: Mic 1 (6 traces)
         assert len(dash.fig_mic1.data) == 6
         # Tab 2: Mic 2 (6 traces)
         assert len(dash.fig_mic2.data) == 6
-        # Tab 3: Dual Overlay (11 traces: A0/A1 amp, gate, A0/A1 pitch, A0 upper/lower/dist, A1 upper/lower/dist)
+        # Tab 3: Dual Overlay (11 traces)
         assert len(dash.fig_dual.data) == 11
+        # Tab 4: AoA Bearing (4 traces: +δθ, -δθ, θ, coherence)
+        assert len(dash.fig_aoa.data) == 4
+        # Tab container has 4 tabs
+        assert len(dash.tabs.children) == 4
 
     def test_get_clean_data_and_distance_handoff(self):
         """Verify clean telemetry extraction with and without distance arrays."""
@@ -5189,14 +5204,27 @@ class TestKinematicsDashboard:
         assert np.allclose(dist_clean, 100.0)
         assert np.allclose(disterr_clean, 4.0)
 
-        # Convenience helper
+        # Convenience distance helper
         t_dist, r_cm, r_err_cm = dash.get_distance_data(channel=1)
         assert len(t_dist) == 100
         assert np.allclose(r_cm, 100.0)
         assert np.allclose(r_err_cm, 4.0)
 
-    def test_export_csv_with_distance_columns(self):
-        """Verify CSV export includes distance and uncertainty headers and data."""
+    def test_get_aoa_data_handoff(self):
+        """Verify clean AoA bearing extraction helper."""
+        dash = KinematicsDashboard(overlay=None, k_constant=0.050)
+
+        with dash._buf_lock:
+            dash.buf_aoa_deg[200:250] = 22.5
+            dash.buf_aoa_err[200:250] = 0.8
+
+        t_aoa, aoa_deg, aoa_err = dash.get_aoa_data()
+        assert len(t_aoa) == 50
+        assert np.allclose(aoa_deg, 22.5)
+        assert np.allclose(aoa_err, 0.8)
+
+    def test_export_csv_with_distance_and_aoa_columns(self):
+        """Verify CSV export includes distance and AoA bearing columns."""
         dash = KinematicsDashboard(overlay=None, k_constant=0.050)
 
         with dash._buf_lock:
@@ -5204,6 +5232,8 @@ class TestKinematicsDashboard:
             dash.buf_freq_a0[10:20] = 1500.0
             dash.buf_dist_a0[10:20] = 62.5
             dash.buf_disterr_a0[10:20] = 2.5
+            dash.buf_aoa_deg[10:20] = -14.2
+            dash.buf_aoa_err[10:20] = 0.5
 
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
             tmp_csv = Path(tmp.name)
@@ -5215,7 +5245,8 @@ class TestKinematicsDashboard:
 
             assert len(lines) == 11  # 1 header + 10 data rows
             header = lines[0].strip()
-            assert header == "time_sec,a0_amp_v,a0_freq_hz,a0_dist_cm,a0_dist_err_cm,a1_amp_v,a1_freq_hz,a1_dist_cm,a1_dist_err_cm"
+            assert "aoa_deg,aoa_err_deg" in header
+            assert "a0_dist_cm" in header
         finally:
             if tmp_csv.exists():
                 tmp_csv.unlink()
