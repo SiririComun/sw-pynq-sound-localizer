@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/differential-air-track-doppler @ d4864e3
+• Repository State    : feat/differential-air-track-doppler @ 42fe7db
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1
 • Package Version     : v1.2.0
 ==============================================================================
@@ -12,13 +12,13 @@ Git Context & Branch Topology:
 Current Branch: feat/differential-air-track-doppler | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/differential-air-track-doppler                d4864e3 [origin/feat/differential-air-track-doppler: ahead 1] docs(notebook): add 04_air_track_differential_doppler interactive lab
+* feat/differential-air-track-doppler                42fe7db [origin/feat/differential-air-track-doppler: ahead 1] docs(notebook): modularize 04_air_track_differential_doppler into step-by-step cells
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
-  remotes/origin/feat/differential-air-track-doppler 0ed3088 chore(context): update repository summary with 57 passing tests
+  remotes/origin/feat/differential-air-track-doppler 33d90e0 chore(context): update repository summary with Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
@@ -31,8 +31,10 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* d4864e3  (HEAD -> feat/differential-air-track-doppler) - 2026-09-24 : docs(notebook): add 04_air_track_differential_doppler interactive lab (SiririComun)
-* 0ed3088  (origin/feat/differential-air-track-doppler) - 2026-09-24 : chore(context): update repository summary with 57 passing tests (SiririComun)
+* 42fe7db  (HEAD -> feat/differential-air-track-doppler) - 2026-09-25 : docs(notebook): modularize 04_air_track_differential_doppler into step-by-step cells (SiririComun)
+* 33d90e0  (origin/feat/differential-air-track-doppler) - 2026-09-24 : chore(context): update repository summary with Notebook 04 (SiririComun)
+* d4864e3  - 2026-09-24 : docs(notebook): add 04_air_track_differential_doppler interactive lab (SiririComun)
+* 0ed3088  - 2026-09-24 : chore(context): update repository summary with 57 passing tests (SiririComun)
 * 82d3760  - 2026-09-24 : feat(dashboard): add 4-row Dual & Doppler Plotly UI and test suite (SiririComun)
 * fefbccc  - 2026-09-24 : chore(context): update repository summary with dashboard Doppler backend (SiririComun)
 * 4e25da6  - 2026-09-24 : feat(dashboard): add differential Doppler velocity buffers, worker calculations, and CSV export (SiririComun)
@@ -44,8 +46,6 @@ Multi-Branch Git Commit Graph:
 * 08c54ca  - 2026-09-24 : docs(notebook): add 03_phase_angle_of_arrival_lab interactive benchmark (SiririComun)
 * ec5dd2d  - 2026-09-24 : chore(context): update repository summary with 4-tab dashboard (SiririComun)
 * cdf76dd  - 2026-09-24 : feat(dashboard): add Tab 4 Direction-of-Arrival Plotly UI and unit tests (SiririComun)
-* 5c1dd6b  - 2026-09-24 : chore(context): update repository summary after dashboard AoA backend additions (SiririComun)
-* dcd36ae  - 2026-09-24 : feat(dashboard): add AoA rolling ring buffers, 100 Hz worker thread, and CSV export (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -6036,219 +6036,210 @@ class TestAngleOfArrivalEngine:
 ```python
 # %% [markdown] Cell 1
 # 🧭 Notebook 3: Acoustic Phase Interferometry & Direction of Arrival (AoA)
-# Welcome to the **Acoustic Angle of Arrival (AoA) Laboratory** (`v1.2.0`).
-# This notebook demonstrates real-time acoustic direction-finding on the **PYNQ-Z2 board (`xc7z020clg400-1`)**:
-# * **Simultaneous Dual-ADC Sampling:** $0.00\,\mu\text{s}$ inter-channel skew across MAX4466 microphones on pins A0 (`Vaux1`) and A1 (`Vaux9`).
-# * **Hann-Windowed Single-Bin Coherent Projection:** Sub-degree phase extraction ($\Delta \phi = \phi_1 - \phi_0$) immune to boundary edge splatter and harmonic distortion ($2f_0$).
-# * **Trigonometric Bearing Inversion:**
+# Welcome to the **Acoustic Direction of Arrival (AoA) Laboratory**.
+# This notebook guides you step-by-step through measuring the physical angle of an incident sound wave using a **two-microphone phase interferometer** on the **PYNQ-Z2 board**.
+# ---
+### 🏛️ Physical Operating Principle
+# When a sound wave arrives at an angle $\theta$ relative to array broadside ($0^\circ$):
+# * The path difference between the two microphones separated by distance $d$ is $\Delta r = d \cdot \sin(\theta)$.
+# * This spatial path difference produces an acoustic phase delay $\Delta \phi$:
+# $$\Delta \phi = \frac{2\pi f_0}{c(T)} \cdot d \cdot \sin(\theta)$$
+# * Inverting this equation gives the incident bearing angle $\theta$:
 # $$\theta = \arcsin\left(\frac{c(T) \cdot \Delta \phi}{2\pi f_0 \cdot d}\right)$$
-# strictly bounded by the spatial aliasing limit ($d \le \lambda / 2$).
-# * **Interactive Protractor Calibration:** Multi-station ground-truth bench verification and spatial beam plotting.
-# * **Real-Time 100 Hz Live Dashboard:** Continuous bearing tracking with dynamic $\pm \delta\theta$ confidence envelope.
+# > **Spatial Aliasing Constraint:** To prevent phase wrapping ambiguity, the microphone spacing $d$ must satisfy $d \le \frac{\lambda}{2} = \frac{c}{2 f_0}$. For our $2610\,\text{Hz}$ buzzer, $d \le 6.58\,\text{cm}$. We use a baseline of **$d = 5.0\,\text{cm}$**.
 
 # %% [markdown] Cell 2
-## 1. Physical Protractor Benchmark Experiment
-# Mount your two MAX4466 microphones on a protractor baseline ($d = 5.0\,\text{cm}$) and test the target stations:
-# $$\theta_{\text{target}} \in \{-45^\circ, -30^\circ, 0^\circ, +30^\circ, +45^\circ\}$$
-# Run the guided cell below to collect multi-burst statistics, evaluate against the $\le 3.0^\circ$ quality gate, and render the interactive spatial beam dashboard.
+## 1. Hardware Initialization & Profile Loading
+# Connect your setup:
+# 1. **Mic 1** $\to$ Arduino **A0** (`Vaux1`).
+# 2. **Mic 2** $\to$ Arduino **A1** (`Vaux9`).
+# 3. Place microphone capsules side-by-side with center-to-center spacing **$d = 5.0\,\text{cm}$**.
+# 4. Power your buzzer circuit ($2\text{N}2222\text{A}$ switch with control wire plugged into $3.3\,\text{V}$ for steady tone).
 
 # %% [code] Cell 3
 import json
-import time
 from pathlib import Path
 import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from IPython.display import display, HTML
-
 from pynq_localizer import MicrophoneArrayOverlay
 
-print("=" * 76)
-print("🧭 STEP 1.6: PHYSICAL PROTRACTOR ANGLE OF ARRIVAL (AoA) BENCH LAB")
-print("=" * 76)
-
-ol = None
-try:
-    # 1. Initialize Hardware Overlay
-    print("⏳ [1/3] Initializing FPGA Hardware Overlay (Profile: 'audio')...")
-    ol = MicrophoneArrayOverlay()
-    
-    # Physical array parameters
-    mic_distance_m = 0.05  # 5.0 cm center-to-center baseline
-    profile_path = Path("profiles/active_buzzer_2610hz.json")
-    
-    if profile_path.exists():
-        with open(profile_path, "r", encoding="utf-8") as f:
-            p_data = json.load(f)
-        f0 = p_data.get("f_res_hz", 2609.73)
-        d_max_aliasing = p_data.get("max_mic_spacing_aoa_cm", 6.58)
-    else:
-        f0 = 2609.73
-        d_max_aliasing = 6.58
-
-    print(f"      • Center Carrier f0     : {f0:.2f} Hz")
-    print(f"      • Microphone Baseline d : {mic_distance_m * 100.0:.1f} cm")
-    print(f"      • Max Aliasing Bound    : <= {d_max_aliasing:.2f} cm")
-
-    # Target test stations along the protractor semicircle
-    test_stations_deg = [-45.0, -30.0, 0.0, +30.0, +45.0]
-    n_bursts = 20
-    results = {}
-
-    print("\n" + "-" * 76)
-    print("📍 [2/3] GUIDED PROTRACTOR MEASUREMENT PROTOCOL")
-    print("   1. Keep the buzzer sounding steadily (wire plugged into 3.3V via 2N2222A).")
-    print("   2. Place the buzzer at radial distance r ≈ 30 cm for each angle mark.")
-    print("-" * 76)
-
-    for target_deg in test_stations_deg:
-        # Interactive Jupyter Prompt
-        input(f"👉 Move buzzer to {target_deg:+5.1f}° mark (r ≈ 30 cm) and press [Enter]...")
-        
-        measured_angles = []
-        measured_coherences = []
-        
-        for b in range(n_bursts):
-            frame = ol.capture_aoa_frame(
-                f_target=f0,
-                mic_distance_m=mic_distance_m,
-                noise_gate_v=0.010,
-                timeout=0.5
-            )
-            if frame["status"] == "ACTIVE_VALID":
-                measured_angles.append(frame["theta_deg"])
-                measured_coherences.append(frame["coherence"])
-            time.sleep(0.01)
-            
-        if len(measured_angles) < 5:
-            print(f"   ⚠️ Weak signal at {target_deg}°! Check buzzer power and line of sight.")
-            continue
-            
-        mean_theta = float(np.mean(measured_angles))
-        std_theta = float(np.std(measured_angles))
-        mean_coh = float(np.mean(measured_coherences))
-        abs_err = abs(mean_theta - target_deg)
-        
-        results[str(target_deg)] = {
-            "target_deg": target_deg,
-            "measured_mean_deg": mean_theta,
-            "measured_std_deg": std_theta,
-            "abs_error_deg": abs_err,
-            "coherence": mean_coh,
-            "n_samples": len(measured_angles)
-        }
-        
-        tag = "✅" if abs_err <= 3.0 else "⚠️"
-        print(f"   {tag} Target: {target_deg:+5.1f}° ──► Measured: {mean_theta:+5.2f}° ± {std_theta:4.2f}° "
-              f"| Err: {abs_err:4.2f}° | Coherence: {mean_coh:.2f}")
-
-    # =========================================================================
-    # PART 3: Statistical Evaluation & Interactive Dashboard Plot
-    # =========================================================================
-    print("\n" + "=" * 76)
-    print("📊 PHYSICAL PROTRACTOR TEST RESULTS SUMMARY")
-    print("=" * 76)
-    print(f"{'Target Station':<18} | {'Measured Mean':<18} | {'Std Dev (σ)':<14} | {'Abs Error':<12} | {'Gate (<= 3.0°)'}")
-    print("-" * 76)
-    
-    all_passed = True
-    targets = []
-    measured_means = []
-    measured_stds = []
-    errors = []
-    
-    for st_str, d in results.items():
-        err = d["abs_error_deg"]
-        targets.append(d["target_deg"])
-        measured_means.append(d["measured_mean_deg"])
-        measured_stds.append(d["measured_std_deg"])
-        errors.append(err)
-        
-        passed = (err <= 3.0)
-        if not passed:
-            all_passed = False
-        status_tag = "✅ PASS" if passed else "❌ FAIL"
-        print(f"{d['target_deg']:+6.1f}°{'':<11} | {d['measured_mean_deg']:+6.2f}°{'':<11} | "
-              f"±{d['measured_std_deg']:4.2f}°{'':<8} | {err:4.2f}°{'':<7} | {status_tag}")
-
-    print("-" * 76)
-    overall_mean_err = float(np.mean(errors)) if errors else 999.0
-    print(f"  • Overall Mean Absolute Angular Error: {overall_mean_err:.2f}° across all stations")
-
-    # Save artifact
-    out_file = Path("aoa_bench_results.json").resolve()
-    with open(out_file, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
-    print(f"💾 Saved bench verification to: {out_file.name}")
-
-    if all_passed:
-        print("\n🎉 PHASE 1 OFFICIALLY CERTIFIED: Direction of Arrival (AoA) PASSED.")
-    else:
-        print("\n⚠️ PHASE 1 GATE INCOMPLETE: Error exceeded 3.0° on one or more stations.")
-
-    # Render Two-Panel Interactive Diagnostic Plotly Figure
-    fig = make_subplots(
-        rows=1, cols=2,
-        subplot_titles=(
-            f"<b>1. Angular Linearity (Mean Err = {overall_mean_err:.2f}°, Gate <= 3.0°)</b>",
-            "<b>2. Spatial Directional Beams (Broadside at 0°)</b>"
-        ),
-        horizontal_spacing=0.12
-    )
-
-    # Panel 1: Measured vs Expected Linearity Curve with ±3° Corridor
-    x_ideal = np.linspace(-60, 60, 100)
-    fig.add_scatter(x=x_ideal, y=x_ideal + 3.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), showlegend=False, row=1, col=1)
-    fig.add_scatter(x=x_ideal, y=x_ideal - 3.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.12)", name="±3.0° Gate Corridor", row=1, col=1)
-    fig.add_scatter(x=x_ideal, y=x_ideal, mode="lines", line=dict(color="gray", dash="dash"), name="Ideal (y = x)", row=1, col=1)
-    fig.add_scatter(x=targets, y=measured_means, error_y=dict(type="data", array=measured_stds, visible=True), mode="markers", marker=dict(size=10, color="#00FFCC"), name="Measured Angles", row=1, col=1)
-
-    # Panel 2: Spatial Directional Ray Vectors
-    fig.add_scatter(x=[-0.025, 0.025], y=[0, 0], mode="lines+markers", marker=dict(size=8, color=["#00FFCC", "#FF007F"]), line=dict(color="white", width=3), name="Mic Baseline (d=5cm)", row=1, col=2)
-    
-    r_beam = 0.30  # 30 cm beam length
-    colors = ["#FFA500", "#00E5FF", "#76FF03", "#E040FB", "#FFD600"]
-    for idx, (t_target, t_meas) in enumerate(zip(targets, measured_means)):
-        c = colors[idx % len(colors)]
-        # Target ray (dashed)
-        rad_target = np.radians(t_target)
-        x_tgt = r_beam * np.sin(rad_target)
-        y_tgt = r_beam * np.cos(rad_target)
-        fig.add_scatter(x=[0, x_tgt], y=[0, y_tgt], mode="lines", line=dict(color=c, dash="dot", width=1.5), showlegend=False, row=1, col=2)
-        # Measured ray (solid)
-        rad_meas = np.radians(t_meas)
-        x_meas = r_beam * np.sin(rad_meas)
-        y_meas = r_beam * np.cos(rad_meas)
-        fig.add_scatter(x=[0, x_meas], y=[0, y_meas], mode="lines+markers", line=dict(color=c, width=2.5), marker=dict(size=[0, 7]), name=f"Beam {t_target:+.0f}°", row=1, col=2)
-
-    fig.update_layout(template="plotly_dark", height=500, margin=dict(l=40, r=20, t=50, b=40))
-    fig.update_xaxes(title="Target Angle (°)", range=[-60, 60], row=1, col=1)
-    fig.update_yaxes(title="Measured Angle (°)", range=[-60, 60], row=1, col=1)
-    fig.update_xaxes(title="Horizontal Position X (m)", range=[-0.25, 0.25], row=1, col=2)
-    fig.update_yaxes(title="Forward Distance Y (m)", range=[-0.02, 0.35], row=1, col=2)
-    fig.show()
-
-finally:
-    if ol is not None:
-        ol.close()
-        print("🔒 FPGA hardware resources cleanly released.")
-
-# %% [markdown] Cell 4
-## 2. Launch the 4-Tab Real-Time Direction-of-Arrival Dashboard
-# Run the cell below to launch the **100 Hz real-time dashboard**.
-# Click **Tab 4 (🧭 Direction of Arrival)** and move your sound source left and right to observe the live incident bearing trajectory $\theta(t)$.
-
-# %% [code] Cell 5
-from pynq_localizer import MicrophoneArrayOverlay
-
+# 1. Initialize Hardware Overlay (50 kSPS dual continuous streaming)
 ol = MicrophoneArrayOverlay()
 
-# Launch the live 4-tab dashboard with AoA tracking enabled
+# 2. Physical Array Parameters
+mic_distance_m = 0.05  # 5.0 cm baseline
+profile_path = Path("profiles/active_buzzer_2610hz.json")
+
+if profile_path.exists():
+    with open(profile_path, "r", encoding="utf-8") as f:
+        p_data = json.load(f)
+    f0 = p_data.get("f_res_hz", 2609.73)
+    d_max = p_data.get("max_mic_spacing_aoa_cm", 6.58)
+else:
+    f0 = 2609.73
+    d_max = 6.58
+
+print(f"✅ Hardware Overlay Active: {ol.fs_per_ch:.0f} SPS per channel")
+print(f"✅ Target Carrier Frequency : f0 = {f0:.2f} Hz")
+print(f"✅ Microphone Baseline     : d  = {mic_distance_m*100:.1f} cm (Aliasing Limit <= {d_max:.2f} cm)")
+
+# %% [markdown] Cell 4
+## 2. Quick 3-Position Sanity Check
+# Before marking an entire protractor, test the 3 cardinal positions:
+# * **Center ($0^\circ$):** Hold buzzer directly in front $\approx 30\,\text{cm}$ away.
+# * **Right ($+45^\circ$):** Hold buzzer to the right (closer to Mic 2 / A1).
+# * **Left ($-45^\circ$):** Hold buzzer to the left (closer to Mic 1 / A0).
+
+# %% [code] Cell 5
+positions = [
+    ("CENTER (Directly in front)", "≈ 0.0°"),
+    ("RIGHT (Closer to Mic 2)", "Positive (+30° to +45°)"),
+    ("LEFT (Closer to Mic 1)", "Negative (-30° to -45°)")
+]
+
+for label, expected in positions:
+    input(f"👉 Place buzzer at {label} (~30 cm away) and press [Enter]...")
+    
+    res = ol.capture_aoa_frame(
+        f_target=f0,
+        mic_distance_m=mic_distance_m,
+        noise_gate_v=0.010
+    )
+    
+    print(f"   • Measured Angle : {res['theta_deg']:+5.1f}° (Expected: {expected})")
+    print(f"   • Phase Shift Δφ : {res['delta_phi_rad']:+5.3f} rad ({np.degrees(res['delta_phi_rad']):+5.1f}°)")
+    print(f"   • Wave Coherence : {res['coherence']:.3f} | Status: {res['status']}\n")
+
+# %% [markdown] Cell 6
+## 3. Multi-Station Protractor Benchmark
+# Place a protractor or mark radial lines at $r \approx 30\,\text{cm}$ on your desk for:
+# $$\theta_{\text{target}} \in \{-45^\circ, -30^\circ, 0^\circ, +30^\circ, +45^\circ\}$$
+# The cell below records **$N=20$ frames per station** to compute mean bearing $\bar{\theta}$ and standard deviation $\sigma_\theta$.
+
+# %% [code] Cell 7
+import time
+
+test_stations_deg = [-45.0, -30.0, 0.0, +30.0, +45.0]
+n_bursts = 20
+results = {}
+
+print("🚀 Starting Guided Protractor Loop...")
+
+for target_deg in test_stations_deg:
+    input(f"\n👉 Place buzzer at {target_deg:+5.1f}° mark and press [Enter]...")
+    
+    measured_angles = []
+    measured_coherences = []
+    
+    for _ in range(n_bursts):
+        frame = ol.capture_aoa_frame(
+            f_target=f0,
+            mic_distance_m=mic_distance_m,
+            noise_gate_v=0.010,
+            timeout=0.5
+        )
+        if frame["status"] == "ACTIVE_VALID":
+            measured_angles.append(frame["theta_deg"])
+            measured_coherences.append(frame["coherence"])
+        time.sleep(0.01)
+        
+    mean_th = float(np.mean(measured_angles))
+    std_th = float(np.std(measured_angles))
+    err = abs(mean_th - target_deg)
+    
+    results[str(target_deg)] = {
+        "target_deg": target_deg,
+        "measured_mean_deg": mean_th,
+        "measured_std_deg": std_th,
+        "abs_error_deg": err,
+        "coherence": float(np.mean(measured_coherences))
+    }
+    
+    tag = "✅" if err <= 3.0 else "⚠️"
+    print(f"   {tag} Target: {target_deg:+5.1f}° ──► Measured: {mean_th:+5.2f}° ± {std_th:4.2f}° (Error = {err:4.2f}°)")
+
+# %% [markdown] Cell 8
+## 4. Angular Linearity & Quality Gate Evaluation
+# Evaluate whether your physical interferometry setup meets the **$\le 3.0^\circ$ accuracy gate** across the central $[-45^\circ, +45^\circ]$ sector.
+
+# %% [code] Cell 9
+import plotly.graph_objects as go
+
+# Summary Table Printout
+print(f"{'Target Station':<16} | {'Measured Mean':<16} | {'Std Dev (σ)':<12} | {'Abs Error':<10} | {'Status'}")
+print("-" * 72)
+
+targets = [d["target_deg"] for d in results.values()]
+means = [d["measured_mean_deg"] for d in results.values()]
+stds = [d["measured_std_deg"] for d in results.values()]
+errors = [d["abs_error_deg"] for d in results.values()]
+
+for d in results.values():
+    passed = d["abs_error_deg"] <= 3.0
+    print(f"{d['target_deg']:+5.1f}°{'':<10} | {d['measured_mean_deg']:+5.2f}°{'':<10} | ±{d['measured_std_deg']:4.2f}°{'':<6} | {d['abs_error_deg']:4.2f}°{'':<5} | {'✅ PASS' if passed else '❌ FAIL'}")
+
+print("-" * 72)
+print(f"Mean Absolute Error across all stations: {np.mean(errors):.2f}°\n")
+
+# Linearity Calibration Plot with ±3.0° Gate Corridor
+x_ideal = np.linspace(-60, 60, 100)
+fig_lin = go.Figure()
+fig_lin.add_scatter(x=x_ideal, y=x_ideal + 3.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), showlegend=False)
+fig_lin.add_scatter(x=x_ideal, y=x_ideal - 3.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.12)", name="±3.0° Quality Corridor")
+fig_lin.add_scatter(x=x_ideal, y=x_ideal, mode="lines", line=dict(color="gray", dash="dash"), name="Ideal (y = x)")
+fig_lin.add_scatter(x=targets, y=means, error_y=dict(type="data", array=stds, visible=True), mode="markers", marker=dict(size=10, color="#00FFCC"), name="Measured Stations")
+
+fig_lin.update_layout(template="plotly_dark", height=450, title="<b>Angular Linearity: Measured vs. Target Protractor Angle</b>")
+fig_lin.update_xaxes(title="Target Angle (°)", range=[-60, 60])
+fig_lin.update_yaxes(title="Measured Angle (°)", range=[-60, 60])
+fig_lin.show()
+
+# %% [markdown] Cell 10
+## 5. 2D Spatial Acoustic Beam Reconstruction
+# Reconstruct the physical acoustic ray vectors in 2D Euclidean space originating from the microphone baseline ($d = 5.0\,\text{cm}$) and pointing toward the measured buzzer locations.
+
+# %% [code] Cell 11
+r_beam = 0.30  # 30 cm distance
+colors = ["#FFA500", "#00E5FF", "#76FF03", "#E040FB", "#FFD600"]
+
+fig_rays = go.Figure()
+# Draw physical microphone baseline
+fig_rays.add_scatter(x=[-0.025, 0.025], y=[0, 0], mode="lines+markers", marker=dict(size=8, color=["#00FFCC", "#FF007F"]), line=dict(color="white", width=3), name="Mic Baseline (d=5cm)")
+
+for idx, (t_tgt, t_meas) in enumerate(zip(targets, means)):
+    c = colors[idx % len(colors)]
+    # Target direction (dashed line)
+    rad_t = np.radians(t_tgt)
+    fig_rays.add_scatter(x=[0, r_beam * np.sin(rad_t)], y=[0, r_beam * np.cos(rad_t)], mode="lines", line=dict(color=c, dash="dot", width=1.5), showlegend=False)
+    # Measured direction (solid ray)
+    rad_m = np.radians(t_meas)
+    fig_rays.add_scatter(x=[0, r_beam * np.sin(rad_m)], y=[0, r_beam * np.cos(rad_m)], mode="lines+markers", line=dict(color=c, width=2.5), marker=dict(size=[0, 7]), name=f"Ray {t_tgt:+.0f}°")
+
+fig_rays.update_layout(template="plotly_dark", height=450, title="<b>2D Reconstructed Directional Acoustic Beams</b>")
+fig_rays.update_xaxes(title="Horizontal Position X (m)", range=[-0.25, 0.25])
+fig_rays.update_yaxes(title="Forward Distance Y (m)", range=[-0.02, 0.35])
+fig_rays.show()
+
+# %% [markdown] Cell 12
+## 6. Live 100 Hz Streaming Dashboard
+# Launch the interactive dashboard.
+
+# %% [code] Cell 13
+# Launch the real-time 4-tab dashboard with AoA enabled
 app = ol.kinematics_dashboard(
     window_duration_sec=10.0,
     hop_ms=10.0,
-    aoa_mic_distance_m=0.05
+    aoa_mic_distance_m=mic_distance_m
 )
+
+# %% [markdown] Cell 14
+## 7. Clean Hardware Teardown
+# When finished, stop the dashboard threads and release the FPGA DMA memory buffers.
+
+# %% [code] Cell 15
+if 'app' in locals():
+    app.stop()
+ol.close()
+print("🔒 FPGA hardware and DMA buffers cleanly released.")
 
 ```
 
@@ -6413,144 +6404,193 @@ class TestDifferentialDopplerEngine:
 
 ```python
 # %% [markdown] Cell 1
-# 🚄 Notebook 4: Dual-Ended Differential Doppler Kinematics on Air Track
-# Welcome to the **Differential Acoustic Doppler Laboratory** (`v1.2.0`).
-# This notebook demonstrates precision 1D motion tracking of an air track glider using counter-positioned microphones at opposite ends of the track ($x=0$ and $x=L$):
-# * **Simultaneous Dual-ADC Sampling:** True zero inter-channel skew ($0.00\,\mu\text{s}$) across MAX4466 microphones on pins A0 and A1.
-# * **Common-Mode Thermal & Battery Drift Cancellation:**
+# 🚄 Notebook 4: Dual-Ended Differential Doppler Kinematics
+# Welcome to the **Differential Acoustic Doppler Laboratory**.
+# This notebook guides you through measuring the real-time velocity, acceleration, and position of an acoustic emitter moving along a 1D line using two opposing microphones (**Mic 1 at $x=0$** and **Mic 2 at $x=L$**).
+# ---
+### 🏛️ The Physical Power of the Dual-Ended Setup
+# 1. **Buzzer Drift Cancellation:**
+# Active buzzers drift with temperature and battery voltage. Because both microphones observe the same source simultaneously, their average tracks the drifting carrier in real time:
 # $$f_0(t) = \frac{f_1(t) + f_2(t)}{2}$$
-# Both microphones observe the active buzzer simultaneously, completely canceling oscillator frequency drift!
-# * **Exact Differential Velocity Inversion (Double Sensitivity):**
+# 2. **Double Doppler Sensitivity ($2\times$):**
+# Subtracting the two observed frequencies doubles the Doppler frequency split:
+# $$\Delta f_{\text{diff}}(t) = f_2(t) - f_1(t) = 2 f_0(t) \cdot \frac{v(t)}{c(T)}$$
+# 3. **Exact Drift-Immune Velocity Inversion:**
 # $$v(t) = c(T) \cdot \left(\frac{f_2(t) - f_1(t)}{f_1(t) + f_2(t)}
 # ight)$$
-# * **Pneumatic Blower Squelch Gating:** Narrowband adaptive tracking band rejects air track hiss.
-# * **Aerodynamic Kinematics Extraction:** Measures air cushion viscous damping $\gamma$ ($v(t) = v_0 e^{-\gamma t}$) and bumper coefficient of restitution $e$.
+# > **Experimental Modes:** This notebook works identically on an **air track** (with a glider) or on a **standard lab desk** (sliding/waving the buzzer by hand along a meter stick).
 
 # %% [markdown] Cell 2
-## 1. Multi-Second Glider Flight Recording & Kinematic Trajectory
-# Place the active buzzer on the air track glider.
-# Run the cell below, release/push the glider when prompted, and observe the extracted velocity, acceleration, and position trajectories.
+## 1. Hardware Initialization & Parameter Setup
+# Place your setup:
+# 1. **Mic 1 (A0):** Left end ($x = 0$).
+# 2. **Mic 2 (A1):** Right end ($x = L$, typically $1.0\,\text{m} - 2.0\,\text{m}$ apart).
+# 3. **Buzzer:** Power the buzzer circuit with control wire plugged into $3.3\,\text{V}$ for steady $2610\,\text{Hz}$ tone.
 
 # %% [code] Cell 3
 import json
 from pathlib import Path
 import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from IPython.display import display, HTML
-
 from pynq_localizer import MicrophoneArrayOverlay, KinematicAnalytics
 
-print("=" * 76)
-print("🚄 STEP 2.6: DUAL-ENDED DIFFERENTIAL DOPPLER AIR TRACK RUN")
-print("=" * 76)
-
-ol = None
-try:
-    print("⏳ [1/3] Initializing FPGA Hardware Overlay (Profile: 'audio', 50 kSPS)...")
-    ol = MicrophoneArrayOverlay()
-    
-    # 1. Flight Parameters
-    duration_flight_sec = 5.0
-    track_len_m = 2.0  # 2.0 meter air track
-    profile_path = Path("profiles/active_buzzer_2610hz.json")
-
-    print(f"      • Track Length L     : {track_len_m:.2f} m")
-    print(f"      • Flight Duration    : {duration_flight_sec:.1f} s")
-    print(f"      • Sample Rate        : {ol.fs_per_ch:.0f} SPS per channel")
-
-    print("\n" + "-" * 76)
-    print("📍 [2/3] GLIDER FLIGHT RECORDING PROTOCOL")
-    print("   1. Turn the buzzer ON (wire in 3.3V via 2N2222A).")
-    print("   2. Turn ON the air track blower.")
-    print("   3. Hold the glider at one end.")
-    print("   4. Press [Enter] and IMMEDIATELY PUSH the glider across the track!")
-    print("-" * 76)
-    input("👉 Press [Enter] and launch the glider...")
-
-    # Record and process continuous 100 Hz kinematic trajectory
-    flight = ol.record_differential_flight(
-        duration_sec=duration_flight_sec,
-        track_length_m=track_len_m,
-        profile=profile_path,
-        temperature_c=20.0,
-        window_ms=40.0,
-        hop_ms=10.0
-    )
-
-    t_sec = flight["times_sec"]
-    v_mps = flight["velocity_mps"]
-    v_cmps = flight["velocity_cmps"]
-    pos_m = flight["position_m"]
-    f1 = flight["f_mic1_hz"]
-    f2 = flight["f_mic2_hz"]
-    f0_drift = flight["f0_common_hz"]
-    summary = flight["kinematics_summary"]
-
-    print("\n" + "=" * 76)
-    print("📊 GLIDER FLIGHT KINEMATICS SUMMARY")
-    print("=" * 76)
-    print(f"  • Trajectory Points Extracted   : {len(t_sec)} frames (100 Hz rate)")
-    print(f"  • Maximum Forward Speed (+v)    : {summary['max_forward_velocity_mps']*100:.1f} cm/s ({summary['max_forward_velocity_mps']:.3f} m/s)")
-    print(f"  • Maximum Reverse Speed (-v)    : {summary['max_reverse_velocity_mps']*100:.1f} cm/s ({summary['max_reverse_velocity_mps']:.3f} m/s)")
-    print(f"  • Total Bumper Bounces Detected : {summary['total_collisions_detected']}")
-    if np.isfinite(summary.get("mean_coefficient_of_restitution", np.nan)):
-        print(f"  • Bumper Restitution Coeff (e)  : e = {summary['mean_coefficient_of_restitution']:.3f} (Elasticity)")
-    print(f"  • Air Viscous Damping Coeff (γ) : γ = {summary['viscous_drag_gamma']:.4f} s⁻¹")
-    print(f"  • Total Glider Travel Distance  : {pos_m[-1] - pos_m[0]:.3f} m")
-    print("=" * 76)
-
-    # Render 3-Panel Interactive Kinematic Trajectory Dashboard
-    fig = make_subplots(
-        rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.08,
-        subplot_titles=(
-            "<b>1. Dual Observed Frequencies (f1 Blue vs f2 Red) & Common Drift f0(t) [Hz]</b>",
-            f"<b>2. Instantaneous Differential Velocity v(t) [cm/s] (Max = {np.max(np.abs(v_cmps)):.1f} cm/s)</b>",
-            "<b>3. Integrated Glider Position Along Track x(t) [m]</b>"
-        )
-    )
-
-    # Panel 1: Frequencies
-    fig.add_scatter(x=t_sec, y=f1, mode="lines", line=dict(color="#00FFCC", width=1.8), name="Mic 1 (Left)", row=1, col=1)
-    fig.add_scatter(x=t_sec, y=f2, mode="lines", line=dict(color="#FF007F", width=1.8), name="Mic 2 (Right)", row=1, col=1)
-    fig.add_scatter(x=t_sec, y=f0_drift, mode="lines", line=dict(color="#FFA500", width=1.5, dash="dash"), name="Drift f0(t)", row=1, col=1)
-
-    # Panel 2: Velocity
-    fig.add_scatter(x=t_sec, y=v_cmps, mode="lines+markers", marker=dict(size=3), line=dict(color="#FFD600", width=2.0), name="v_diff (cm/s)", row=2, col=1)
-    fig.add_hline(y=0.0, line=dict(color="gray", dash="dash"), row=2, col=1)
-
-    # Panel 3: Position
-    fig.add_scatter(x=t_sec, y=pos_m, mode="lines", line=dict(color="#76FF03", width=2.2), name="Position x(t)", row=3, col=1)
-    fig.add_hline(y=0.0, line=dict(color="white", dash="dot"), annotation_text="Left Bumper (0m)", row=3, col=1)
-    fig.add_hline(y=track_len_m, line=dict(color="white", dash="dot"), annotation_text=f"Right Bumper ({track_len_m}m)", row=3, col=1)
-
-    fig.update_layout(template="plotly_dark", height=800, margin=dict(l=55, r=25, t=50, b=30))
-    fig.update_yaxes(title="Frequency (Hz)", row=1, col=1)
-    fig.update_yaxes(title="Velocity (cm/s)", row=2, col=1)
-    fig.update_yaxes(title="Position (m)", range=[-0.05, track_len_m + 0.05], row=3, col=1)
-    fig.update_xaxes(title="Time (Seconds)", row=3, col=1)
-    fig.show()
-
-finally:
-    if ol is not None:
-        ol.close()
-        print("🔒 FPGA hardware resources cleanly released.")
-
-# %% [markdown] Cell 4
-## 2. Launch the Real-Time 4-Tab Kinematics & Doppler Dashboard
-# Run the cell below to launch the **100 Hz live streaming dashboard**.
-# Click **Tab 3 (🔀 Dual Overlay & Doppler)** to observe real-time differential velocity $v_{\text{diff}}(t)$ in Row 4 while manually pushing the glider back and forth!
-
-# %% [code] Cell 5
-from pynq_localizer import MicrophoneArrayOverlay
-
+# 1. Initialize Hardware Overlay (50 kSPS per channel)
 ol = MicrophoneArrayOverlay()
 
-# Launch the live 4-tab instrument with AoA and Differential Doppler enabled
+# 2. Physical Experiment Parameters
+track_len_m = 1.50   # Physical distance between microphones in meters
+temperature_c = 20.0 # Ambient temperature in °C
+c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
+
+profile_path = Path("profiles/active_buzzer_2610hz.json")
+if profile_path.exists():
+    with open(profile_path, "r", encoding="utf-8") as f:
+        p_data = json.load(f)
+    f0 = p_data.get("f_res_hz", 2609.73)
+else:
+    f0 = 2609.73
+
+print(f"✅ Hardware Overlay Active : {ol.fs_per_ch:.0f} SPS per channel")
+print(f"✅ Speed of Sound c(T)     : {c_sound:.2f} m/s (at {temperature_c}°C)")
+print(f"✅ Buzzer Nominal Carrier  : f0 = {f0:.2f} Hz")
+print(f"✅ Doppler Scale Factor    : {2.0 * f0 / c_sound:.2f} Hz per (m/s)")
+
+# %% [markdown] Cell 4
+## 2. Quick 2-Second Motion Sanity Check
+# Verify that motion direction maps correctly:
+# * **Move Right (towards Mic 2):** Mic 2 is Blue-shifted, Mic 1 is Red-shifted $\implies v > 0$.
+# * **Move Left (towards Mic 1):** Mic 1 is Blue-shifted, Mic 2 is Red-shifted $\implies v < 0$.
+
+# %% [code] Cell 5
+input("👉 Hold buzzer between mics. Press [Enter] and move it quickly RIGHT then LEFT...")
+
+quick_run = ol.record_differential_flight(
+    duration_sec=2.0,
+    track_length_m=track_len_m,
+    profile=profile_path,
+    temperature_c=temperature_c
+)
+
+v_check = quick_run["velocity_cmps"]
+max_right = np.max(v_check)
+max_left = np.min(v_check)
+
+print(f"   • Max Speed Right (+v) : {max_right:+5.1f} cm/s ({'✅ OK' if max_right > 5 else '⚠️ WEAK'})")
+print(f"   • Max Speed Left  (-v) : {max_left:+5.1f} cm/s ({'✅ OK' if max_left < -5 else '⚠️ WEAK'})")
+print(f"   • Peak Doppler Split   : {np.max(np.abs(quick_run['f_mic2_hz'] - quick_run['f_mic1_hz'])):.2f} Hz")
+
+# %% [markdown] Cell 6
+## 3. Continuous Multi-Second Flight Recording
+# Record a complete **5.0-second trajectory** as the glider coasts along the track (or as you slide the buzzer smoothly back and forth between the two microphones).
+
+# %% [code] Cell 7
+duration_flight = 5.0
+
+print("-" * 76)
+print(f"📍 Launching {duration_flight:.1f}-second continuous flight recorder at 100 Hz trajectory rate...")
+print("   1. Position buzzer/glider at the left side.")
+print("   2. Press [Enter] and IMMEDIATELY PUSH it toward the right side.")
+print("-" * 76)
+input("👉 Press [Enter] and launch the motion...")
+
+flight = ol.record_differential_flight(
+    duration_sec=duration_flight,
+    track_length_m=track_len_m,
+    profile=profile_path,
+    temperature_c=temperature_c,
+    window_ms=40.0,
+    hop_ms=10.0
+)
+
+t_sec = flight["times_sec"]
+v_cmps = flight["velocity_cmps"]
+pos_m = flight["position_m"]
+f1 = flight["f_mic1_hz"]
+f2 = flight["f_mic2_hz"]
+f0_drift = flight["f0_common_hz"]
+summary = flight["kinematics_summary"]
+
+print(f"✅ Flight Captured: {len(t_sec)} time steps ({t_sec[0]:.2f}s to {t_sec[-1]:.2f}s)")
+
+# %% [markdown] Cell 8
+## 4. Interactive Kinematic Trajectory Visualization
+# Plot the three synchronized physical layers:
+# 1. **Frequencies:** Shows the blue and red shifts crossing each other as direction changes, and the common-mode carrier $f_0(t)$.
+# 2. **Velocity $v(t)$:** Shows forward acceleration, coasting deceleration, and direction reversals.
+# 3. **Position $x(t)$:** Reconstructs the 1D position of the source between the two microphones.
+
+# %% [code] Cell 9
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+fig = make_subplots(
+    rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.08,
+    subplot_titles=(
+        "<b>1. Dual Observed Frequencies (f1 Blue vs f2 Red) & Common Drift f0(t) [Hz]</b>",
+        f"<b>2. Instantaneous Differential Velocity v(t) [cm/s] (Max = {np.max(np.abs(v_cmps)):.1f} cm/s)</b>",
+        "<b>3. Integrated 1D Position Along Track x(t) [m]</b>"
+    )
+)
+
+# Panel 1: Frequency Curves
+fig.add_scatter(x=t_sec, y=f1, mode="lines", line=dict(color="#00FFCC", width=1.8), name="Mic 1 (Left)", row=1, col=1)
+fig.add_scatter(x=t_sec, y=f2, mode="lines", line=dict(color="#FF007F", width=1.8), name="Mic 2 (Right)", row=1, col=1)
+fig.add_scatter(x=t_sec, y=f0_drift, mode="lines", line=dict(color="#FFA500", width=1.5, dash="dash"), name="Carrier f0(t)", row=1, col=1)
+
+# Panel 2: Velocity Curve
+fig.add_scatter(x=t_sec, y=v_cmps, mode="lines+markers", marker=dict(size=3), line=dict(color="#FFD600", width=2.0), name="v_diff (cm/s)", row=2, col=1)
+fig.add_hline(y=0.0, line=dict(color="gray", dash="dash"), annotation_text="Stationary (v = 0)", row=2, col=1)
+
+# Panel 3: Position Trajectory
+fig.add_scatter(x=t_sec, y=pos_m, mode="lines", line=dict(color="#76FF03", width=2.2), name="Position x(t)", row=3, col=1)
+fig.add_hline(y=0.0, line=dict(color="white", dash="dot"), annotation_text="Left End (0 m)", row=3, col=1)
+fig.add_hline(y=track_len_m, line=dict(color="white", dash="dot"), annotation_text=f"Right End ({track_len_m} m)", row=3, col=1)
+
+fig.update_layout(template="plotly_dark", height=750, margin=dict(l=55, r=25, t=40, b=30))
+fig.update_yaxes(title="Frequency (Hz)", row=1, col=1)
+fig.update_yaxes(title="Velocity (cm/s)", row=2, col=1)
+fig.update_yaxes(title="Position (m)", range=[-0.05, track_len_m + 0.05], row=3, col=1)
+fig.update_xaxes(title="Time (Seconds)", row=3, col=1)
+fig.show()
+
+# %% [markdown] Cell 10
+## 5. Aerodynamic Damping & Collision Analysis
+# The tracker automatically extracts physical parameters from the velocity trajectory:
+# * **Viscous Drag Coefficient ($\gamma$):** Fits linear damping $v(t) = v_0 e^{-\gamma t}$ on undisturbed coasting segments.
+# * **Bumper Restitution ($e$):** Measures kinetic energy retention during direction reversals ($e = |v_{\text{after}}| / |v_{\text{before}}|$).
+
+# %% [code] Cell 11
+print("=" * 76)
+print("📊 AERODYNAMIC & COLLISION KINEMATICS REPORT")
+print("=" * 76)
+print(f"  • Max Forward Velocity (+v) : {summary['max_forward_velocity_mps']*100:+5.1f} cm/s ({summary['max_forward_velocity_mps']:+.3f} m/s)")
+print(f"  • Max Reverse Velocity (-v) : {summary['max_reverse_velocity_mps']*100:+5.1f} cm/s ({summary['max_reverse_velocity_mps']:+.3f} m/s)")
+print(f"  • Collisions / Reversals    : {summary['total_collisions_detected']}")
+if np.isfinite(summary.get("mean_coefficient_of_restitution", np.nan)):
+    print(f"  • Coefficient of Restitution: e = {summary['mean_coefficient_of_restitution']:.3f} (Collision Elasticity)")
+print(f"  • Viscous Drag Coefficient  : γ = {summary['viscous_drag_gamma']:.4f} s⁻¹")
+print(f"  • Net Distance Traveled     : {pos_m[-1] - pos_m[0]:.3f} m")
+print("=" * 76)
+
+# %% [markdown] Cell 12
+## 6. Real-Time 100 Hz Live Streaming Dashboard
+# Launch the interactive dashboard. Click **Tab 3 (🔀 Dual Overlay & Doppler)** and observe **Row 4** streaming real-time differential velocity $v_{\text{diff}}(t)$ live at $30\,\text{FPS}$ as you move the buzzer!
+
+# %% [code] Cell 13
+# Launch the real-time 4-tab live dashboard with Doppler enabled
 app = ol.kinematics_dashboard(
     window_duration_sec=10.0,
     hop_ms=10.0,
     aoa_mic_distance_m=0.05
 )
+
+# %% [markdown] Cell 14
+## 7. Clean Hardware Teardown
+# When finished, cleanly stop the dashboard background threads and release FPGA DMA memory buffers.
+
+# %% [code] Cell 15
+if 'app' in locals():
+    app.stop()
+ol.close()
+print("🔒 FPGA hardware and DMA buffers cleanly released.")
 
 ```
