@@ -299,37 +299,43 @@ class KinematicsDashboard:
         self.fig_mic2.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=3, col=1)
 
         # ---------------------------------------------------------------------
-        # Tab 3: Dual Comparison (Overlaid A0 & A1)
+        # Tab 3: Dual Overlay + Differential Doppler Velocity (4 Rows)
         # ---------------------------------------------------------------------
         self.fig_dual = make_subplots(
-            rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.08,
+            rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.06,
             subplot_titles=(
-                "<b>Dual In-Band Amplitude Comparison (A0 Cyan vs A1 Magenta) [mV]</b>",
-                "<b>Dual Pitch Scatter Overlay (A0 Cyan dots vs A1 Magenta dots) [Hz]</b>",
-                "<b>Dual Inverted Distance Comparison (A0 Cyan vs A1 Magenta) [cm]</b>"
+                "<b>Dual In-Band Amplitude Comparison [mV]</b>",
+                "<b>Dual Pitch Scatter Overlay & Common-Mode Carrier f0(t) [Hz]</b>",
+                "<b>Dual Inverted Distance Comparison [cm]</b>",
+                "<b>Differential Doppler Glider Velocity v_diff(t) [cm/s]</b>"
             )
         )
         self.fig_dual = go.FigureWidget(self.fig_dual)
-        # Row 1: Amplitudes
+        # Row 1: Amplitudes (Traces 0, 1, 2)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_amp_a0 * 1000.0, mode="lines", line=dict(color="#00FFCC", width=1.8), name="A0 (mV)", row=1, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_amp_a1 * 1000.0, mode="lines", line=dict(color="#FF007F", width=1.8), name="A1 (mV)", row=1, col=1)
         self.fig_dual.add_scatter(x=[-self.window_duration_sec, 0.0], y=[15.0, 15.0], mode="lines", line=dict(color="#FFA500", width=1.2, dash="dash"), name="Noise Gate", row=1, col=1)
-        # Row 2: Frequencies
+        # Row 2: Frequencies & Common Mode Carrier (Traces 3, 4, 5)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_freq_a0, mode="markers", marker=dict(size=4.0, color="#00FFCC", opacity=0.85), name="A0 Pitch", row=2, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_freq_a1, mode="markers", marker=dict(size=4.0, color="#FF007F", opacity=0.85), name="A1 Pitch", row=2, col=1)
-        # Row 3: Distances
+        self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_common_f0, mode="lines", line=dict(color="#FFA500", width=1.5, dash="dash"), name="Carrier f0(t)", row=2, col=1)
+        # Row 3: Distances (Traces 6, 7, 8, 9, 10, 11)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.3)", dash="dot"), showlegend=False, name="A0 +δr", row=3, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.3)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.15)", name="A0 ±δr", row=3, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a0, mode="lines", line=dict(color="#00FFCC", width=2.0), name="A0 Dist (cm)", row=3, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a1, mode="lines", line=dict(width=0.5, color="rgba(255, 0, 127, 0.3)", dash="dot"), showlegend=False, name="A1 +δr", row=3, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a1, mode="lines", line=dict(width=0.5, color="rgba(255, 0, 127, 0.3)", dash="dot"), fill="tonexty", fillcolor="rgba(255, 0, 127, 0.15)", name="A1 ±δr", row=3, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a1, mode="lines", line=dict(color="#FF007F", width=2.0), name="A1 Dist (cm)", row=3, col=1)
+        # Row 4: Differential Doppler Velocity (Trace 12)
+        self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_diff_vel * 100.0, mode="lines+markers", marker=dict(size=4.0), line=dict(color="#FFD600", width=2.0), name="v_diff (cm/s)", row=4, col=1)
+        self.fig_dual.add_hline(y=0.0, line=dict(color="gray", dash="dash"), row=4, col=1)
 
-        self.fig_dual.update_layout(template="plotly_dark", height=700, margin=dict(l=55, r=25, t=40, b=30), uirevision="dual")
+        self.fig_dual.update_layout(template="plotly_dark", height=850, margin=dict(l=55, r=25, t=40, b=30), uirevision="dual")
         self.fig_dual.update_yaxes(range=[0, 500], title="Amplitude (mV)", row=1, col=1)
         self.fig_dual.update_yaxes(range=[self.f_min_input.value, self.f_max_input.value], title="Pitch (Hz)", row=2, col=1)
         self.fig_dual.update_yaxes(range=[0, 150], title="Distance (cm)", row=3, col=1)
-        self.fig_dual.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=3, col=1)
+        self.fig_dual.update_yaxes(range=[-100, 100], title="v_diff (cm/s)", row=4, col=1)
+        self.fig_dual.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=4, col=1)
 
         # ---------------------------------------------------------------------
         # Tab 4: Direction of Arrival (AoA Bearing Angle θ)
@@ -360,7 +366,7 @@ class KinematicsDashboard:
         self.tabs = widgets.Tab(children=[self.fig_mic1, self.fig_mic2, self.fig_dual, self.fig_aoa])
         self.tabs.set_title(0, "🎙 Mic 1 (A0)")
         self.tabs.set_title(1, "🎙 Mic 2 (A1)")
-        self.tabs.set_title(2, "🔀 Dual Overlay")
+        self.tabs.set_title(2, "🔀 Dual Overlay & Doppler")
         self.tabs.set_title(3, "🧭 Direction of Arrival")
 
     def _setup_callbacks(self):
@@ -815,6 +821,9 @@ class KinematicsDashboard:
                 aoa_deg = np.copy(self.buf_aoa_deg)
                 aoa_err = np.copy(self.buf_aoa_err)
 
+                diff_vel_cmps = np.copy(self.buf_diff_vel) * 100.0
+                f0_comm = np.copy(self.buf_common_f0)
+
             squelch_mv = float(self.squelch_slider.value) * 1000.0
             active_tab = self.tabs.selected_index
 
@@ -846,12 +855,14 @@ class KinematicsDashboard:
                     self.fig_dual.data[2].y = [squelch_mv, squelch_mv]
                     self.fig_dual.data[3].y = freq_a0
                     self.fig_dual.data[4].y = freq_a1
-                    self.fig_dual.data[5].y = dist_upper_a0
-                    self.fig_dual.data[6].y = dist_lower_a0
-                    self.fig_dual.data[7].y = dist_a0
-                    self.fig_dual.data[8].y = dist_upper_a1
-                    self.fig_dual.data[9].y = dist_lower_a1
-                    self.fig_dual.data[10].y = dist_a1
+                    self.fig_dual.data[5].y = f0_comm
+                    self.fig_dual.data[6].y = dist_upper_a0
+                    self.fig_dual.data[7].y = dist_lower_a0
+                    self.fig_dual.data[8].y = dist_a0
+                    self.fig_dual.data[9].y = dist_upper_a1
+                    self.fig_dual.data[10].y = dist_lower_a1
+                    self.fig_dual.data[11].y = dist_a1
+                    self.fig_dual.data[12].y = diff_vel_cmps
             elif active_tab == 3 and hasattr(self, "fig_aoa"):
                 aoa_upper = np.clip(aoa_deg + aoa_err, -90.0, 90.0)
                 aoa_lower = np.clip(aoa_deg - aoa_err, -90.0, 90.0)
@@ -867,12 +878,14 @@ class KinematicsDashboard:
             dist_str_a1 = f"{self._cur_dist_a1:.1f}cm" if np.isfinite(self._cur_dist_a1) else "---"
 
             aoa_str = f"{self._cur_aoa_deg:+.1f}°" if np.isfinite(self._cur_aoa_deg) else "---"
+            vel_str = f"{self._cur_diff_vel * 100.0:+5.1f}cm/s" if np.isfinite(self._cur_diff_vel) else "---"
 
             self.readout_metrics.value = (
                 f"<span style='color:#00FFCC; font-family:monospace; font-size:12px; font-weight:bold;'>"
                 f"A0: {self._cur_amp_a0*1000.0:.1f}mV ({f0_str_a0} → <b>{dist_str_a0}</b>) | "
-                f"A1: {self._cur_amp_a1*1000.0:.1f}mV ({f0_str_a1} → <b>{dist_str_a1}</b>) | "
-                f"🧭 Bearing: <b>{aoa_str}</b> | Live: 30 FPS"
+                f"A1: {self._cur_amp_a1*1000.0:.1f}mV | "
+                f"🧭 AoA: <b>{aoa_str}</b> | "
+                f"🚄 v_diff: <b>{vel_str}</b> | Live: 30 FPS"
                 f"</span>"
             )
 

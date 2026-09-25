@@ -12,7 +12,7 @@ from pynq_localizer.kinematics_dashboard import KinematicsDashboard
 class TestKinematicsDashboard:
 
     def test_dashboard_initialization_and_buffer_geometry(self):
-        """Verify dashboard buffers and distance/aoa estimator initialization."""
+        """Verify dashboard buffers and distance/aoa/doppler tracker initialization."""
         dash = KinematicsDashboard(
             overlay=None,
             window_duration_sec=10.0,
@@ -31,14 +31,17 @@ class TestKinematicsDashboard:
         assert len(dash.buf_dist_a1) == 1000
         assert len(dash.buf_disterr_a1) == 1000
 
-        # AoA buffers
+        # AoA & Doppler buffers
         assert len(dash.buf_aoa_deg) == 1000
         assert len(dash.buf_aoa_err) == 1000
+        assert len(dash.buf_diff_vel) == 1000
+        assert len(dash.buf_common_f0) == 1000
 
-        # Estimators were properly configured
+        # Trackers configured
         k_eval, _ = dash.estimator.profile.evaluate(1000.0)
         assert abs(k_eval - 0.050) < 1e-6
         assert hasattr(dash, "aoa_estimator")
+        assert hasattr(dash, "doppler_tracker")
 
     def test_figure_trace_counts_and_subplot_geometry(self):
         """Verify 4-tab layout and exact trace counts for all tabs."""
@@ -48,8 +51,8 @@ class TestKinematicsDashboard:
         assert len(dash.fig_mic1.data) == 6
         # Tab 2: Mic 2 (6 traces)
         assert len(dash.fig_mic2.data) == 6
-        # Tab 3: Dual Overlay (11 traces)
-        assert len(dash.fig_dual.data) == 11
+        # Tab 3: Dual Overlay (13 traces: A0/A1 amp, gate, A0/A1 pitch, f0_comm, A0/A1 dist 6x, v_diff)
+        assert len(dash.fig_dual.data) == 13
         # Tab 4: AoA Bearing (4 traces: +δθ, -δθ, θ, coherence)
         assert len(dash.fig_aoa.data) == 4
         # Tab container has 4 tabs
@@ -99,8 +102,21 @@ class TestKinematicsDashboard:
         assert np.allclose(aoa_deg, 22.5)
         assert np.allclose(aoa_err, 0.8)
 
-    def test_export_csv_with_distance_and_aoa_columns(self):
-        """Verify CSV export includes distance and AoA bearing columns."""
+    def test_get_doppler_data_handoff(self):
+        """Verify clean Differential Doppler extraction helper."""
+        dash = KinematicsDashboard(overlay=None, k_constant=0.050)
+
+        with dash._buf_lock:
+            dash.buf_diff_vel[300:350] = 0.420
+            dash.buf_common_f0[300:350] = 2609.73
+
+        t_dopp, vel_mps, f0_comm = dash.get_doppler_data()
+        assert len(t_dopp) == 50
+        assert np.allclose(vel_mps, 0.420)
+        assert np.allclose(f0_comm, 2609.73)
+
+    def test_export_csv_with_all_telemetry_columns(self):
+        """Verify CSV export includes distance, AoA bearing, and differential velocity columns."""
         dash = KinematicsDashboard(overlay=None, k_constant=0.050)
 
         with dash._buf_lock:
@@ -110,6 +126,8 @@ class TestKinematicsDashboard:
             dash.buf_disterr_a0[10:20] = 2.5
             dash.buf_aoa_deg[10:20] = -14.2
             dash.buf_aoa_err[10:20] = 0.5
+            dash.buf_diff_vel[10:20] = -0.320
+            dash.buf_common_f0[10:20] = 2610.0
 
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
             tmp_csv = Path(tmp.name)
@@ -121,6 +139,7 @@ class TestKinematicsDashboard:
 
             assert len(lines) == 11  # 1 header + 10 data rows
             header = lines[0].strip()
+            assert "diff_velocity_mps,f0_common_hz" in header
             assert "aoa_deg,aoa_err_deg" in header
             assert "a0_dist_cm" in header
         finally:
