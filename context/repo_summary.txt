@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/differential-air-track-doppler @ 52ab183
+• Repository State    : feat/differential-air-track-doppler @ fefbccc
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1
 • Package Version     : v1.2.0
 ==============================================================================
@@ -9,16 +9,16 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/differential-air-track-doppler | Working Tree: Dirty (3 modified/untracked files)
+Current Branch: feat/differential-air-track-doppler | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
-* feat/differential-air-track-doppler                52ab183 [origin/feat/differential-air-track-doppler] chore(context): update repository context with differential Doppler tests
+* feat/differential-air-track-doppler                fefbccc [origin/feat/differential-air-track-doppler] chore(context): update repository summary with dashboard Doppler backend
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
-  remotes/origin/feat/differential-air-track-doppler 52ab183 chore(context): update repository context with differential Doppler tests
+  remotes/origin/feat/differential-air-track-doppler fefbccc chore(context): update repository summary with dashboard Doppler backend
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
@@ -31,7 +31,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 52ab183  (HEAD -> feat/differential-air-track-doppler, origin/feat/differential-air-track-doppler) - 2026-09-24 : chore(context): update repository context with differential Doppler tests (SiririComun)
+* fefbccc  (HEAD -> feat/differential-air-track-doppler, origin/feat/differential-air-track-doppler) - 2026-09-24 : chore(context): update repository summary with dashboard Doppler backend (SiririComun)
+* 4e25da6  - 2026-09-24 : feat(dashboard): add differential Doppler velocity buffers, worker calculations, and CSV export (SiririComun)
+* 52ab183  - 2026-09-24 : chore(context): update repository context with differential Doppler tests (SiririComun)
 * 4cb80b0  - 2026-09-24 : test(doppler): add strict unit verification suite for DifferentialDopplerTracker (SiririComun)
 * bd8ae9a  - 2026-09-24 : chore(context): update repository summary with DifferentialDopplerTracker (SiririComun)
 * 62b6a11  - 2026-09-24 : feat(doppler): implement common-mode drift canceling DifferentialDopplerTracker (SiririComun)
@@ -44,8 +46,6 @@ Multi-Branch Git Commit Graph:
 * c0f60fe  - 2026-09-24 : chore(context): update repository context with capture_aoa_frame (SiririComun)
 * 23cf3a3  - 2026-09-24 : feat(array): implement capture_aoa_frame and add offline pynq fallbacks (SiririComun)
 * 7e64ad7  - 2026-09-24 : chore(context): update Cog configuration and context with test_aoa (SiririComun)
-* 1b11a18  - 2026-09-24 : test(aoa): add strict unit verification suite with Hann-windowed precision (SiririComun)
-* efd34e7  - 2026-09-24 : chore(context): update repository summary with AoA engine (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -3452,37 +3452,43 @@ class KinematicsDashboard:
         self.fig_mic2.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=3, col=1)
 
         # ---------------------------------------------------------------------
-        # Tab 3: Dual Comparison (Overlaid A0 & A1)
+        # Tab 3: Dual Overlay + Differential Doppler Velocity (4 Rows)
         # ---------------------------------------------------------------------
         self.fig_dual = make_subplots(
-            rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.08,
+            rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.06,
             subplot_titles=(
-                "<b>Dual In-Band Amplitude Comparison (A0 Cyan vs A1 Magenta) [mV]</b>",
-                "<b>Dual Pitch Scatter Overlay (A0 Cyan dots vs A1 Magenta dots) [Hz]</b>",
-                "<b>Dual Inverted Distance Comparison (A0 Cyan vs A1 Magenta) [cm]</b>"
+                "<b>Dual In-Band Amplitude Comparison [mV]</b>",
+                "<b>Dual Pitch Scatter Overlay & Common-Mode Carrier f0(t) [Hz]</b>",
+                "<b>Dual Inverted Distance Comparison [cm]</b>",
+                "<b>Differential Doppler Glider Velocity v_diff(t) [cm/s]</b>"
             )
         )
         self.fig_dual = go.FigureWidget(self.fig_dual)
-        # Row 1: Amplitudes
+        # Row 1: Amplitudes (Traces 0, 1, 2)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_amp_a0 * 1000.0, mode="lines", line=dict(color="#00FFCC", width=1.8), name="A0 (mV)", row=1, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_amp_a1 * 1000.0, mode="lines", line=dict(color="#FF007F", width=1.8), name="A1 (mV)", row=1, col=1)
         self.fig_dual.add_scatter(x=[-self.window_duration_sec, 0.0], y=[15.0, 15.0], mode="lines", line=dict(color="#FFA500", width=1.2, dash="dash"), name="Noise Gate", row=1, col=1)
-        # Row 2: Frequencies
+        # Row 2: Frequencies & Common Mode Carrier (Traces 3, 4, 5)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_freq_a0, mode="markers", marker=dict(size=4.0, color="#00FFCC", opacity=0.85), name="A0 Pitch", row=2, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_freq_a1, mode="markers", marker=dict(size=4.0, color="#FF007F", opacity=0.85), name="A1 Pitch", row=2, col=1)
-        # Row 3: Distances
+        self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_common_f0, mode="lines", line=dict(color="#FFA500", width=1.5, dash="dash"), name="Carrier f0(t)", row=2, col=1)
+        # Row 3: Distances (Traces 6, 7, 8, 9, 10, 11)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.3)", dash="dot"), showlegend=False, name="A0 +δr", row=3, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.3)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.15)", name="A0 ±δr", row=3, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a0, mode="lines", line=dict(color="#00FFCC", width=2.0), name="A0 Dist (cm)", row=3, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a1, mode="lines", line=dict(width=0.5, color="rgba(255, 0, 127, 0.3)", dash="dot"), showlegend=False, name="A1 +δr", row=3, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a1, mode="lines", line=dict(width=0.5, color="rgba(255, 0, 127, 0.3)", dash="dot"), fill="tonexty", fillcolor="rgba(255, 0, 127, 0.15)", name="A1 ±δr", row=3, col=1)
         self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_dist_a1, mode="lines", line=dict(color="#FF007F", width=2.0), name="A1 Dist (cm)", row=3, col=1)
+        # Row 4: Differential Doppler Velocity (Trace 12)
+        self.fig_dual.add_scatter(x=self.t_axis, y=self.buf_diff_vel * 100.0, mode="lines+markers", marker=dict(size=4.0), line=dict(color="#FFD600", width=2.0), name="v_diff (cm/s)", row=4, col=1)
+        self.fig_dual.add_hline(y=0.0, line=dict(color="gray", dash="dash"), row=4, col=1)
 
-        self.fig_dual.update_layout(template="plotly_dark", height=700, margin=dict(l=55, r=25, t=40, b=30), uirevision="dual")
+        self.fig_dual.update_layout(template="plotly_dark", height=850, margin=dict(l=55, r=25, t=40, b=30), uirevision="dual")
         self.fig_dual.update_yaxes(range=[0, 500], title="Amplitude (mV)", row=1, col=1)
         self.fig_dual.update_yaxes(range=[self.f_min_input.value, self.f_max_input.value], title="Pitch (Hz)", row=2, col=1)
         self.fig_dual.update_yaxes(range=[0, 150], title="Distance (cm)", row=3, col=1)
-        self.fig_dual.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=3, col=1)
+        self.fig_dual.update_yaxes(range=[-100, 100], title="v_diff (cm/s)", row=4, col=1)
+        self.fig_dual.update_xaxes(range=[-self.window_duration_sec, 0.0], title="Time Window (Seconds)", row=4, col=1)
 
         # ---------------------------------------------------------------------
         # Tab 4: Direction of Arrival (AoA Bearing Angle θ)
@@ -3513,7 +3519,7 @@ class KinematicsDashboard:
         self.tabs = widgets.Tab(children=[self.fig_mic1, self.fig_mic2, self.fig_dual, self.fig_aoa])
         self.tabs.set_title(0, "🎙 Mic 1 (A0)")
         self.tabs.set_title(1, "🎙 Mic 2 (A1)")
-        self.tabs.set_title(2, "🔀 Dual Overlay")
+        self.tabs.set_title(2, "🔀 Dual Overlay & Doppler")
         self.tabs.set_title(3, "🧭 Direction of Arrival")
 
     def _setup_callbacks(self):
@@ -3968,6 +3974,9 @@ class KinematicsDashboard:
                 aoa_deg = np.copy(self.buf_aoa_deg)
                 aoa_err = np.copy(self.buf_aoa_err)
 
+                diff_vel_cmps = np.copy(self.buf_diff_vel) * 100.0
+                f0_comm = np.copy(self.buf_common_f0)
+
             squelch_mv = float(self.squelch_slider.value) * 1000.0
             active_tab = self.tabs.selected_index
 
@@ -3999,12 +4008,14 @@ class KinematicsDashboard:
                     self.fig_dual.data[2].y = [squelch_mv, squelch_mv]
                     self.fig_dual.data[3].y = freq_a0
                     self.fig_dual.data[4].y = freq_a1
-                    self.fig_dual.data[5].y = dist_upper_a0
-                    self.fig_dual.data[6].y = dist_lower_a0
-                    self.fig_dual.data[7].y = dist_a0
-                    self.fig_dual.data[8].y = dist_upper_a1
-                    self.fig_dual.data[9].y = dist_lower_a1
-                    self.fig_dual.data[10].y = dist_a1
+                    self.fig_dual.data[5].y = f0_comm
+                    self.fig_dual.data[6].y = dist_upper_a0
+                    self.fig_dual.data[7].y = dist_lower_a0
+                    self.fig_dual.data[8].y = dist_a0
+                    self.fig_dual.data[9].y = dist_upper_a1
+                    self.fig_dual.data[10].y = dist_lower_a1
+                    self.fig_dual.data[11].y = dist_a1
+                    self.fig_dual.data[12].y = diff_vel_cmps
             elif active_tab == 3 and hasattr(self, "fig_aoa"):
                 aoa_upper = np.clip(aoa_deg + aoa_err, -90.0, 90.0)
                 aoa_lower = np.clip(aoa_deg - aoa_err, -90.0, 90.0)
@@ -4020,12 +4031,14 @@ class KinematicsDashboard:
             dist_str_a1 = f"{self._cur_dist_a1:.1f}cm" if np.isfinite(self._cur_dist_a1) else "---"
 
             aoa_str = f"{self._cur_aoa_deg:+.1f}°" if np.isfinite(self._cur_aoa_deg) else "---"
+            vel_str = f"{self._cur_diff_vel * 100.0:+5.1f}cm/s" if np.isfinite(self._cur_diff_vel) else "---"
 
             self.readout_metrics.value = (
                 f"<span style='color:#00FFCC; font-family:monospace; font-size:12px; font-weight:bold;'>"
                 f"A0: {self._cur_amp_a0*1000.0:.1f}mV ({f0_str_a0} → <b>{dist_str_a0}</b>) | "
-                f"A1: {self._cur_amp_a1*1000.0:.1f}mV ({f0_str_a1} → <b>{dist_str_a1}</b>) | "
-                f"🧭 Bearing: <b>{aoa_str}</b> | Live: 30 FPS"
+                f"A1: {self._cur_amp_a1*1000.0:.1f}mV | "
+                f"🧭 AoA: <b>{aoa_str}</b> | "
+                f"🚄 v_diff: <b>{vel_str}</b> | Live: 30 FPS"
                 f"</span>"
             )
 
@@ -5580,7 +5593,7 @@ from pynq_localizer.kinematics_dashboard import KinematicsDashboard
 class TestKinematicsDashboard:
 
     def test_dashboard_initialization_and_buffer_geometry(self):
-        """Verify dashboard buffers and distance/aoa estimator initialization."""
+        """Verify dashboard buffers and distance/aoa/doppler tracker initialization."""
         dash = KinematicsDashboard(
             overlay=None,
             window_duration_sec=10.0,
@@ -5599,14 +5612,17 @@ class TestKinematicsDashboard:
         assert len(dash.buf_dist_a1) == 1000
         assert len(dash.buf_disterr_a1) == 1000
 
-        # AoA buffers
+        # AoA & Doppler buffers
         assert len(dash.buf_aoa_deg) == 1000
         assert len(dash.buf_aoa_err) == 1000
+        assert len(dash.buf_diff_vel) == 1000
+        assert len(dash.buf_common_f0) == 1000
 
-        # Estimators were properly configured
+        # Trackers configured
         k_eval, _ = dash.estimator.profile.evaluate(1000.0)
         assert abs(k_eval - 0.050) < 1e-6
         assert hasattr(dash, "aoa_estimator")
+        assert hasattr(dash, "doppler_tracker")
 
     def test_figure_trace_counts_and_subplot_geometry(self):
         """Verify 4-tab layout and exact trace counts for all tabs."""
@@ -5616,8 +5632,8 @@ class TestKinematicsDashboard:
         assert len(dash.fig_mic1.data) == 6
         # Tab 2: Mic 2 (6 traces)
         assert len(dash.fig_mic2.data) == 6
-        # Tab 3: Dual Overlay (11 traces)
-        assert len(dash.fig_dual.data) == 11
+        # Tab 3: Dual Overlay (13 traces: A0/A1 amp, gate, A0/A1 pitch, f0_comm, A0/A1 dist 6x, v_diff)
+        assert len(dash.fig_dual.data) == 13
         # Tab 4: AoA Bearing (4 traces: +δθ, -δθ, θ, coherence)
         assert len(dash.fig_aoa.data) == 4
         # Tab container has 4 tabs
@@ -5667,8 +5683,21 @@ class TestKinematicsDashboard:
         assert np.allclose(aoa_deg, 22.5)
         assert np.allclose(aoa_err, 0.8)
 
-    def test_export_csv_with_distance_and_aoa_columns(self):
-        """Verify CSV export includes distance and AoA bearing columns."""
+    def test_get_doppler_data_handoff(self):
+        """Verify clean Differential Doppler extraction helper."""
+        dash = KinematicsDashboard(overlay=None, k_constant=0.050)
+
+        with dash._buf_lock:
+            dash.buf_diff_vel[300:350] = 0.420
+            dash.buf_common_f0[300:350] = 2609.73
+
+        t_dopp, vel_mps, f0_comm = dash.get_doppler_data()
+        assert len(t_dopp) == 50
+        assert np.allclose(vel_mps, 0.420)
+        assert np.allclose(f0_comm, 2609.73)
+
+    def test_export_csv_with_all_telemetry_columns(self):
+        """Verify CSV export includes distance, AoA bearing, and differential velocity columns."""
         dash = KinematicsDashboard(overlay=None, k_constant=0.050)
 
         with dash._buf_lock:
@@ -5678,6 +5707,8 @@ class TestKinematicsDashboard:
             dash.buf_disterr_a0[10:20] = 2.5
             dash.buf_aoa_deg[10:20] = -14.2
             dash.buf_aoa_err[10:20] = 0.5
+            dash.buf_diff_vel[10:20] = -0.320
+            dash.buf_common_f0[10:20] = 2610.0
 
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
             tmp_csv = Path(tmp.name)
@@ -5689,6 +5720,7 @@ class TestKinematicsDashboard:
 
             assert len(lines) == 11  # 1 header + 10 data rows
             header = lines[0].strip()
+            assert "diff_velocity_mps,f0_common_hz" in header
             assert "aoa_deg,aoa_err_deg" in header
             assert "a0_dist_cm" in header
         finally:
