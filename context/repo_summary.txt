@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ ea90d35
+• Repository State    : feat/pulse-time-of-arrival @ b477312
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1
 • Package Version     : v1.2.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (3 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         ea90d35 [origin/feat/pulse-time-of-arrival] chore(context): update repository summary with ToA/TDOA engine
+* feat/pulse-time-of-arrival                         b477312 [origin/feat/pulse-time-of-arrival] chore(context): update repository context with test_toa
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          ea90d35 chore(context): update repository summary with ToA/TDOA engine
+  remotes/origin/feat/pulse-time-of-arrival          b477312 chore(context): update repository context with test_toa
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* ea90d35  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-25 : chore(context): update repository summary with ToA/TDOA engine (SiririComun)
+* b477312  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-25 : chore(context): update repository context with test_toa (SiririComun)
+* 872aca7  - 2026-09-25 : test(toa): add strict unit verification suite for TimeOfArrivalEstimator (SiririComun)
+* ea90d35  - 2026-09-25 : chore(context): update repository summary with ToA/TDOA engine (SiririComun)
 * 0d8b776  - 2026-09-25 : feat(toa): implement TimeOfArrivalEstimator and sub-sample pulse arrival detector (SiririComun)
 * 08b2a60  - 2026-09-25 : chore(context): update repository summary with pulse trigger driver (SiririComun)
 * 9701620  - 2026-09-25 : feat(trigger): add hardware buzzer pulse generator driver and modularize Notebook 03 (SiririComun)
@@ -46,8 +48,6 @@ Multi-Branch Git Commit Graph:
 * fefbccc  - 2026-09-24 : chore(context): update repository summary with dashboard Doppler backend (SiririComun)
 * 4e25da6  - 2026-09-24 : feat(dashboard): add differential Doppler velocity buffers, worker calculations, and CSV export (SiririComun)
 * 52ab183  - 2026-09-24 : chore(context): update repository context with differential Doppler tests (SiririComun)
-* 4cb80b0  - 2026-09-24 : test(doppler): add strict unit verification suite for DifferentialDopplerTracker (SiririComun)
-* bd8ae9a  - 2026-09-24 : chore(context): update repository summary with DifferentialDopplerTracker (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -645,6 +645,103 @@ class MicrophoneArrayOverlay(Overlay):
         aoa_res["v_a1"] = v_a1
 
         return aoa_res
+
+    def capture_pulsed_toa_frame(
+        self,
+        pulse_width_ms: float = 5.0,
+        f_target: Optional[float] = None,
+        mic_distance_m: float = 0.05,
+        profile: Optional[Union[Any, str, Path]] = None,
+        calibrated_offset_ms: Optional[float] = None,
+        temperature_c: float = 20.0,
+        noise_gate_v: float = 0.010,
+        timeout: float = 0.5
+    ) -> Dict[str, Any]:
+        """
+        Synchronously fires a hardware acoustic pulse via FPGA Arduino pin AR2 (U13),
+        latches the cycle-accurate emission timestamp, captures the dual-channel
+        response stream via DMA 0, and computes absolute distance r and TDOA angle θ.
+
+        :param pulse_width_ms: Duration of hardware pulse burst in ms (default: 5.0 ms).
+        :param f_target: Nominal pulse carrier frequency (default None -> auto from profile).
+        :param mic_distance_m: Center-to-center microphone baseline in meters.
+        :param profile: Optional device profile (e.g. 'profiles/active_buzzer_2610hz.json').
+        :param calibrated_offset_ms: Optional piezo turn-on delay override (defaults to profile / 1.1400 ms).
+        :param temperature_c: Air temperature in °C for c(T) calculation.
+        :param noise_gate_v: Squelch detection threshold in Volts.
+        :param timeout: Maximum DMA wait time in seconds.
+        :return: Telemetry dictionary containing:
+                 - 'distance_m': Metric distance to source in meters.
+                 - 'distance_cm': Metric distance to source in cm.
+                 - 'theta_tdoa_deg': Incident bearing angle in degrees from TDOA.
+                 - 't_flight_sec': Net acoustic time of flight in seconds.
+                 - 't_arrival_a0_sec': Arrival time at Mic 1.
+                 - 't_arrival_a1_sec': Arrival time at Mic 2.
+                 - 'delta_t12_sec': Inter-microphone arrival time difference.
+                 - 'amp_a0_v': Peak burst amplitude at Mic 1.
+                 - 'amp_a1_v': Peak burst amplitude at Mic 2.
+                 - 'status': 'ACTIVE_VALID' or 'SILENCE'.
+                 - 'v_a0': Raw ADC voltage array of Mic 1.
+                 - 'v_a1': Raw ADC voltage array of Mic 2.
+        """
+        from pynq_localizer.kinematics import TimeOfArrivalEstimator
+
+        # 1. Configure hardware pulse generator and arm trigger in Single mode
+        if hasattr(self, "trigger") and self.trigger is not None:
+            self.trigger.set_pulse_width_ms(pulse_width_ms)
+            self.trigger.set_mode("Single")
+
+        # 2. Pre-arm DMA receive channels
+        if hasattr(self, "axi_dma_0") and hasattr(self.axi_dma_0, "recvchannel"):
+            self.axi_dma_0.recvchannel.transfer(self._buf_time)
+            if hasattr(self, "axi_dma_1") and self._buf_fft is not None:
+                self.axi_dma_1.recvchannel.transfer(self._buf_fft)
+
+        # 3. Fire hardware pulse and sync acquisition
+        if hasattr(self, "trigger") and self.trigger is not None:
+            self.trigger.fire_pulse()
+
+        # 4. Wait for DMA transfer completion
+        if hasattr(self, "axi_dma_0") and hasattr(self.axi_dma_0, "recvchannel"):
+            t0 = time.time()
+            while not self.axi_dma_0.recvchannel.idle:
+                if time.time() - t0 > timeout:
+                    if hasattr(self, "trigger") and self.trigger is not None:
+                        self.trigger.disarm()
+                    raise TimeoutError(f"Pulsed ToA DMA transfer timed out after {timeout}s.")
+                time.sleep(0.0005)
+
+        t_launch_cycles = self.axi_timer_0.mmio.read(0x08) if hasattr(self, "axi_timer_0") else 0
+
+        # 5. Unpack raw time domain samples
+        raw_samples = np.array(self._buf_time) if self._buf_time is not None else np.zeros(4096, dtype=np.uint16)
+        raw_a0 = raw_samples[0::2]
+        raw_a1 = raw_samples[1::2]
+        v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
+        v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
+
+        # 6. Instantiate TimeOfArrivalEstimator and solve
+        estimator = TimeOfArrivalEstimator(
+            nominal_f0_hz=f_target if f_target is not None else 2609.73,
+            profile=profile,
+            mic_distance_m=mic_distance_m,
+            temperature_c=temperature_c,
+            calibrated_offset_ms=calibrated_offset_ms,
+            noise_gate_v=noise_gate_v
+        )
+
+        toa_res = estimator.estimate_distance_and_tdoa(
+            v_a0=v_a0,
+            v_a1=v_a1,
+            fs=self.fs_per_ch,
+            t_emission_sec=0.0
+        )
+
+        toa_res["v_a0"] = v_a0
+        toa_res["v_a1"] = v_a1
+        toa_res["t_launch_cycles"] = t_launch_cycles
+
+        return toa_res
 
     # =========================================================================
     # 3. Continuous Multi-Second Flight Recorder
@@ -7031,4 +7128,81 @@ class TestTimeOfArrivalEngine:
         estimator = TimeOfArrivalEstimator(profile=profile_path)
         assert abs(estimator.f0_hz - 2609.73) < 0.1
         assert abs(estimator.offset_ms - 1.1400) < 0.01
+```
+
+verify_step44.py: (tools/verify_step44.py)
+
+```python
+from unittest.mock import MagicMock
+import numpy as np
+from pynq_localizer.array import MicrophoneArrayOverlay
+from pynq_localizer.kinematics import KinematicAnalytics
+
+# 1. Instantiate overlay mock
+ol = MicrophoneArrayOverlay.__new__(MicrophoneArrayOverlay)
+ol.fs_per_ch = 50000.0
+ol.trigger = MagicMock()
+ol.axi_dma_0 = MagicMock()
+ol.axi_dma_0.recvchannel.idle = True
+ol.axi_timer_0 = MagicMock()
+ol.axi_timer_0.mmio.read.return_value = 100000000
+
+fs = 50000.0
+c = KinematicAnalytics.speed_of_sound(20.0)  # 343.2145 m/s
+f0 = 2609.73
+d = 0.05
+
+# 2. Target physical parameters: r = 60.0 cm, theta = +25.0 deg
+r_true = 0.600
+theta_true = 25.0
+theta_rad = np.radians(theta_true)
+
+t_flight = r_true / c
+t_start0 = t_flight
+t_start1 = t_flight + (d * np.sin(theta_rad) / c)
+
+tau_rise = 0.001140 / np.log(2.0)
+n_samples = 3000
+t_axis = np.arange(n_samples) / fs
+
+# Create exponential step burst envelopes
+env0 = np.where(t_axis >= t_start0, 1.0 - np.exp(-(t_axis - t_start0) / tau_rise), 0.0)
+env1 = np.where(t_axis >= t_start1, 1.0 - np.exp(-(t_axis - t_start1) / tau_rise), 0.0)
+
+v0 = 0.150 * env0 * np.cos(2.0 * np.pi * f0 * t_axis)
+v1 = 0.150 * env1 * np.cos(2.0 * np.pi * f0 * t_axis)
+
+# 3. Simulate real XADC 12-bit unipolar sampling (Biased at 1.65V DC)
+v_dc = 1.65
+code0 = np.clip((v_dc + v0) * (4095.0 / 3.3), 0, 4095).astype(np.uint16)
+code1 = np.clip((v_dc + v1) * (4095.0 / 3.3), 0, 4095).astype(np.uint16)
+
+raw_interleaved = np.empty(n_samples * 2, dtype=np.uint16)
+raw_interleaved[0::2] = code0 << 4
+raw_interleaved[1::2] = code1 << 4
+
+ol._buf_time = raw_interleaved
+ol._buf_fft = None
+
+# 4. Measure system offset at r = 0 cm (Buzzer rise + Bandpass filter lag)
+v_cal = 0.150 * (1.0 - np.exp(-t_axis / tau_rise)) * np.cos(2.0 * np.pi * f0 * t_axis)
+cal_offset_ms = KinematicAnalytics.detect_pulse_arrival_time(v_cal, fs, f0)["t_arrival_sec"] * 1000.0
+
+# 5. Execute capture_pulsed_toa_frame
+res = ol.capture_pulsed_toa_frame(
+    pulse_width_ms=5.0,
+    mic_distance_m=d,
+    calibrated_offset_ms=cal_offset_ms
+)
+
+print(f"Target Distance : {r_true*100:.1f} cm | Estimated Distance : {res['distance_cm']:.2f} cm")
+print(f"Target Bearing  : {theta_true:+.1f}° | Estimated TDOA Angle: {res['theta_tdoa_deg']:+.2f}°")
+print(f"Flight Time     : {res['t_flight_sec']*1000:.4f} ms")
+print(f"Status          : {res['status']}")
+
+assert abs(res['distance_m'] - r_true) < 0.010, f"Distance error: {res['distance_m']}"
+assert abs(res['theta_tdoa_deg'] - theta_true) < 0.50, f"TDOA angle error: {res['theta_tdoa_deg']}"
+assert res['status'] == "ACTIVE_VALID"
+
+print("🎉 Step 4.4 PASSED: MicrophoneArrayOverlay.capture_pulsed_toa_frame() verified on PC")
 ```
