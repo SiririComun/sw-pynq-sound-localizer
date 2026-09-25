@@ -1950,8 +1950,16 @@ class DifferentialDopplerTracker:
         # 2. Fit viscous drag coefficient γ on the longest continuous coasting segment
         # dv/dt = -γ · v => ln|v(t)| = ln|v0| - γ · t
         coast_mask = abs(v_clean) > 0.05
+
+        # Mask out collision boundary windows (±3 samples around each bounce)
+        # to ensure the fit operates on an undisturbed single-direction coasting run!
+        for idx in sign_changes:
+            bad_start = max(0, idx - 3)
+            bad_end = min(len(v_clean), idx + 4)
+            coast_mask[bad_start:bad_end] = False
+
         if np.sum(coast_mask) > 15:
-            # Find contiguous block
+            # Find longest contiguous single-direction coasting segment
             indices = np.where(coast_mask)[0]
             longest_seg = np.split(indices, np.where(np.diff(indices) != 1)[0] + 1)
             seg = max(longest_seg, key=len)
@@ -1959,7 +1967,7 @@ class DifferentialDopplerTracker:
             if len(seg) > 10:
                 t_seg = t_clean[seg] - t_clean[seg[0]]
                 log_v_seg = np.log(abs(v_clean[seg]))
-                # Linear fit: log|v| = -gamma · t + intercept
+                # Linear fit: ln|v| = -gamma · t + intercept
                 slope, intercept = np.polyfit(t_seg, log_v_seg, 1)
                 gamma_drag = float(-slope)
             else:
