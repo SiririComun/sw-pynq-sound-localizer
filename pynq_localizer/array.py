@@ -359,6 +359,103 @@ class MicrophoneArrayOverlay(Overlay):
         aoa_res["v_a1"] = v_a1
 
         return aoa_res
+    
+    def capture_pulsed_toa_frame(
+        self,
+        pulse_width_ms: float = 5.0,
+        f_target: Optional[float] = None,
+        mic_distance_m: float = 0.05,
+        profile: Optional[Union[Any, str, Path]] = None,
+        calibrated_offset_ms: Optional[float] = None,
+        temperature_c: float = 20.0,
+        noise_gate_v: float = 0.010,
+        timeout: float = 0.5
+    ) -> Dict[str, Any]:
+        """
+        Synchronously fires a hardware acoustic pulse via FPGA Arduino pin AR2 (U13),
+        latches the cycle-accurate emission timestamp, captures the dual-channel
+        response stream via DMA 0, and computes absolute distance r and TDOA angle θ.
+
+        :param pulse_width_ms: Duration of hardware pulse burst in ms (default: 5.0 ms).
+        :param f_target: Nominal pulse carrier frequency (default None -> auto from profile).
+        :param mic_distance_m: Center-to-center microphone baseline in meters.
+        :param profile: Optional device profile (e.g. 'profiles/active_buzzer_2610hz.json').
+        :param calibrated_offset_ms: Optional piezo turn-on delay override (defaults to profile / 1.1400 ms).
+        :param temperature_c: Air temperature in °C for c(T) calculation.
+        :param noise_gate_v: Squelch detection threshold in Volts.
+        :param timeout: Maximum DMA wait time in seconds.
+        :return: Telemetry dictionary containing:
+                 - 'distance_m': Metric distance to source in meters.
+                 - 'distance_cm': Metric distance to source in cm.
+                 - 'theta_tdoa_deg': Incident bearing angle in degrees from TDOA.
+                 - 't_flight_sec': Net acoustic time of flight in seconds.
+                 - 't_arrival_a0_sec': Arrival time at Mic 1.
+                 - 't_arrival_a1_sec': Arrival time at Mic 2.
+                 - 'delta_t12_sec': Inter-microphone arrival time difference.
+                 - 'amp_a0_v': Peak burst amplitude at Mic 1.
+                 - 'amp_a1_v': Peak burst amplitude at Mic 2.
+                 - 'status': 'ACTIVE_VALID' or 'SILENCE'.
+                 - 'v_a0': Raw ADC voltage array of Mic 1.
+                 - 'v_a1': Raw ADC voltage array of Mic 2.
+        """
+        from pynq_localizer.kinematics import TimeOfArrivalEstimator
+
+        # 1. Configure hardware pulse generator and arm trigger in Single mode
+        if hasattr(self, "trigger") and self.trigger is not None:
+            self.trigger.set_pulse_width_ms(pulse_width_ms)
+            self.trigger.set_mode("Single")
+
+        # 2. Pre-arm DMA receive channels
+        if hasattr(self, "axi_dma_0") and hasattr(self.axi_dma_0, "recvchannel"):
+            self.axi_dma_0.recvchannel.transfer(self._buf_time)
+            if hasattr(self, "axi_dma_1") and self._buf_fft is not None:
+                self.axi_dma_1.recvchannel.transfer(self._buf_fft)
+
+        # 3. Fire hardware pulse and sync acquisition
+        if hasattr(self, "trigger") and self.trigger is not None:
+            self.trigger.fire_pulse()
+
+        # 4. Wait for DMA transfer completion
+        if hasattr(self, "axi_dma_0") and hasattr(self.axi_dma_0, "recvchannel"):
+            t0 = time.time()
+            while not self.axi_dma_0.recvchannel.idle:
+                if time.time() - t0 > timeout:
+                    if hasattr(self, "trigger") and self.trigger is not None:
+                        self.trigger.disarm()
+                    raise TimeoutError(f"Pulsed ToA DMA transfer timed out after {timeout}s.")
+                time.sleep(0.0005)
+
+        t_launch_cycles = self.axi_timer_0.mmio.read(0x08) if hasattr(self, "axi_timer_0") else 0
+
+        # 5. Unpack raw time domain samples
+        raw_samples = np.array(self._buf_time) if self._buf_time is not None else np.zeros(4096, dtype=np.uint16)
+        raw_a0 = raw_samples[0::2]
+        raw_a1 = raw_samples[1::2]
+        v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
+        v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
+
+        # 6. Instantiate TimeOfArrivalEstimator and solve
+        estimator = TimeOfArrivalEstimator(
+            nominal_f0_hz=f_target if f_target is not None else 2609.73,
+            profile=profile,
+            mic_distance_m=mic_distance_m,
+            temperature_c=temperature_c,
+            calibrated_offset_ms=calibrated_offset_ms,
+            noise_gate_v=noise_gate_v
+        )
+
+        toa_res = estimator.estimate_distance_and_tdoa(
+            v_a0=v_a0,
+            v_a1=v_a1,
+            fs=self.fs_per_ch,
+            t_emission_sec=0.0
+        )
+
+        toa_res["v_a0"] = v_a0
+        toa_res["v_a1"] = v_a1
+        toa_res["t_launch_cycles"] = t_launch_cycles
+
+        return toa_res
 
     # =========================================================================
     # 3. Continuous Multi-Second Flight Recorder
