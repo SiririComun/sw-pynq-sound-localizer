@@ -1,29 +1,29 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ a6f036e
+• Repository State    : feat/pulse-time-of-arrival @ 25e9ce2
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc1
-• Package Version     : v1.2.0
+• Package Version     : v1.3.0
 ==============================================================================
 
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Clean (No uncommitted changes)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         a6f036e [origin/feat/pulse-time-of-arrival: ahead 1] chore(hw): pin overlay dependency to candidate v1.5.2-rc1 with buzzer pulse trigger
+* feat/pulse-time-of-arrival                         25e9ce2 [origin/feat/pulse-time-of-arrival] chore(context): update repository context with v1.5.2-rc1 pinning
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          08f4f1e chore(context): update repository context with Notebook 05
+  remotes/origin/feat/pulse-time-of-arrival          25e9ce2 chore(context): update repository context with v1.5.2-rc1 pinning
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,8 +33,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* a6f036e  (HEAD -> feat/pulse-time-of-arrival) - 2026-09-25 : chore(hw): pin overlay dependency to candidate v1.5.2-rc1 with buzzer pulse trigger (SiririComun)
-* 08f4f1e  (origin/feat/pulse-time-of-arrival) - 2026-09-25 : chore(context): update repository context with Notebook 05 (SiririComun)
+* 25e9ce2  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-25 : chore(context): update repository context with v1.5.2-rc1 pinning (SiririComun)
+* a6f036e  - 2026-09-25 : chore(hw): pin overlay dependency to candidate v1.5.2-rc1 with buzzer pulse trigger (SiririComun)
+* 08f4f1e  - 2026-09-25 : chore(context): update repository context with Notebook 05 (SiririComun)
 * fc346e1  - 2026-09-25 : docs(notebook): add 05_pulse_time_of_arrival_lab interactive lab (SiririComun)
 * 1a9fcca  - 2026-09-25 : chore(context): update repository context with capture_pulsed_toa_frame (SiririComun)
 * 1301e9e  - 2026-09-25 : feat(array): implement capture_pulsed_toa_frame for active ToA distance sounding (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * 0caba84  (origin/feat/differential-air-track-doppler, feat/differential-air-track-doppler) - 2026-09-25 : chore(context): update repository context with modular Notebook 04 (SiririComun)
 * 42fe7db  - 2026-09-25 : docs(notebook): modularize 04_air_track_differential_doppler into step-by-step cells (SiririComun)
 * 33d90e0  - 2026-09-24 : chore(context): update repository summary with Notebook 04 (SiririComun)
-* d4864e3  - 2026-09-24 : docs(notebook): add 04_air_track_differential_doppler interactive lab (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -262,7 +262,7 @@ except (ImportError, ModuleNotFoundError):
     KinematicsDashboard = None
     _HAS_PYNQ = False
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 __all__ = [
     "HardwareLoader",
     "HardwareTrigger",
@@ -4652,7 +4652,7 @@ if os.path.exists("README.md"):
 
 setup(
     name="pynq-sound-localizer",
-    version="1.2.0",
+    version="1.3.0",
     author="Juan Pablo Sánchez (SiririComun)",
     description="FPGA-Accelerated Acoustic Kinematics, Doppler Tracking & Direction-of-Arrival Sound Localizer for PYNQ-Z2",
     long_description=long_description,
@@ -4673,8 +4673,8 @@ setup(
         "plotly>=5.10.0,<6.0.0",
         "ipywidgets>=8.0.0",
     ],
-    package_data={
-        "pynq_localizer": ["../notebooks/*.ipynb", "../hardware.json"],
+    ppackage_data={
+        "pynq_localizer": ["../notebooks/*.ipynb", "../hardware.json", "../profiles/*.json"],
     },
     include_package_data=True,
     entry_points={
