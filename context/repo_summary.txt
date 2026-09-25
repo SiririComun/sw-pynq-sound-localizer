@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/phase-angle-of-arrival @ ab78791
+• Repository State    : feat/phase-angle-of-arrival @ efd34e7
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.1
 • Package Version     : v1.2.0
 ==============================================================================
@@ -9,17 +9,17 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/phase-angle-of-arrival | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: feat/phase-angle-of-arrival | Working Tree: Dirty (3 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
-* feat/phase-angle-of-arrival                        ab78791 [origin/feat/phase-angle-of-arrival] chore(context): update repository context with profiles catalog
+* feat/phase-angle-of-arrival                        efd34e7 [origin/feat/phase-angle-of-arrival] chore(context): update repository summary with AoA engine
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
-  remotes/origin/feat/phase-angle-of-arrival         ab78791 chore(context): update repository context with profiles catalog
+  remotes/origin/feat/phase-angle-of-arrival         efd34e7 chore(context): update repository summary with AoA engine
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -29,7 +29,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* ab78791  (HEAD -> feat/phase-angle-of-arrival, origin/main, origin/feat/phase-angle-of-arrival, main) - 2026-09-24 : chore(context): update repository context with profiles catalog (SiririComun)
+* efd34e7  (HEAD -> feat/phase-angle-of-arrival, origin/feat/phase-angle-of-arrival) - 2026-09-24 : chore(context): update repository summary with AoA engine (SiririComun)
+* 9037962  - 2026-09-24 : feat(aoa): implement dual coherent phase extractor and AngleOfArrivalEstimator (SiririComun)
+* ab78791  (origin/main, main) - 2026-09-24 : chore(context): update repository context with profiles catalog (SiririComun)
 * dac6836  - 2026-09-24 : feat(profiles): add certified active buzzer 2610 Hz characterization profile (SiririComun)
 * ffb0838  - 2026-09-24 : chore(context): regenerate repository summary after sinc scale fix (SiririComun)
 * a534058  - 2026-09-24 : fix(dashboard): rectify sinc peak estimator input scale to linear magnitude (SiririComun)
@@ -43,9 +45,6 @@ Multi-Branch Git Commit Graph:
 | * 375ccd9  - 2026-09-23 : docs(context): update repository summary with multipath profile exporter (SiririComun)
 | * 3d47b9f  - 2026-09-23 : feat(calibration): add export_profile and save_profile_json to MultipathCalibrationProtocol (SiririComun)
 | * 8c01eed  - 2026-09-23 : docs(context): update repository summary with multipath calibration protocol (SiririComun)
-| * b82a16e  - 2026-09-23 : feat(calibration): implement MultipathCalibrationProtocol with spatial centroid solver (SiririComun)
-|/  
-* 633b3f0  - 2026-09-23 : docs(notebook): refactor 02_acoustic_calibration_lab into single-carrier interactive wizard (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -1122,8 +1121,11 @@ class KinematicAnalytics:
     ) -> Dict[str, float]:
         """
         Simultaneously projects both synchronous ADC channels (A0 and A1) onto a
-        common Fourier phasor e^(-j 2π f0 t) to extract individual phases, in-band
-        RMS voltages, and the unambiguous wrapped phase difference Δφ = φ1 - φ0.
+        Hann-windowed Fourier phasor w[n] · e^(-j 2π f0 t) to extract individual phases,
+        in-band RMS voltages, and the unambiguous wrapped phase difference Δφ = φ1 - φ0.
+
+        Hann windowing suppresses frame boundary splatter and attenuates harmonic
+        distortion (such as the buzzer's 24% 2f0 harmonic) by > 75 dB.
 
         Sign Convention:
           • Δφ = 0      => Broadside (Wavefront arrives at A0 and A1 simultaneously)
@@ -1157,11 +1159,16 @@ class KinematicAnalytics:
         v1_ac = v1[:n] - np.mean(v1[:n]) if remove_dc else v1[:n]
 
         t = np.arange(n) / float(fs)
-        phasor = np.exp(-2.0j * np.pi * float(target_freq_hz) * t)
 
-        # Single-bin discrete Fourier projections
-        x0 = (2.0 / n) * np.dot(v0_ac, phasor)
-        x1 = (2.0 / n) * np.dot(v1_ac, phasor)
+        # Hann window to suppress non-integer boundary leakage and harmonic splatter
+        w = 0.5 - 0.5 * np.cos(2.0 * np.pi * np.arange(n) / (n - 1)) if n > 1 else np.ones(n)
+        coherent_sum = float(np.sum(w))
+        phasor = w * np.exp(-2.0j * np.pi * float(target_freq_hz) * t)
+
+        # Single-bin Hann-windowed discrete Fourier projections
+        scale = 2.0 / max(coherent_sum, 1e-12)
+        x0 = scale * np.dot(v0_ac, phasor)
+        x1 = scale * np.dot(v1_ac, phasor)
 
         # In-band RMS physical voltages
         v_rms_0 = float(np.abs(x0) / np.sqrt(2.0))
@@ -5193,4 +5200,143 @@ class TestMultipathCalibrationProtocol:
         fits = protocol.fit()
         res = fits[1000.0]
         assert res["passed_gate"] is False
+```
+
+test_aoa.py: (tests/test_aoa.py)
+
+```python
+"""
+tests/test_aoa.py: Strict Unit Verification Suite for Angle of Arrival (AoA) Interferometry Engine.
+"""
+
+import json
+from pathlib import Path
+from typing import Optional
+import numpy as np
+import pytest
+
+from pynq_localizer.kinematics import KinematicAnalytics, AngleOfArrivalEstimator
+
+def generate_synthetic_aoa_stereo_frame(
+    theta_deg: float,
+    f0: float = 2609.73,
+    mic_distance_m: float = 0.05,
+    amplitude_v: float = 0.100,
+    fs: float = 50000.0,
+    n_samples: int = 2048,
+    temperature_c: float = 20.0,
+    snr_db: Optional[float] = None
+):
+    """
+    Synthesizes a dual-channel time stream for an acoustic plane wave incident at angle theta_deg.
+    Sign convention:
+      - theta = 0 deg => Broadside (wavefront arrives at A0 and A1 at the same instant)
+      - theta > 0 deg => Wavefront reaches Mic 2 (A1) before Mic 1 (A0) (Right)
+      - theta < 0 deg => Wavefront reaches Mic 1 (A0) before Mic 2 (A1) (Left)
+    """
+    c = KinematicAnalytics.speed_of_sound(temperature_c)
+    theta_rad = np.radians(theta_deg)
+
+    # Time delay: tau = (d * sin(theta)) / c
+    tau_sec = (mic_distance_m * np.sin(theta_rad)) / c
+
+    t = np.arange(n_samples) / fs
+
+    # Mic 1 (A0) is reference phase; Mic 2 (A1) leads by tau
+    v_a0 = amplitude_v * np.cos(2.0 * np.pi * f0 * t)
+    v_a1 = amplitude_v * np.cos(2.0 * np.pi * f0 * (t + tau_sec))
+
+    if snr_db is not None:
+        noise_sigma = amplitude_v / (10.0 ** (snr_db / 20.0)) / np.sqrt(2.0)
+        v_a0 += np.random.normal(0, noise_sigma, n_samples)
+        v_a1 += np.random.normal(0, noise_sigma, n_samples)
+
+    return v_a0, v_a1
+
+class TestAngleOfArrivalEngine:
+
+    def test_broadside_zero_angle_recovery(self):
+        """Verify that an incident plane wave at 0 deg produces exactly 0 deg with Delta phi = 0."""
+        v0, v1 = generate_synthetic_aoa_stereo_frame(theta_deg=0.0)
+        aoa = AngleOfArrivalEstimator(mic_distance_m=0.05, target_freq_hz=2609.73)
+        res = aoa.estimate_angle(v0, v1, fs=50000.0)
+
+        assert abs(res["theta_deg"] - 0.0) < 1e-3, f"Broadside failed: {res['theta_deg']}"
+        assert abs(res["delta_phi_rad"] - 0.0) < 1e-4, f"Delta phi not zero: {res['delta_phi_rad']}"
+        assert res["status"] == "ACTIVE_VALID"
+
+    def test_angular_sweep_grid_accuracy(self):
+        """
+        Verify angular recovery across an incident grid from -60 deg to +60 deg
+        across multiple carrier frequencies (1000 Hz, 2000 Hz, 2609.73 Hz).
+        With Hann-windowed coherent projection, error must remain < 0.02 deg!
+        """
+        test_angles = [-60.0, -45.0, -30.0, -15.0, 0.0, 15.0, 30.0, 45.0, 60.0]
+        test_frequencies = [1000.0, 2000.0, 2609.73]
+        d_mic = 0.05
+
+        for f0 in test_frequencies:
+            aoa = AngleOfArrivalEstimator(mic_distance_m=d_mic, target_freq_hz=f0)
+            for theta_true in test_angles:
+                v0, v1 = generate_synthetic_aoa_stereo_frame(
+                    theta_deg=theta_true, f0=f0, mic_distance_m=d_mic
+                )
+                res = aoa.estimate_angle(v0, v1, fs=50000.0)
+                theta_est = res["theta_deg"]
+                err = abs(theta_est - theta_true)
+
+                # High-precision threshold: < 0.02 deg
+                assert err < 0.02, (
+                    f"AoA grid error too high: True={theta_true}°, "
+                    f"Est={theta_est:.4f}°, Err={err:.4f}° (f0={f0}Hz)"
+                )
+                assert res["status"] == "ACTIVE_VALID"
+
+    def test_noise_robustness(self):
+        """Verify angle recovery remains accurate under additive Gaussian noise down to 20 dB SNR."""
+        theta_true = 25.0
+        v0, v1 = generate_synthetic_aoa_stereo_frame(
+            theta_deg=theta_true, f0=2609.73, snr_db=20.0
+        )
+        aoa = AngleOfArrivalEstimator(mic_distance_m=0.05, target_freq_hz=2609.73)
+        res = aoa.estimate_angle(v0, v1, fs=50000.0)
+
+        err = abs(res["theta_deg"] - theta_true)
+        print(f"\n[AoA Noise Test] True={theta_true}° | Est={res['theta_deg']:.2f}° | Err={err:.2f}°")
+        assert err < 0.80, f"Noisy AoA error too high: {err}°"
+        assert res["status"] == "ACTIVE_VALID"
+
+    def test_squelch_silence_gating(self):
+        """Verify that amplitudes below the noise gate return status SILENCE and NaN angle."""
+        aoa = AngleOfArrivalEstimator(mic_distance_m=0.05, target_freq_hz=2609.73, noise_gate_v=0.020)
+        # Signal below noise gate (5 mV)
+        v0, v1 = generate_synthetic_aoa_stereo_frame(theta_deg=30.0, amplitude_v=0.005)
+        res = aoa.estimate_angle(v0, v1, fs=50000.0)
+
+        assert np.isnan(res["theta_deg"])
+        assert res["status"] == "SILENCE"
+
+    def test_spatial_aliasing_boundary_flag(self):
+        """Verify that microphone spacing d > lambda/2 sets OUT_OF_BOUNDS_SPATIAL_ALIASING status."""
+        # For f0 = 4000 Hz, lambda/2 = 343.2 / (2 * 4000) = 0.0429 m (4.29 cm)
+        # Spacing d = 0.06 m (6 cm) exceeds the spatial aliasing limit
+        aoa = AngleOfArrivalEstimator(mic_distance_m=0.060, target_freq_hz=4000.0)
+        v0, v1 = generate_synthetic_aoa_stereo_frame(theta_deg=10.0, f0=4000.0, mic_distance_m=0.060)
+        res = aoa.estimate_angle(v0, v1, fs=50000.0)
+
+        assert res["status"] == "OUT_OF_BOUNDS_SPATIAL_ALIASING"
+
+    def test_profile_loading_integration(self):
+        """Verify that AngleOfArrivalEstimator correctly loads f0 from the certified buzzer profile."""
+        profile_path = Path("profiles/active_buzzer_2610hz.json")
+        assert profile_path.exists(), "Profile file missing!"
+
+        aoa = AngleOfArrivalEstimator(mic_distance_m=0.05, profile=profile_path)
+        assert abs(aoa.target_freq_hz - 2609.73) < 0.1
+
+        v0, v1 = generate_synthetic_aoa_stereo_frame(theta_deg=-35.0, f0=aoa.target_freq_hz)
+        res = aoa.estimate_angle(v0, v1, fs=50000.0)
+
+        assert abs(res["theta_deg"] - (-35.0)) < 0.02
+        assert res["status"] == "ACTIVE_VALID"
 ```
