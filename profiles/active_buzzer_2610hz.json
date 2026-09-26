@@ -3,7 +3,7 @@
   "description": "Certified acoustic calibration profile for 2610 Hz active piezo transducer on PYNQ-Z2",
   "device_model": "Active_Piezo_Buzzer_5V",
   "f_res_hz": 2609.73,
-  "calibrated_toa_offset_ms": 1.8080,
+  "calibrated_toa_offset_ms": 1.8758,
   "max_mic_spacing_aoa_cm": 6.58,
   "system_metadata": {
     "carrier_frequency_hz": 2609.73,
@@ -16,19 +16,19 @@
     2609.73
   ],
   "k_values": [
-    0.0450
+    0.045
   ],
   "r_squared": [
-    0.9850
+    0.985
   ],
   "k_uncertainty": [
     0.0015
   ],
   "operational_bounds": {
     "2609.73": {
-      "r_min_m": 0.10,
-      "r_max_m": 2.50,
-      "v_sat_v": 0.450,
+      "r_min_m": 0.1,
+      "r_max_m": 2.5,
+      "v_sat_v": 0.45,
       "v_min_v": 0.008,
       "c_room_v": 0.002
     }

@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ f7d6571
+• Repository State    : feat/pulse-time-of-arrival @ 9df6179
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc3
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (3 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         f7d6571 [origin/feat/pulse-time-of-arrival] feat(array): overhaul capture_pulsed_toa_frame with star-ground timing and 1.808ms offset
+* feat/pulse-time-of-arrival                         9df6179 [origin/feat/pulse-time-of-arrival] docs(notebook): overhaul Notebook 05 with star-ground timing and 1.808ms offset
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          f7d6571 feat(array): overhaul capture_pulsed_toa_frame with star-ground timing and 1.808ms offset
+  remotes/origin/feat/pulse-time-of-arrival          9df6179 docs(notebook): overhaul Notebook 05 with star-ground timing and 1.808ms offset
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* f7d6571  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-26 : feat(array): overhaul capture_pulsed_toa_frame with star-ground timing and 1.808ms offset (SiririComun)
+* 9df6179  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-26 : docs(notebook): overhaul Notebook 05 with star-ground timing and 1.808ms offset (SiririComun)
+* f7d6571  - 2026-09-26 : feat(array): overhaul capture_pulsed_toa_frame with star-ground timing and 1.808ms offset (SiririComun)
 * 5c789ea  - 2026-09-26 : fix(profile): update active buzzer turn-on delay to 1.808ms based on acoustic measurements (SiririComun)
 * cd56c8a  - 2026-09-26 : fix(loader): robust multi-path hardware.json resolution and v1.5.2-rc3 fallback (SiririComun)
 * 4020be1  - 2026-09-26 : fix(notebooks): isolate localizer notebooks from other packages and prune foreign files (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * 25e9ce2  - 2026-09-25 : chore(context): update repository context with v1.5.2-rc1 pinning (SiririComun)
 * a6f036e  - 2026-09-25 : chore(hw): pin overlay dependency to candidate v1.5.2-rc1 with buzzer pulse trigger (SiririComun)
 * 08f4f1e  - 2026-09-25 : chore(context): update repository context with Notebook 05 (SiririComun)
-* fc346e1  - 2026-09-25 : docs(notebook): add 05_pulse_time_of_arrival_lab interactive lab (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -295,6 +295,8 @@ import time
 from pathlib import Path
 from typing import Union, Optional, Tuple, Dict, Any
 import numpy as np
+import json
+
 try:
     from pynq import Overlay, allocate
 except (ImportError, ModuleNotFoundError):
@@ -7451,7 +7453,7 @@ print("🎉 Step 4.4 PASSED: MicrophoneArrayOverlay.capture_pulsed_toa_frame() v
 ### 🏛️ Operating Principles
 # 1. **Synchronous Hardware Emission ($10\,\text{ns}$ Resolution):**
 # The FPGA drives Arduino digital pin **`AR2` (Zynq Pin `U13`)** HIGH for a programmed duration (e.g. $10.0\,\text{ms}$) via the `axis_trigger_unit` IP, starting cycle 0 on the exact clock edge the pulse launches.
-# 2. **Piezo Transducer Ignition Delay ($t_{\text{offset}} = 1.8080\,\text{ms}$):**
+# 2. **Piezo Transducer Ignition Delay ($t_{\text{offset}} = 1.8758\,\text{ms}$):**
 # Active buzzers take a few acoustic cycles for their internal mechanical oscillator to build resonant pressure waves in air:
 # $$t_{\text{flight}} = t_{\text{arrival}} - t_{\text{offset}}$$
 # $$r = c(T) \cdot t_{\text{flight}}$$
@@ -7486,9 +7488,15 @@ print("🎉 Step 4.4 PASSED: MicrophoneArrayOverlay.capture_pulsed_toa_frame() v
 # • AR2 (Digital 2) ──► 1kΩ Resistor ──► Transistor Base (Pin 2) ─────────┘
 # • Transistor Emitter (Pin 1) ──► External 5V GND (-) AND PYNQ GND Pin 2
 # ```
+### 🔍 2N2222A Transistor Pinout (TO-92 Package)
+# With the flat face facing you and pins pointing down: **Pin 1 = Emitter**, **Pin 2 = Base**, **Pin 3 = Collector**.
 
-# %% [code] Cell 3
-# %% [code] Cell 1: Environment Setup & Hardware Initialization
+# %% [markdown] Cell 3
+## 2. Hardware Initialization & Overlay Loading
+# We load the **`v1.5.2-rc3`** overlay, configure $M=1$ bypass mode ($500\,\text{kSPS}$ undecimated stream), and initialize physical constants.
+
+# %% [code] Cell 4
+# %% [code] Cell 1: Environment Setup, Live Patch & Overlay Initialization
 import json
 import time
 from pathlib import Path
@@ -7497,202 +7505,349 @@ import scipy.signal as signal
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from pynq import allocate
+import pynq_localizer
 from pynq_localizer import MicrophoneArrayOverlay, KinematicAnalytics
 
-# 1. Initialize Hardware Overlay (Auto-downloads v1.5.2-rc3)
-ol = MicrophoneArrayOverlay()
-trig = ol.trigger
-dma = ol.axi_dma_0
+# 1. LIVE PATCH: Ensure json is available inside array module
+import pynq_localizer.array
+pynq_localizer.array.json = json
 
-# 2. System Constants
-temperature_c = 20.0
-c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
-profile_path = Path("profiles/active_buzzer_2610hz.json")
+# 2. AUTOMATIC PROFILE RESOLUTION
+def resolve_profile_path(filename="active_buzzer_2610hz.json") -> Path:
+    candidates = [
+        Path.cwd() / "profiles" / filename,
+        Path.cwd() / filename,
+        Path(pynq_localizer.__file__).resolve().parent / "profiles" / filename,
+        Path(pynq_localizer.__file__).resolve().parent.parent / "profiles" / filename,
+        Path("/home/xilinx/jupyter_notebooks/pynq_sound_localizer/profiles") / filename,
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    return None
 
-if profile_path.exists():
+profile_path = resolve_profile_path()
+if profile_path:
     with open(profile_path, "r", encoding="utf-8") as f:
         p_data = json.load(f)
     f0 = float(p_data.get("f_res_hz", 2609.73))
-    t_offset_cal = float(p_data.get("calibrated_toa_offset_ms", 1.8080))
-    d_max = float(p_data.get("max_mic_spacing_aoa_cm", 6.58))
+    print(f"✅ Loaded Profile: '{profile_path.name}' (f0 = {f0:.2f} Hz)")
 else:
     f0 = 2609.73
-    t_offset_cal = 1.8080
-    d_max = 6.58
+    print(f"ℹ️ Profile file not in local directory. Using default carrier: f0 = {f0:.2f} Hz")
 
-mic_distance_m = 0.05  # 5.0 cm baseline
-fs = 500_000.0         # 500 kSPS per channel (M=1 Bypass Mode)
+# 3. Hardware & Physics Parameters
+temperature_c = 20.0
+c_sound = KinematicAnalytics.speed_of_sound(temperature_c)  # 343.21 m/s at 20°C
+fs = 500_000.0                       # 500 kSPS per channel (M=1 Bypass Mode)
+packet_samples = 16384               # 16.384 ms capture window (~5.6 m range)
+mic_distance_m = 0.05                # 5.0 cm microphone baseline
+pulse_ms = 10.0                      # 10 ms pulse for acoustic volume
+blanking_ms = 2.00                   # 2.0 ms blanking against electrical transients
 
-print("=" * 75)
-print("✅ HARDWARE INITIALIZATION COMPLETE (v1.5.2-rc3)")
-print("=" * 75)
-print(f"• Sampling Rate         : {fs/1000:.0f} kSPS per channel (M=1 Bypass Mode)")
+# 4. Load Overlay v1.5.2-rc3
+ol = MicrophoneArrayOverlay(version="v1.5.2-rc3")
+trig = ol.trigger
+dma = ol.axi_dma_0
+
+# Ensure DMA 0 engine is started
+if not dma.recvchannel.running:
+    dma.mmio.write(0x30, 0x04)
+    time.sleep(0.005)
+    dma.recvchannel.start()
+
+print("=" * 80)
+print("✅ HARDWARE SETUP COMPLETE (v1.5.2-rc3)")
+print("=" * 80)
+print(f"• Sampling Frequency fs : {fs/1000:.0f} kSPS per channel")
 print(f"• Carrier Frequency f0  : {f0:.2f} Hz")
 print(f"• Speed of Sound c(T)   : {c_sound:.2f} m/s (at {temperature_c}°C)")
-print(f"• Calibrated Delay t_off: {t_offset_cal:.4f} ms")
-print(f"• Array Baseline d      : {mic_distance_m*100:.1f} cm (Aliasing limit: {d_max:.2f} cm)")
-print(f"• Pulse Trigger Pin     : Arduino AR2 (Pin U13)")
-print("=" * 75)
+print(f"• Spatial Resolution    : {c_sound / fs * 1000:.3f} mm per sample")
+print(f"• Microphone Baseline d : {mic_distance_m*100:.1f} cm")
+print("=" * 80)
 
-# %% [code] Cell 4
-# %% [code] Cell 2: Audible Buzzer 1-Second Check
-print("🔊 FIRING 1.0-SECOND TEST PULSE ON AR2...")
+# %% [markdown] Cell 5
+## 3. 10-Pulse Statistical Reference Calibration ($r_{\text{ref}} = 10.0\,\text{cm}$)
+# Instead of touching the mic capsule (which causes sound to conduct through solid plastic at $2200\,\text{m/s}$), we place the buzzer at an **airborne standoff of $r_{\text{ref}} = 10.0\,\text{cm}$** along a ruler.
+# The cell fires 10 pulses, discards the cold start (Pulse #1), and extracts $t_{\text{offset}}$ empirically with sub-millimeter precision.
 
-# Set 1000 ms pulse (100,000,000 cycles @ 100 MHz)
-trig.set_pulse_width_ms(1000.0)
-trig.fire_pulse()
+# %% [code] Cell 6
+# %% [code] Cell 2: 10-Pulse Statistical Reference Calibration
+r_ref_cm = 10.0
 
-time.sleep(0.05)
-st = trig.mmio.read(trig.REG_STATUS)
-is_active = bool(st & trig.STATUS_PULSE_ACTIVE)
+print("=" * 85)
+print(f"📏 10-PULSE REFERENCE CALIBRATION (r_ref = {r_ref_cm:.1f} cm)")
+print("=" * 85)
+input(f"👉 Place buzzer at EXACTLY {r_ref_cm:.1f} cm from Mic 1 along ruler and press [Enter]...")
 
-print(f"• Hardware Status (0x04) : {hex(st)}")
-print(f"• Is Pin AR2 Actively HIGH: {is_active}")
+n_cal_pulses = 10
+cal_arrivals = []
 
-time.sleep(1.0)
-st_done = trig.mmio.read(trig.REG_STATUS)
-print(f"• Pulse Completed (0x04) : {hex(st_done)} (Active = {bool(st_done & trig.STATUS_PULSE_ACTIVE)})")
+# Bandpass filter around carrier (2610 Hz +/- 350 Hz)
+nyq = fs / 2.0
+b, a = signal.butter(2, [max(20.0, f0 - 350.0) / nyq, min(nyq - 20.0, f0 + 350.0) / nyq], btype="bandpass")
 
-if is_active:
-    print("\n👉 Did you hear the loud 1-second beep from the buzzer?")
-else:
-    print("\n❌ Hardware pulse did not trigger. Check connections.")
+for p in range(n_cal_pulses):
+    res = ol.capture_pulsed_toa_frame(
+        pulse_width_ms=10.0,
+        packet_samples=16384,
+        f_target=f0,
+        calibrated_offset_ms=0.0,  # Zero software offset: capture raw arrival!
+        temperature_c=temperature_c
+    )
+    
+    def find_wf(v_bp, env):
+        blank_idx = int((blanking_ms / 1000.0) * fs)
+        peak_val = np.max(env[blank_idx:])
+        thresh = max(15.0, 0.20 * peak_val)
+        zc = np.where((v_bp[:-1] <= 0) & (v_bp[1:] > 0))[0]
+        for i in range(len(zc) - 1):
+            z0 = zc[i]
+            z1 = zc[i + 1]
+            if z0 < blank_idx:
+                continue
+            p_len = z1 - z0
+            amp = np.max(v_bp[z0:z1]) - np.min(v_bp[z0:z1])
+            if (150 <= p_len <= 230) and (amp >= thresh):
+                frac = -v_bp[z0] / (v_bp[z0 + 1] - v_bp[z0]) if abs(v_bp[z0 + 1] - v_bp[z0]) > 1e-6 else 0.0
+                return (float(z0) + frac) / fs * 1000.0
+        return np.nan
 
-# %% [code] Cell 5
-# %% [code] Cell 3: Single-Shot Dual-Channel Acoustic Sounding (10 ms Pulse)
-input("👉 Place buzzer at target location (e.g. Mic 2 @ 17 cm, Mic 1 @ 61.5 cm) and press [Enter]...")
+    t_arr = find_wf(res["v1_bp"], res["env1"])
+    if np.isfinite(t_arr):
+        cal_arrivals.append(t_arr)
+    time.sleep(0.12)  # Acoustic decay rest
+
+# 1. Discard Pulse #1 (Cold start / warm-up)
+stable_arrivals = cal_arrivals[1:]
+
+# 2. Theoretical air flight time for r_ref
+t_air_ref_ms = (r_ref_cm / 100.0) / c_sound * 1000.0  # ~0.291 ms for 10.0 cm
+
+# 3. Empirically extract the true buzzer turn-on delay
+t_arr_median = float(np.median(stable_arrivals))
+t_offset_calibrated_ms = t_arr_median - t_air_ref_ms
+jitter_cal_us = float(np.std(stable_arrivals)) * 1000.0
+
+print("\n" + "=" * 85)
+print("🏆 STATISTICAL CALIBRATION SUMMARY (Pulses #2 to #10):")
+print("=" * 85)
+print(f"• Raw Arrivals Recorded   : {[f'{t:.3f}ms' for t in stable_arrivals]}")
+print(f"• Median Raw Arrival Time : {t_arr_median:.4f} ms")
+print(f"• Theoretical Air Flight  : {t_air_ref_ms:.4f} ms (for {r_ref_cm:.1f} cm)")
+print(f"• EMPIRICAL t_offset      : {t_offset_calibrated_ms:.4f} ms")
+print(f"• Arrival Jitter (σ)      : ±{jitter_cal_us:.1f} µs (±{jitter_cal_us * 1e-6 * c_sound * 1000.0:.2f} mm)")
+print("=" * 85)
+
+# %% [markdown] Cell 7
+## 4. Single-Shot Arbitrary Distance & TDOA Sounder
+# Move the buzzer to any position in space. This cell uses the calibrated $t_{\text{offset}}$ from Step 3 to compute absolute distances $r_1, r_2$, path difference $\Delta r$, and bearing angle $\theta_{\text{TDOA}}$.
+
+# %% [code] Cell 8
+# %% [code] Cell 3: Arbitrary Distance Sounder using Calibrated Zero
+input("👉 Move buzzer to ANY arbitrary distance along ruler and press [Enter] to sound...")
 
 res = ol.capture_pulsed_toa_frame(
     pulse_width_ms=10.0,
     packet_samples=16384,
     f_target=f0,
-    mic_distance_m=mic_distance_m,
-    profile=profile_path,
+    calibrated_offset_ms=0.0,
     temperature_c=temperature_c
 )
 
+def get_acoustic_wavefront(v_bp, env, blank_ms=2.00):
+    blank_idx = int((blank_ms / 1000.0) * fs)
+    peak_val = np.max(env[blank_idx:])
+    thresh = max(15.0, 0.20 * peak_val)
+    zc = np.where((v_bp[:-1] <= 0) & (v_bp[1:] > 0))[0]
+    for i in range(len(zc) - 1):
+        z0 = zc[i]
+        z1 = zc[i + 1]
+        if z0 < blank_idx:
+            continue
+        p = z1 - z0
+        amp = np.max(v_bp[z0:z1]) - np.min(v_bp[z0:z1])
+        if (150 <= p <= 230) and (amp >= thresh):
+            frac = -v_bp[z0] / (v_bp[z0 + 1] - v_bp[z0]) if abs(v_bp[z0 + 1] - v_bp[z0]) > 1e-6 else 0.0
+            return (float(z0) + frac) / fs * 1000.0
+    return np.nan
+
+t1_raw_ms = get_acoustic_wavefront(res["v1_bp"], res["env1"], blank_ms=blanking_ms)
+t2_raw_ms = get_acoustic_wavefront(res["v2_bp"], res["env2"], blank_ms=blanking_ms)
+
+# Apply calibrated turn-on delay
+t1_flight_ms = max(0.0, t1_raw_ms - t_offset_calibrated_ms) if np.isfinite(t1_raw_ms) else np.nan
+t2_flight_ms = max(0.0, t2_raw_ms - t_offset_calibrated_ms) if np.isfinite(t2_raw_ms) else np.nan
+
+r1_cm = (c_sound * (t1_flight_ms / 1000.0)) * 100.0
+r2_cm = (c_sound * (t2_flight_ms / 1000.0)) * 100.0
+delta_t_ms = (t1_raw_ms - t2_raw_ms)
+delta_r_cm = (c_sound * (delta_t_ms / 1000.0)) * 100.0
+
+if mic_distance_m > 0 and abs(delta_r_cm) <= mic_distance_m * 100.0:
+    sin_theta = (c_sound * (delta_t_ms / 1000.0)) / mic_distance_m
+    theta_deg = float(np.degrees(np.arcsin(np.clip(sin_theta, -1.0, 1.0))))
+else:
+    theta_deg = np.nan
+
 print("=" * 80)
-print("📊 DUAL-CHANNEL ACOUSTIC ToA & TDOA RANGING REPORT")
+print("🎯 EMPIRICALLY CALIBRATED ACOUSTIC RANGING")
 print("=" * 80)
-print(f"• Operational Status         : ✅ {res['status']}")
-print(f"• Pre-Acoustic Spike (t<0.25): Mic 1 = {np.max(res['env1'][:125]):5.1f} mV | Mic 2 = {np.max(res['env2'][:125]):5.1f} mV (Star Ground Clean)")
+print(f"• Calibrated Buzzer t_offset : {t_offset_calibrated_ms:.4f} ms")
 print("-" * 80)
-print(f"• Mic 2 (A1, Near) Arrival   : {res['t2_raw_ms']:6.3f} ms ──► Inverted Dist = {res['r2_cm']:5.1f} cm")
-print(f"• Mic 1 (A0, Far) Arrival    : {res['t1_raw_ms']:6.3f} ms ──► Inverted Dist = {res['r1_cm']:5.1f} cm")
+print(f"• Mic 1 (A0): Raw = {t1_raw_ms:6.3f} ms ──► Flight = {t1_flight_ms:6.3f} ms ──► Distance = {r1_cm:5.1f} cm")
+print(f"• Mic 2 (A1): Raw = {t2_raw_ms:6.3f} ms ──► Flight = {t2_flight_ms:6.3f} ms ──► Distance = {r2_cm:5.1f} cm")
 print("-" * 80)
-print(f"• Physical Path Delta (Δr)   : {res['delta_r_cm']:+5.1f} cm (Δt12 = {res['delta_t_ms']*1000.0:+6.1f} µs)")
-if np.isfinite(res['theta_tdoa_deg']):
-    print(f"• Incident Bearing Angle (θ) : {res['theta_tdoa_deg']:+5.1f}°")
-print(f"• Peak Burst Amplitudes      : Mic 1 = {res['amp_a0_v']*1000.0:5.1f} mV | Mic 2 = {res['amp_a1_v']*1000.0:5.1f} mV")
+print(f"• Physical Path Delta (Δr)   : {delta_r_cm:+5.1f} cm (Δt12 = {delta_t_ms*1000.0:+6.1f} µs)")
+if np.isfinite(theta_deg):
+    print(f"• Incident Bearing Angle (θ) : {theta_deg:+5.1f}°")
 print("=" * 80)
 
-# %% [code] Cell 6
-# %% [code] Cell 4: Interactive Waveform Diagnostic Plot
+# Interactive Plot
 t_ms = res["t_ms"]
 mask_zoom = t_ms <= 8.0
 
 fig = make_subplots(
     rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08,
     subplot_titles=(
-        f"<b>Mic 1 (A0, Far): Arrival = {res['t1_raw_ms']:.3f} ms ──► Inverted Dist = {res['r1_cm']:.1f} cm</b>",
-        f"<b>Mic 2 (A1, Near): Arrival = {res['t2_raw_ms']:.3f} ms ──► Inverted Dist = {res['r2_cm']:.1f} cm</b>"
+        f"<b>Mic 1 (A0): Distance = {r1_cm:.1f} cm (Flight = {t1_flight_ms:.3f} ms, Raw = {t1_raw_ms:.3f} ms)</b>",
+        f"<b>Mic 2 (A1): Distance = {r2_cm:.1f} cm (Flight = {t2_flight_ms:.3f} ms, Raw = {t2_raw_ms:.3f} ms)</b>"
     )
 )
 
-# Mic 1
-fig.add_scatter(x=t_ms[mask_zoom], y=res["v1_bp"][mask_zoom], mode="lines", line=dict(color="#00FFCC", width=1.5), name="Mic 1 Sine", row=1, col=1)
+fig.add_scatter(x=t_ms[mask_zoom], y=res["v1_bp"][mask_zoom], mode="lines", line=dict(color="#00FFCC", width=1.5), name="Mic 1", row=1, col=1)
 fig.add_scatter(x=t_ms[mask_zoom], y=res["env1"][mask_zoom], mode="lines", line=dict(color="#FFA500", width=1.8), name="Mic 1 Env", row=1, col=1)
-if np.isfinite(res["t1_raw_ms"]):
-    fig.add_vline(x=res["t1_raw_ms"], line=dict(color="red", dash="dash", width=2), annotation_text=f"Arrival: {res['t1_raw_ms']:.3f} ms", row=1, col=1)
+fig.add_vline(x=t_offset_calibrated_ms, line=dict(color="gray", dash="dot"), annotation_text="t_offset (Buzzer)", row=1, col=1)
+if np.isfinite(t1_raw_ms):
+    fig.add_vline(x=t1_raw_ms, line=dict(color="red", dash="dash", width=2), annotation_text=f"Wavefront: {r1_cm:.1f} cm", row=1, col=1)
 
-# Mic 2
-fig.add_scatter(x=t_ms[mask_zoom], y=res["v2_bp"][mask_zoom], mode="lines", line=dict(color="#FF007F", width=1.5), name="Mic 2 Sine", row=2, col=1)
+fig.add_scatter(x=t_ms[mask_zoom], y=res["v2_bp"][mask_zoom], mode="lines", line=dict(color="#FF007F", width=1.5), name="Mic 2", row=2, col=1)
 fig.add_scatter(x=t_ms[mask_zoom], y=res["env2"][mask_zoom], mode="lines", line=dict(color="#FFA500", width=1.8), name="Mic 2 Env", row=2, col=1)
-if np.isfinite(res["t2_raw_ms"]):
-    fig.add_vline(x=res["t2_raw_ms"], line=dict(color="red", dash="dash", width=2), annotation_text=f"Arrival: {res['t2_raw_ms']:.3f} ms", row=2, col=1)
+fig.add_vline(x=t_offset_calibrated_ms, line=dict(color="gray", dash="dot"), annotation_text="t_offset (Buzzer)", row=2, col=1)
+if np.isfinite(t2_raw_ms):
+    fig.add_vline(x=t2_raw_ms, line=dict(color="red", dash="dash", width=2), annotation_text=f"Wavefront: {r2_cm:.1f} cm", row=2, col=1)
 
-fig.update_layout(
-    template="plotly_dark", height=550,
-    title=f"<b>Acoustic Wavefront Delay Verification (Measured Δr = {res['delta_r_cm']:+.1f} cm)</b>",
-    xaxis2=dict(title="Time from Pulse Launch (ms)", range=[0, 8.0]),
-    yaxis=dict(title="Mic 1 (mV)", range=[-250, 250]),
-    yaxis2=dict(title="Mic 2 (mV)", range=[-250, 250])
-)
+fig.update_layout(template="plotly_dark", height=550, title=f"<b>Empirically Calibrated Acoustic Sounding (Δr = {delta_r_cm:+.1f} cm)</b>")
 fig.show()
 
-# %% [code] Cell 7
-# %% [code] Cell 5: Multi-Distance Radial Linearity Benchmark
+# %% [markdown] Cell 9
+## 5. Multi-Distance Radial Linearity Benchmark
+# This benchmark tests ranging accuracy along a ruler at **$25\,\text{cm}, 50\,\text{cm}, 75\,\text{cm},\text{ and } 100\,\text{cm}$**.
+# It computes median estimates across 5 pulses per station, performs linear regression, and verifies the $R^2 \ge 0.99$ linearity score.
+
+# %% [code] Cell 10
+# %% [code] Cell 4: Multi-Distance Radial Linearity Benchmark
 test_distances_cm = [25.0, 50.0, 75.0, 100.0]
 measured_dists = []
 
-print("=" * 75)
+print("=" * 85)
 print("📏 MULTI-DISTANCE RADIAL LINEARITY BENCHMARK")
-print("=" * 75)
+print(f"   Empirical Calibration: t_offset = {t_offset_calibrated_ms:.4f} ms")
+print("=" * 85)
 
 for r_tgt in test_distances_cm:
-    input(f"👉 Move buzzer to {r_tgt:.0f} cm along ruler from Mic 1 and press [Enter]...")
+    input(f"\n👉 Move buzzer to {r_tgt:.0f} cm along ruler from Mic 1 and press [Enter]...")
     
     burst_runs = []
-    for _ in range(5):
-        run = ol.capture_pulsed_toa_frame(
+    for shot in range(5):
+        if not ol.axi_dma_0.recvchannel.running or not ol.axi_dma_0.recvchannel.idle:
+            ol.axi_dma_0.mmio.write(0x30, 0x04)
+            time.sleep(0.005)
+            ol.axi_dma_0.recvchannel.start()
+            time.sleep(0.002)
+
+        res = ol.capture_pulsed_toa_frame(
             pulse_width_ms=10.0,
             packet_samples=16384,
             f_target=f0,
-            profile=profile_path,
-            temperature_c=temperature_c
+            calibrated_offset_ms=0.0,
+            temperature_c=temperature_c,
+            timeout=1.0
         )
-        if run["status"] == "ACTIVE_VALID":
-            burst_runs.append(run["r1_cm"])
-        time.sleep(0.10)
         
-    m_dist = float(np.mean(burst_runs)) if burst_runs else np.nan
+        t_arr_ms = get_acoustic_wavefront(res["v1_bp"], res["env1"], blank_ms=2.0)
+        if np.isfinite(t_arr_ms):
+            t_flight_ms = max(0.0, t_arr_ms - t_offset_calibrated_ms)
+            dist_cm = c_sound * (t_flight_ms / 1000.0) * 100.0
+            burst_runs.append(dist_cm)
+            
+        time.sleep(0.15)
+        
+    m_dist = float(np.median(burst_runs)) if burst_runs else np.nan
     measured_dists.append(m_dist)
     err_cm = abs(m_dist - r_tgt)
-    print(f"   • Target: {r_tgt:5.1f} cm ──► Measured: {m_dist:5.1f} cm (Error = {err_cm:4.1f} cm)")
+    print(f"   • Target: {r_tgt:5.1f} cm ──► Measured: {m_dist:5.1f} cm (Error = {err_cm:4.1f} cm | Shots = {[f'{d:.1f}' for d in burst_runs]})")
 
-# Linearity Plot
+# Linear regression fit
 valid_mask = np.isfinite(measured_dists)
 x_vals = np.array(test_distances_cm)[valid_mask]
 y_vals = np.array(measured_dists)[valid_mask]
 
+slope, intercept = np.polyfit(x_vals, y_vals, 1)
+ss_res = np.sum((y_vals - (slope * x_vals + intercept))**2)
+ss_tot = np.sum((y_vals - np.mean(y_vals))**2)
+r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 1e-9 else 1.0
+
 fig_dist = go.Figure()
 fig_dist.add_scatter(x=[0, 115], y=[0, 115], mode="lines", line=dict(color="gray", dash="dash"), name="Ideal (y = x)")
-fig_dist.add_scatter(x=x_vals, y=y_vals, mode="lines+markers", marker=dict(size=9, color="#00FFCC"), line=dict(color="#00FFCC", width=2), name="Measured Distance")
+fig_dist.add_scatter(x=x_vals, y=y_vals, mode="lines+markers", marker=dict(size=10, color="#00FFCC"), line=dict(color="#00FFCC", width=2.5), name=f"Measured (R² = {r_squared:.4f})")
 
-fig_dist.update_layout(template="plotly_dark", height=450, title="<b>Acoustic ToA Distance Sounding Linearity</b>")
-fig_dist.update_xaxes(title="True Physical Distance (cm)", range=[0, 120])
-fig_dist.update_yaxes(title="Estimated ToA Distance (cm)", range=[0, 120])
+fig_dist.update_layout(
+    template="plotly_dark", height=450,
+    title=f"<b>Calibrated Acoustic Linearity: Slope = {slope:.3f}, Intercept = {intercept:+.1f} cm, R² = {r_squared:.4f}</b>",
+    xaxis=dict(title="True Physical Distance (cm)", range=[0, 120]),
+    yaxis=dict(title="Estimated ToA Distance (cm)", range=[0, 120])
+)
 fig_dist.show()
 
-# %% [code] Cell 8
-# %% [code] Cell 6: 10-Shot Repeatability & Jitter Benchmark
+# %% [markdown] Cell 11
+## 6. Multi-Shot Repeatability & Jitter Analysis
+# Fires **10 consecutive pulses** at a stationary target position, logging standard deviations to verify sub-millimeter ranging repeatability.
+
+# %% [code] Cell 12
+# %% [code] Cell 5: 10-Shot Repeatability Benchmark
 n_shots = 10
 shot_r1 = []
 shot_r2 = []
 shot_dr = []
 
 print("=" * 85)
-print(f"🚀 FIRING {n_shots} CONSECUTIVE PULSES (120 ms acoustic rest between shots)...")
+print(f"🚀 FIRING {n_shots} CONSECUTIVE PULSES (150 ms acoustic rest)...")
 print("=" * 85)
 print(f"{'Shot #':<8} | {'Mic 1 Dist':<15} | {'Mic 2 Dist':<15} | {'Δr (cm)':<12} | {'Status'}")
 print("-" * 85)
 
 for p in range(n_shots):
-    frame = ol.capture_pulsed_toa_frame(
+    if not ol.axi_dma_0.recvchannel.running or not ol.axi_dma_0.recvchannel.idle:
+        ol.axi_dma_0.mmio.write(0x30, 0x04)
+        time.sleep(0.005)
+        ol.axi_dma_0.recvchannel.start()
+        time.sleep(0.002)
+
+    res = ol.capture_pulsed_toa_frame(
         pulse_width_ms=10.0,
         packet_samples=16384,
         f_target=f0,
-        profile=profile_path,
-        temperature_c=temperature_c
+        calibrated_offset_ms=0.0,
+        temperature_c=temperature_c,
+        timeout=1.0
     )
-    if frame["status"] == "ACTIVE_VALID":
-        shot_r1.append(frame["r1_cm"])
-        shot_r2.append(frame["r2_cm"])
-        shot_dr.append(frame["delta_r_cm"])
-        print(f"#{p+1:<7} | {frame['r1_cm']:6.2f} cm        | {frame['r2_cm']:6.2f} cm        | {frame['delta_r_cm']:+6.2f} cm   | ✅ VALID")
+    
+    t1_ms = get_acoustic_wavefront(res["v1_bp"], res["env1"], blank_ms=2.0)
+    t2_ms = get_acoustic_wavefront(res["v2_bp"], res["env2"], blank_ms=2.0)
+    
+    if np.isfinite(t1_ms) and np.isfinite(t2_ms):
+        r1 = c_sound * (max(0.0, t1_ms - t_offset_calibrated_ms) / 1000.0) * 100.0
+        r2 = c_sound * (max(0.0, t2_ms - t_offset_calibrated_ms) / 1000.0) * 100.0
+        dr = r1 - r2
+        shot_r1.append(r1)
+        shot_r2.append(r2)
+        shot_dr.append(dr)
+        print(f"#{p+1:<7} | {r1:6.2f} cm        | {r2:6.2f} cm        | {dr:+6.2f} cm   | ✅ VALID")
     else:
-        print(f"#{p+1:<7} | {'---':<15} | {'---':<15} | {'---':<12} | ⚠️ {frame['status']}")
-    time.sleep(0.12)
+        print(f"#{p+1:<7} | {'---':<15} | {'---':<15} | {'---':<12} | ⚠️ WEAK")
+        
+    time.sleep(0.15)
 
 print("=" * 85)
 if len(shot_r1) >= 3:
@@ -7705,8 +7860,12 @@ if len(shot_r1) >= 3:
     print(f"  • Path Delta (Δr)     : Mean = {np.mean(shot_dr):+6.2f} cm | Jitter (σ) = ±{jitter_dr_mm:.2f} mm")
 print("=" * 85)
 
-# %% [code] Cell 9
-# %% [code] Cell 7: Clean Teardown & FPGA Memory Release
+# %% [markdown] Cell 13
+## 7. Clean Hardware Teardown
+# When finished, cleanly release all DMA buffers and reset the FPGA trigger engine.
+
+# %% [code] Cell 14
+# %% [code] Cell 6: Clean Teardown & FPGA Memory Release
 ol.close()
 print("🔒 FPGA hardware resources cleanly released.")
 

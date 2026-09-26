@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from typing import Union, Optional, Tuple, Dict, Any
 import numpy as np
+import json 
+
 try:
     from pynq import Overlay, allocate
 except (ImportError, ModuleNotFoundError):
