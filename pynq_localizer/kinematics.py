@@ -761,12 +761,12 @@ class KinematicAnalytics:
         # 3. Forward Cartesian Coordinate y = sqrt(max(0, (r1^2 + r2^2)/2 - x^2 - d^2/4))
         y_radicand = ((r1**2 + r2**2) / 2.0) - (x**2) - ((d**2) / 4.0)
 
-        if y_radicand < 0.0:
+        if is_geometric_anomaly:
+            y = 0.0
+            status = "GEOMETRIC_OUT_OF_BOUNDS"
+        elif y_radicand < 0.0:
             y = 0.0
             status = "OUT_OF_PLANE_COLLAPSE"
-        elif is_geometric_anomaly:
-            y = float(np.sqrt(max(0.0, y_radicand)))
-            status = "GEOMETRIC_OUT_OF_BOUNDS"
         else:
             y = float(np.sqrt(y_radicand))
             status = "ACTIVE_VALID"

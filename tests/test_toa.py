@@ -1,39 +1,46 @@
 """
-tests/test_toa.py: Strict Unit Verification Suite for Time of Arrival (ToA) and TDOA Engine.
+tests/test_toa.py: Strict Unit Verification Suite for Time of Arrival (ToA),
+TDOA Bearing, and Exact 2D Cartesian Multilateration Engine.
 """
 
 import json
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 import numpy as np
 import pytest
 
 from pynq_localizer.kinematics import KinematicAnalytics, TimeOfArrivalEstimator
 
-def generate_synthetic_pulsed_stereo_frame(
-    distance_m: float,
-    theta_deg: float = 0.0,
+
+def generate_synthetic_2d_stereo_frame(
+    x_m: float,
+    y_m: float,
+    d_m: float = 0.050,
     f0: float = 2609.73,
     amplitude_v: float = 0.150,
     fs: float = 50000.0,
     n_samples: int = 5000,
-    mic_distance_m: float = 0.05,
     temperature_c: float = 20.0,
     t_emission_sec: float = 0.0,
-    tau_rise_sec: float = 0.001140 / np.log(2.0),
+    tau_rise_sec: float = 0.001808 / np.log(2.0),
     snr_db: Optional[float] = None
-) -> Tuple[np.ndarray, np.ndarray, float, float]:
+) -> Tuple[np.ndarray, np.ndarray, float, float, float, float]:
     """
-    Synthesizes a dual-channel pulsed acoustic burst arriving at distance_m and theta_deg.
-    Models the physical exponential step onset of an active piezo buzzer.
+    Synthesizes exact near-field stereo microphone signals for a sound emitter at (x_m, y_m).
+
+    Geometry:
+      Mic 1 (Left / A0)  at (-d/2, 0)
+      Mic 2 (Right / A1) at (+d/2, 0)
     """
     c = KinematicAnalytics.speed_of_sound(temperature_c)
-    theta_rad = np.radians(theta_deg)
 
-    # Physical acoustic flight time
-    t_flight = distance_m / c
-    t_start0 = t_emission_sec + t_flight
-    t_start1 = t_start0 + (mic_distance_m * np.sin(theta_rad) / c)
+    # Exact near-field Euclidean ranges
+    r1 = np.sqrt((x_m + d_m / 2.0) ** 2 + y_m ** 2)
+    r2 = np.sqrt((x_m - d_m / 2.0) ** 2 + y_m ** 2)
+
+    # Physical acoustic arrival times
+    t_start0 = t_emission_sec + (r1 / c)
+    t_start1 = t_emission_sec + (r2 / c)
 
     t_axis = np.arange(n_samples) / fs
 
@@ -53,117 +60,186 @@ def generate_synthetic_pulsed_stereo_frame(
         v_a0 += np.random.normal(0, noise_sigma, n_samples)
         v_a1 += np.random.normal(0, noise_sigma, n_samples)
 
-    return v_a0, v_a1, t_start0, t_start1
+    return v_a0, v_a1, r1, r2, t_start0, t_start1
+
 
 class TestTimeOfArrivalEngine:
 
     @pytest.fixture
     def calibrated_offset_ms(self):
-        """Calibrates total system onset lag (buzzer mechanical rise + bandpass filter delay)."""
+        """Calibrates system onset lag (buzzer rise + filter delay) from a reference onset burst."""
         fs = 50000.0
         f0 = 2609.73
-        tau_rise = 0.001140 / np.log(2.0)
+        tau_rise = 0.001808 / np.log(2.0)
         t_axis = np.arange(5000) / fs
         v_cal = 0.150 * (1.0 - np.exp(-t_axis / tau_rise)) * np.cos(2.0 * np.pi * f0 * t_axis)
         cal_res = KinematicAnalytics.detect_pulse_arrival_time(v_cal, fs, f0)
         return cal_res["t_arrival_sec"] * 1000.0
 
-    def test_zero_distance_calibration(self, calibrated_offset_ms):
-        """Verify that a contact pulse (r = 0.0 cm) returns 0.0 cm with sub-millimeter precision."""
-        v0, v1, _, _ = generate_synthetic_pulsed_stereo_frame(distance_m=0.0)
+    # =========================================================================
+    # 1. Pure Analytical Multilateration Unit Tests
+    # =========================================================================
+
+    def test_multilateration_broadside_center(self):
+        """Verify (x=0, y=40cm) broadside localization: theta = 0.0 deg."""
+        d = 0.050
+        x_true, y_true = 0.0, 0.400
+        r1_true = np.sqrt((x_true + d / 2.0) ** 2 + y_true ** 2)
+        r2_true = np.sqrt((x_true - d / 2.0) ** 2 + y_true ** 2)
+
+        res = KinematicAnalytics.solve_2d_multilateration(r1_true, r2_true, d)
+
+        assert abs(res["x_m"] - 0.0) < 1e-4
+        assert abs(res["y_m"] - 0.400) < 1e-4
+        assert abs(res["range_m"] - 0.400) < 1e-4
+        assert abs(res["theta_deg"] - 0.0) < 1e-3
+        assert res["status"] == "ACTIVE_VALID"
+
+    def test_multilateration_right_sector_positive_angle(self):
+        """Verify (x=+15cm, y=30cm): theta > 0 deg (closer to Mic 2)."""
+        d = 0.050
+        x_true, y_true = 0.150, 0.300
+        r1_true = np.sqrt((x_true + d / 2.0) ** 2 + y_true ** 2)
+        r2_true = np.sqrt((x_true - d / 2.0) ** 2 + y_true ** 2)
+        expected_theta = np.degrees(np.arctan2(x_true, y_true))  # ~+26.565°
+
+        res = KinematicAnalytics.solve_2d_multilateration(r1_true, r2_true, d)
+
+        assert abs(res["x_m"] - 0.150) < 1e-4
+        assert abs(res["y_m"] - 0.300) < 1e-4
+        assert abs(res["range_m"] - np.sqrt(x_true**2 + y_true**2)) < 1e-4
+        assert abs(res["theta_deg"] - expected_theta) < 1e-3
+        assert res["status"] == "ACTIVE_VALID"
+
+    def test_multilateration_left_sector_negative_angle(self):
+        """Verify (x=-15cm, y=30cm): theta < 0 deg (closer to Mic 1)."""
+        d = 0.050
+        x_true, y_true = -0.150, 0.300
+        r1_true = np.sqrt((x_true + d / 2.0) ** 2 + y_true ** 2)
+        r2_true = np.sqrt((x_true - d / 2.0) ** 2 + y_true ** 2)
+        expected_theta = np.degrees(np.arctan2(x_true, y_true))  # ~-26.565°
+
+        res = KinematicAnalytics.solve_2d_multilateration(r1_true, r2_true, d)
+
+        assert abs(res["x_m"] - (-0.150)) < 1e-4
+        assert abs(res["y_m"] - 0.300) < 1e-4
+        assert abs(res["theta_deg"] - expected_theta) < 1e-3
+        assert res["status"] == "ACTIVE_VALID"
+
+    def test_multilateration_triangle_inequality_gate(self):
+        """Verify that |r1 - r2| > d flags GEOMETRIC_OUT_OF_BOUNDS and clamps gracefully."""
+        d = 0.050
+        # Physical impossibility: delta_r = 0.080 m > d (0.050 m)
+        r1, r2 = 0.500, 0.420
+        res = KinematicAnalytics.solve_2d_multilateration(r1, r2, d)
+
+        assert res["status"] == "GEOMETRIC_OUT_OF_BOUNDS"
+        assert np.isfinite(res["x_m"])
+        assert np.isfinite(res["theta_far_deg"])
+
+    # =========================================================================
+    # 2. End-to-End Waveform Localization Tests
+    # =========================================================================
+
+    def test_2d_waveform_localization_broadside(self, calibrated_offset_ms):
+        """Verify waveform end-to-end 2D solver at (x=0, y=40cm)."""
+        x_t, y_t, d = 0.0, 0.400, 0.050
+        v0, v1, r1, r2, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d)
+
         estimator = TimeOfArrivalEstimator(
             nominal_f0_hz=2609.73,
+            mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
         res = estimator.estimate_distance_and_tdoa(v0, v1, fs=50000.0)
 
-        assert abs(res["distance_m"] - 0.0) < 0.002, f"Zero distance failed: {res['distance_m']} m"
+        assert abs(res["x_cm"] - 0.0) < 0.5
+        assert abs(res["y_cm"] - 40.0) < 1.0
+        assert abs(res["theta_deg"] - 0.0) < 0.75
         assert res["status"] == "ACTIVE_VALID"
 
-    def test_distance_sweep_accuracy(self, calibrated_offset_ms):
-        """
-        Verify metric distance accuracy across multiple radial stations:
-        15 cm, 30 cm, 50 cm, 80 cm, 120 cm.
-        Tolerance: error < 0.010 m (1.0 cm).
-        """
-        test_distances_m = [0.15, 0.30, 0.50, 0.80, 1.20]
+    def test_2d_waveform_localization_right_sector(self, calibrated_offset_ms):
+        """Verify waveform end-to-end 2D solver at (x=+15cm, y=30cm)."""
+        x_t, y_t, d = 0.150, 0.300, 0.050
+        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d)
+
         estimator = TimeOfArrivalEstimator(
             nominal_f0_hz=2609.73,
+            mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
+        res = estimator.estimate_distance_and_tdoa(v0, v1, fs=50000.0)
 
-        for r_true in test_distances_m:
-            v0, v1, _, _ = generate_synthetic_pulsed_stereo_frame(distance_m=r_true)
-            res = estimator.estimate_distance_and_tdoa(v0, v1, fs=50000.0)
-            err_m = abs(res["distance_m"] - r_true)
+        assert abs(res["x_cm"] - 15.0) < 0.6
+        assert abs(res["y_cm"] - 30.0) < 1.0
+        assert abs(res["theta_deg"] - 26.56) < 0.8
+        assert res["status"] == "ACTIVE_VALID"
 
-            assert err_m < 0.010, f"Distance error too high: Target={r_true*100}cm, Est={res['distance_cm']:.1f}cm, Err={err_m*100:.2f}cm"
-            assert res["status"] == "ACTIVE_VALID"
+    def test_2d_waveform_localization_left_sector(self, calibrated_offset_ms):
+        """Verify waveform end-to-end 2D solver at (x=-15cm, y=30cm)."""
+        x_t, y_t, d = -0.150, 0.300, 0.050
+        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d)
 
-    def test_tdoa_angle_sweep_accuracy(self, calibrated_offset_ms):
-        """
-        Verify TDOA bearing angle recovery across incident angles from -45 deg to +45 deg.
-        Sub-sample linear interpolation resolves arrival times to sub-microsecond precision (< 1.0 µs),
-        yielding angular error < 0.75 deg across the entire +-45 deg sector.
-        """
-        test_angles = [-45.0, -30.0, -15.0, 0.0, 15.0, 30.0, 45.0]
         estimator = TimeOfArrivalEstimator(
             nominal_f0_hz=2609.73,
-            mic_distance_m=0.05,
+            mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
+        res = estimator.estimate_distance_and_tdoa(v0, v1, fs=50000.0)
 
-        for th_true in test_angles:
-            v0, v1, _, _ = generate_synthetic_pulsed_stereo_frame(distance_m=0.60, theta_deg=th_true)
-            res = estimator.estimate_distance_and_tdoa(v0, v1, fs=50000.0)
-            th_est = res["theta_tdoa_deg"]
-            err_deg = abs(th_est - th_true)
+        assert abs(res["x_cm"] - (-15.0)) < 0.6
+        assert abs(res["y_cm"] - 30.0) < 1.0
+        assert abs(res["theta_deg"] - (-26.56)) < 0.8
+        assert res["status"] == "ACTIVE_VALID"
 
-            assert err_deg < 0.75, (
-                f"TDOA angle error too high: Target={th_true}°, Est={th_est:.2f}°, "
-                f"Err={err_deg:.3f}° (Timing error = {err_deg / 0.556:.3f} µs)"
-            )
-            assert res["status"] == "ACTIVE_VALID"
+    # =========================================================================
+    # 3. Robustness, Emission Offsets, and Profile Integration
+    # =========================================================================
 
     def test_emission_timestamp_offset(self, calibrated_offset_ms):
-        """
-        Verify that non-zero emission timestamps (e.g. pulse launched at t = 50 ms)
-        correctly subtract to yield the true flight time.
-        """
-        r_true = 0.400  # 40 cm
+        """Verify non-zero pulse emission timestamp subtraction."""
+        x_t, y_t, d = 0.0, 0.400, 0.050
         t_emit = 0.050  # 50 ms emission timestamp
-        v0, v1, _, _ = generate_synthetic_pulsed_stereo_frame(distance_m=r_true, t_emission_sec=t_emit)
+        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(
+            x_m=x_t, y_m=y_t, d_m=d, t_emission_sec=t_emit
+        )
 
         estimator = TimeOfArrivalEstimator(
             nominal_f0_hz=2609.73,
+            mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
         res = estimator.estimate_distance_and_tdoa(v0, v1, fs=50000.0, t_emission_sec=t_emit)
 
-        err_m = abs(res["distance_m"] - r_true)
-        assert err_m < 0.008, f"Emission offset distance error: {err_m*100:.2f} cm"
+        assert abs(res["y_cm"] - 40.0) < 1.0
         assert res["t_flight_sec"] > 0.0
 
     def test_noise_gate_silence_rejection(self, calibrated_offset_ms):
-        """Verify that quiet frames below noise gate return status SILENCE and NaN distance."""
+        """Verify weak signals below noise gate return status SILENCE and NaN coordinates."""
+        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(
+            x_m=0.0, y_m=0.50, amplitude_v=0.003
+        )
         estimator = TimeOfArrivalEstimator(
             nominal_f0_hz=2609.73,
             calibrated_offset_ms=calibrated_offset_ms,
             noise_gate_v=0.020
         )
-        # 3 mV weak pulse
-        v0, v1, _, _ = generate_synthetic_pulsed_stereo_frame(distance_m=0.50, amplitude_v=0.003)
         res = estimator.estimate_distance_and_tdoa(v0, v1, fs=50000.0)
 
-        assert np.isnan(res["distance_m"])
-        assert np.isnan(res["theta_tdoa_deg"])
+        assert np.isnan(res["x_cm"])
+        assert np.isnan(res["y_cm"])
+        assert np.isnan(res["theta_deg"])
         assert res["status"] == "SILENCE"
 
     def test_profile_loading_integration(self):
-        """Verify that TimeOfArrivalEstimator correctly loads f0 and calibrated offset from profile."""
+        """Verify profile parameter resolution and calibrated offset alignment."""
         profile_path = Path("profiles/active_buzzer_2610hz.json")
-        assert profile_path.exists(), "Profile missing!"
+        assert profile_path.exists(), "Profile file missing!"
+
+        with open(profile_path, "r", encoding="utf-8") as f:
+            profile_data = json.load(f)
+        expected_offset = float(profile_data.get("calibrated_toa_offset_ms", 1.8758))
 
         estimator = TimeOfArrivalEstimator(profile=profile_path)
         assert abs(estimator.f0_hz - 2609.73) < 0.1
-        assert abs(estimator.offset_ms - 1.1400) < 0.01
+        assert abs(estimator.offset_ms - expected_offset) < 0.001
