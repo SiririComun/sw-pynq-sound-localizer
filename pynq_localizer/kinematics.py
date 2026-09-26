@@ -709,6 +709,87 @@ class KinematicAnalytics:
             "snr_db": snr_db,
             "is_detected": True
         }
+    
+    @staticmethod
+    def solve_2d_multilateration(
+        r1_m: float,
+        r2_m: float,
+        d_m: float
+    ) -> Dict[str, Union[float, str]]:
+        """
+        Solves exact 2D Cartesian and polar acoustic multilateration from dual-channel ranges.
+
+        Geometry convention (matching Notebook 03):
+          - Origin (0, 0) is the midpoint between microphones.
+          - Mic 1 (Left / A0) is at (-d/2, 0).
+          - Mic 2 (Right / A1) is at (+d/2, 0).
+          - Forward axis is +y (theta = 0° at broadside).
+          - Transverse axis is +x (theta > 0° to the Right, theta < 0° to the Left).
+
+        :param r1_m: Calibrated radial distance to Mic 1 in meters.
+        :param r2_m: Calibrated radial distance to Mic 2 in meters.
+        :param d_m: Inter-microphone baseline distance in meters.
+        :return: Dict containing x_m, y_m, range_m, theta_deg, theta_far_deg, and status.
+        """
+        r1 = float(r1_m)
+        r2 = float(r2_m)
+        d = float(d_m)
+
+        if not (np.isfinite(r1) and np.isfinite(r2) and r1 > 0.0 and r2 > 0.0 and d > 0.0):
+            return {
+                "x_m": np.nan,
+                "y_m": np.nan,
+                "range_m": np.nan,
+                "theta_deg": np.nan,
+                "theta_far_deg": np.nan,
+                "status": "SILENCE"
+            }
+
+        delta_r = r1 - r2
+        is_geometric_anomaly = False
+
+        # 1. Hyperbolic Path Length Gate (Triangle Inequality: |r1 - r2| <= d)
+        if abs(delta_r) > d:
+            is_geometric_anomaly = True
+            delta_r_clamped = np.sign(delta_r) * d
+        else:
+            delta_r_clamped = delta_r
+
+        # 2. Transverse Cartesian Coordinate x = (r1^2 - r2^2) / (2 * d)
+        x = (r1**2 - r2**2) / (2.0 * d)
+
+        # 3. Forward Cartesian Coordinate y = sqrt(max(0, (r1^2 + r2^2)/2 - x^2 - d^2/4))
+        y_radicand = ((r1**2 + r2**2) / 2.0) - (x**2) - ((d**2) / 4.0)
+
+        if y_radicand < 0.0:
+            y = 0.0
+            status = "OUT_OF_PLANE_COLLAPSE"
+        elif is_geometric_anomaly:
+            y = float(np.sqrt(max(0.0, y_radicand)))
+            status = "GEOMETRIC_OUT_OF_BOUNDS"
+        else:
+            y = float(np.sqrt(y_radicand))
+            status = "ACTIVE_VALID"
+
+        # 4. Polar Coordinates from array center (0, 0)
+        range_center = float(np.sqrt(x**2 + y**2))
+
+        # theta = arctan2(x, y): 0° = broadside (+y), +deg = right (+x), -deg = left (-x)
+        theta_rad = float(np.arctan2(x, y))
+        theta_deg = float(np.degrees(theta_rad))
+
+        # 5. Far-field plane-wave approximation: sin(theta) = delta_r / d
+        ratio_far = delta_r_clamped / d
+        theta_far_deg = float(np.degrees(np.arcsin(np.clip(ratio_far, -1.0, 1.0))))
+
+        return {
+            "x_m": float(x),
+            "y_m": float(y),
+            "range_m": range_center,
+            "theta_deg": theta_deg,
+            "theta_far_deg": theta_far_deg,
+            "status": status
+        }
 
 class MultiSourceTracker:
     """
@@ -2205,3 +2286,95 @@ class TimeOfArrivalEstimator:
             fs=fs,
             t_emission_sec=t_emission_sec
         )
+    
+    def estimate_distance_and_tdoa(
+        self,
+        v_a0: np.ndarray,
+        v_a1: np.ndarray,
+        fs: float,
+        t_emission_sec: float = 0.0
+    ) -> Dict[str, Any]:
+        """
+        Estimates radial distances (r1, r2), 2D Cartesian coordinates (x, y),
+        center range r, and bearing angle theta from stereo ADC frames.
+        """
+        c = KinematicAnalytics.speed_of_sound(self.temperature_c)
+
+        # 1. Detect sub-sample wavefront arrival times
+        arr0 = KinematicAnalytics.detect_pulse_arrival_time(
+            signal_v=v_a0,
+            fs=fs,
+            target_freq_hz=self.f0_hz,
+            threshold_ratio=self.threshold_ratio
+        )
+        arr1 = KinematicAnalytics.detect_pulse_arrival_time(
+            signal_v=v_a1,
+            fs=fs,
+            target_freq_hz=self.f0_hz,
+            threshold_ratio=self.threshold_ratio
+        )
+
+        if not (arr0["is_detected"] and arr1["is_detected"]) or (
+            arr0["amp_peak_v"] < self.noise_gate_v or arr1["amp_peak_v"] < self.noise_gate_v
+        ):
+            return {
+                "distance_m": np.nan,
+                "distance_cm": np.nan,
+                "r1_cm": np.nan,
+                "r2_cm": np.nan,
+                "x_cm": np.nan,
+                "y_cm": np.nan,
+                "range_cm": np.nan,
+                "theta_deg": np.nan,
+                "theta_tdoa_deg": np.nan,
+                "delta_t_ms": np.nan,
+                "delta_r_cm": np.nan,
+                "t_flight_sec": np.nan,
+                "status": "SILENCE"
+            }
+
+        t_arr0 = arr0["t_arrival_sec"]
+        t_arr1 = arr1["t_arrival_sec"]
+
+        # 2. Calibrated acoustic flight times
+        t_flight1 = max(0.0, (t_arr0 - float(t_emission_sec)) - self.offset_sec)
+        t_flight2 = max(0.0, (t_arr1 - float(t_emission_sec)) - self.offset_sec)
+
+        # 3. Individual radial distances
+        r1_m = float(c * t_flight1)
+        r2_m = float(c * t_flight2)
+
+        # 4. Solve exact 2D Cartesian and Polar localization
+        loc2d = KinematicAnalytics.solve_2d_multilateration(
+            r1_m=r1_m,
+            r2_m=r2_m,
+            d_m=self.mic_distance_m
+        )
+
+        delta_t_sec = float(t_arr0 - t_arr1)
+        delta_r_m = float(c * delta_t_sec)
+
+        return {
+            "distance_m": loc2d["range_m"],
+            "distance_cm": loc2d["range_m"] * 100.0 if np.isfinite(loc2d["range_m"]) else np.nan,
+            "r1_m": r1_m,
+            "r1_cm": r1_m * 100.0,
+            "r2_m": r2_m,
+            "r2_cm": r2_m * 100.0,
+            "x_m": loc2d["x_m"],
+            "x_cm": loc2d["x_m"] * 100.0 if np.isfinite(loc2d["x_m"]) else np.nan,
+            "y_m": loc2d["y_m"],
+            "y_cm": loc2d["y_m"] * 100.0 if np.isfinite(loc2d["y_m"]) else np.nan,
+            "range_cm": loc2d["range_m"] * 100.0 if np.isfinite(loc2d["range_m"]) else np.nan,
+            "theta_deg": loc2d["theta_deg"],
+            "theta_tdoa_deg": loc2d["theta_far_deg"],
+            "delta_t12_sec": delta_t_sec,
+            "delta_t_ms": delta_t_sec * 1000.0,
+            "delta_r_cm": delta_r_m * 100.0,
+            "t_flight_sec": t_flight1,
+            "t_arrival_a0_sec": float(t_arr0),
+            "t_arrival_a1_sec": float(t_arr1),
+            "amp_a0_v": arr0["amp_peak_v"],
+            "amp_a1_v": arr1["amp_peak_v"],
+            "status": loc2d["status"]
+        }

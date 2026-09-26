@@ -492,40 +492,48 @@ class MicrophoneArrayOverlay(Overlay):
         t1_raw_ms = find_wavefront(v1_bp, env1)
         t2_raw_ms = find_wavefront(v2_bp, env2)
 
-        # 9. Compute Calibrated Distances & TDOA
+        # 9. Compute Calibrated Distances, TDOA, and 2D Multilateration
         t1_flight_ms = max(0.0, t1_raw_ms - offset_ms) if np.isfinite(t1_raw_ms) else np.nan
         t2_flight_ms = max(0.0, t2_raw_ms - offset_ms) if np.isfinite(t2_raw_ms) else np.nan
 
-        r1_cm = (c_sound * (t1_flight_ms / 1000.0)) * 100.0 if np.isfinite(t1_flight_ms) else np.nan
-        r2_cm = (c_sound * (t2_flight_ms / 1000.0)) * 100.0 if np.isfinite(t2_flight_ms) else np.nan
+        r1_m = (c_sound * (t1_flight_ms / 1000.0)) if np.isfinite(t1_flight_ms) else np.nan
+        r2_m = (c_sound * (t2_flight_ms / 1000.0)) if np.isfinite(t2_flight_ms) else np.nan
 
         delta_t_ms = (t1_raw_ms - t2_raw_ms) if (np.isfinite(t1_raw_ms) and np.isfinite(t2_raw_ms)) else np.nan
         delta_r_cm = (c_sound * (delta_t_ms / 1000.0)) * 100.0 if np.isfinite(delta_t_ms) else np.nan
 
-        # Invert TDOA to bearing angle if baseline is satisfied
-        if np.isfinite(delta_t_ms) and mic_distance_m > 0:
-            ratio = (c_sound * (delta_t_ms / 1000.0)) / mic_distance_m
-            clamped = float(np.clip(ratio, -1.0, 1.0))
-            theta_deg = float(np.degrees(np.arcsin(clamped)))
-        else:
-            theta_deg = np.nan
+        # Solve exact 2D position (x, y) and bearing angles
+        loc2d = KinematicAnalytics.solve_2d_multilateration(
+            r1_m=r1_m if np.isfinite(r1_m) else 0.0,
+            r2_m=r2_m if np.isfinite(r2_m) else 0.0,
+            d_m=mic_distance_m
+        )
 
-        is_valid = np.isfinite(r1_cm) and np.isfinite(r2_cm)
+        r1_cm = r1_m * 100.0 if np.isfinite(r1_m) else np.nan
+        r2_cm = r2_m * 100.0 if np.isfinite(r2_m) else np.nan
+        x_cm = loc2d["x_m"] * 100.0 if np.isfinite(loc2d["x_m"]) else np.nan
+        y_cm = loc2d["y_m"] * 100.0 if np.isfinite(loc2d["y_m"]) else np.nan
+        range_cm = loc2d["range_m"] * 100.0 if np.isfinite(loc2d["range_m"]) else np.nan
+
+        is_valid = np.isfinite(r1_cm) and np.isfinite(r2_cm) and (loc2d["status"] != "SILENCE")
 
         return {
             "r1_cm": r1_cm,
             "r2_cm": r2_cm,
-            "distance_cm": r1_cm,  # Default reference distance (Mic 1)
-            "distance_m": r1_cm / 100.0 if np.isfinite(r1_cm) else np.nan,
+            "distance_cm": range_cm,           # Range from array center (0, 0)
+            "distance_m": loc2d["range_m"],
             "delta_r_cm": delta_r_cm,
             "delta_t_ms": delta_t_ms,
-            "theta_tdoa_deg": theta_deg,
+            "x_cm": x_cm,                      # Lateral position (+ = Right, - = Left)
+            "y_cm": y_cm,                      # Forward distance in front of array
+            "theta_deg": loc2d["theta_deg"],   # Near-field bearing angle
+            "theta_tdoa_deg": loc2d["theta_far_deg"],  # Far-field bearing angle
             "t1_raw_ms": t1_raw_ms,
             "t2_raw_ms": t2_raw_ms,
             "t_flight_sec": t1_flight_ms / 1000.0 if np.isfinite(t1_flight_ms) else np.nan,
             "amp_a0_v": float(np.max(env1)) / 1000.0,
             "amp_a1_v": float(np.max(env2)) / 1000.0,
-            "status": "ACTIVE_VALID" if is_valid else "SILENCE",
+            "status": loc2d["status"] if is_valid else "SILENCE",
             "v_a0": v_a0,
             "v_a1": v_a1,
             "v1_bp": v1_bp,
