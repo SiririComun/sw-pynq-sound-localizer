@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 4020be1
+• Repository State    : feat/pulse-time-of-arrival @ cd56c8a
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc3
 • Package Version     : v1.3.0
 ==============================================================================
@@ -16,14 +16,14 @@ feat/differential-air-track-doppler                0caba84 [origin/feat/differen
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         4020be1 [origin/feat/pulse-time-of-arrival] fix(notebooks): isolate localizer notebooks from other packages and prune foreign files
+* feat/pulse-time-of-arrival                         cd56c8a [origin/feat/pulse-time-of-arrival] fix(loader): robust multi-path hardware.json resolution and v1.5.2-rc3 fallback
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          4020be1 fix(notebooks): isolate localizer notebooks from other packages and prune foreign files
+  remotes/origin/feat/pulse-time-of-arrival          cd56c8a fix(loader): robust multi-path hardware.json resolution and v1.5.2-rc3 fallback
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 4020be1  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-26 : fix(notebooks): isolate localizer notebooks from other packages and prune foreign files (SiririComun)
+* cd56c8a  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-26 : fix(loader): robust multi-path hardware.json resolution and v1.5.2-rc3 fallback (SiririComun)
+* 4020be1  - 2026-09-26 : fix(notebooks): isolate localizer notebooks from other packages and prune foreign files (SiririComun)
 * c4fbeeb  - 2026-09-26 : feat(cli): add pynq-localizer-notebooks command and update loader search paths (SiririComun)
 * e903ba2  - 2026-09-26 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc3 (SiririComun)
 * 0276251  - 2026-09-25 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2 (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * fc346e1  - 2026-09-25 : docs(notebook): add 05_pulse_time_of_arrival_lab interactive lab (SiririComun)
 * 1a9fcca  - 2026-09-25 : chore(context): update repository context with capture_pulsed_toa_frame (SiririComun)
 * 1301e9e  - 2026-09-25 : feat(array): implement capture_pulsed_toa_frame for active ToA distance sounding (SiririComun)
-* b477312  - 2026-09-25 : chore(context): update repository context with test_toa (SiririComun)
 ```
 
 LICENSE: (LICENSE)

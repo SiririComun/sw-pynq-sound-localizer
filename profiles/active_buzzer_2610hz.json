@@ -1,25 +1,36 @@
 {
-  "device": "Active_Buzzer_2N2222A_Driven",
-  "timestamp": "2026-09-24 21:14:51",
-  "fs_hz": 50000.0,
-  "n_fft": 2048,
+  "name": "Active_Buzzer_2610Hz_Certified",
+  "description": "Certified acoustic calibration profile for 2610 Hz active piezo transducer on PYNQ-Z2",
+  "device_model": "Active_Piezo_Buzzer_5V",
   "f_res_hz": 2609.73,
-  "f_res_std_hz": 261.5459,
-  "carrier_vrms_mv": 113.69,
-  "ambient_noise_floor_mv": 21.19,
-  "carrier_snr_db": 14.59,
-  "h2_ratio": 0.2392,
-  "h3_ratio": 0.0544,
-  "thd_pct": 24.53,
-  "wavelength_cm": 13.15,
+  "calibrated_toa_offset_ms": 1.8080,
   "max_mic_spacing_aoa_cm": 6.58,
-  "recommended_tracking_band_hz": [
-    2534.7,
-    2684.7
+  "system_metadata": {
+    "carrier_frequency_hz": 2609.73,
+    "operating_mode": "pulsed_toa_and_continuous_aoa",
+    "transducer_type": "piezo_active_multivibrator",
+    "supply_voltage_v": 5.0,
+    "driver_switch": "2N2222A_NPN_star_ground"
+  },
+  "frequencies_hz": [
+    2609.73
   ],
-  "transient_rise_time_10_90_ms": 31.12,
-  "transient_delay_to_50pct_ms": 1.14,
-  "transient_delay_to_90pct_ms": 31.4,
-  "cycles_to_half_power": 3.0,
-  "calibrated_toa_offset_ms": 1.14
+  "k_values": [
+    0.0450
+  ],
+  "r_squared": [
+    0.9850
+  ],
+  "k_uncertainty": [
+    0.0015
+  ],
+  "operational_bounds": {
+    "2609.73": {
+      "r_min_m": 0.10,
+      "r_max_m": 2.50,
+      "v_sat_v": 0.450,
+      "v_min_v": 0.008,
+      "c_room_v": 0.002
+    }
+  }
 }
