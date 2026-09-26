@@ -2087,6 +2087,9 @@ class TimeOfArrivalEstimator:
         self.threshold_ratio = float(threshold_ratio)
         self.noise_gate_v = float(noise_gate_v)
 
+        # Default physical turn-on delay for active piezo buzzer
+        DEFAULT_TOA_OFFSET_MS = 1.8080
+
         # Resolve carrier frequency and calibrated piezo rise-time offset
         if profile is not None:
             if isinstance(profile, (str, Path)):
@@ -2094,14 +2097,18 @@ class TimeOfArrivalEstimator:
                 with open(p_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 self.f0_hz = float(data.get("f_res_hz", 2609.73))
-                offset_from_prof = float(data.get("calibrated_toa_offset_ms", 1.1400))
+                offset_from_prof = float(data.get("calibrated_toa_offset_ms", DEFAULT_TOA_OFFSET_MS))
+                self.offset_ms = offset_from_prof if calibrated_offset_ms is None else float(calibrated_offset_ms)
+            elif isinstance(profile, AcousticProfile):
+                self.f0_hz = float(profile.frequencies[0]) if len(profile.frequencies) > 0 else float(nominal_f0_hz)
+                offset_from_prof = float(profile.system_metadata.get("calibrated_toa_offset_ms", DEFAULT_TOA_OFFSET_MS))
                 self.offset_ms = offset_from_prof if calibrated_offset_ms is None else float(calibrated_offset_ms)
             else:
                 self.f0_hz = float(nominal_f0_hz)
-                self.offset_ms = 1.1400 if calibrated_offset_ms is None else float(calibrated_offset_ms)
+                self.offset_ms = DEFAULT_TOA_OFFSET_MS if calibrated_offset_ms is None else float(calibrated_offset_ms)
         else:
             self.f0_hz = float(nominal_f0_hz)
-            self.offset_ms = 1.1400 if calibrated_offset_ms is None else float(calibrated_offset_ms)
+            self.offset_ms = DEFAULT_TOA_OFFSET_MS if calibrated_offset_ms is None else float(calibrated_offset_ms)
 
         self.offset_sec = self.offset_ms / 1000.0
 

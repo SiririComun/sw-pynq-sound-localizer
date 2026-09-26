@@ -362,100 +362,176 @@ class MicrophoneArrayOverlay(Overlay):
     
     def capture_pulsed_toa_frame(
         self,
-        pulse_width_ms: float = 5.0,
+        pulse_width_ms: float = 10.0,
+        packet_samples: int = 16384,
         f_target: Optional[float] = None,
         mic_distance_m: float = 0.05,
         profile: Optional[Union[Any, str, Path]] = None,
         calibrated_offset_ms: Optional[float] = None,
         temperature_c: float = 20.0,
-        noise_gate_v: float = 0.010,
-        timeout: float = 0.5
+        blanking_ms: float = 0.25,
+        min_thresh_mv: float = 15.0,
+        timeout: float = 1.0,
     ) -> Dict[str, Any]:
         """
         Synchronously fires a hardware acoustic pulse via FPGA Arduino pin AR2 (U13),
-        latches the cycle-accurate emission timestamp, captures the dual-channel
-        response stream via DMA 0, and computes absolute distance r and TDOA angle θ.
+        captures the dual-channel response stream via DMA 0 at 500 kSPS (M=1), and
+        computes calibrated radial distances (r1, r2), path delta (Δr), and TDOA angle (θ).
 
-        :param pulse_width_ms: Duration of hardware pulse burst in ms (default: 5.0 ms).
+        :param pulse_width_ms: Duration of hardware pulse burst in ms (default: 10.0 ms).
+        :param packet_samples: Total interleaved DMA samples (default: 16384 = 16.384 ms window).
         :param f_target: Nominal pulse carrier frequency (default None -> auto from profile).
         :param mic_distance_m: Center-to-center microphone baseline in meters.
         :param profile: Optional device profile (e.g. 'profiles/active_buzzer_2610hz.json').
-        :param calibrated_offset_ms: Optional piezo turn-on delay override (defaults to profile / 1.1400 ms).
+        :param calibrated_offset_ms: Transducer turn-on delay override (defaults to profile / 1.8080 ms).
         :param temperature_c: Air temperature in °C for c(T) calculation.
-        :param noise_gate_v: Squelch detection threshold in Volts.
+        :param blanking_ms: Initial time in ms to ignore electrical transients (default: 0.25 ms).
+        :param min_thresh_mv: Minimum acoustic wave threshold in mV.
         :param timeout: Maximum DMA wait time in seconds.
-        :return: Telemetry dictionary containing:
-                 - 'distance_m': Metric distance to source in meters.
-                 - 'distance_cm': Metric distance to source in cm.
-                 - 'theta_tdoa_deg': Incident bearing angle in degrees from TDOA.
-                 - 't_flight_sec': Net acoustic time of flight in seconds.
-                 - 't_arrival_a0_sec': Arrival time at Mic 1.
-                 - 't_arrival_a1_sec': Arrival time at Mic 2.
-                 - 'delta_t12_sec': Inter-microphone arrival time difference.
-                 - 'amp_a0_v': Peak burst amplitude at Mic 1.
-                 - 'amp_a1_v': Peak burst amplitude at Mic 2.
-                 - 'status': 'ACTIVE_VALID' or 'SILENCE'.
-                 - 'v_a0': Raw ADC voltage array of Mic 1.
-                 - 'v_a1': Raw ADC voltage array of Mic 2.
+        :return: Telemetry dictionary containing r1_cm, r2_cm, delta_r_cm, delta_t_ms,
+                 theta_tdoa_deg, v_a0, v_a1, and status.
         """
-        from pynq_localizer.kinematics import TimeOfArrivalEstimator
+        import scipy.signal as signal
+        from pynq_localizer.kinematics import KinematicAnalytics
 
-        # 1. Configure hardware pulse generator and arm trigger in Single mode
+        c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
+
+        # 1. Resolve carrier frequency and calibrated turn-on delay
+        if profile is not None:
+            if isinstance(profile, (str, Path)):
+                p_path = Path(profile).resolve()
+                with open(p_path, "r", encoding="utf-8") as f:
+                    p_data = json.load(f)
+                f0 = float(p_data.get("f_res_hz", 2609.73))
+                offset_ms = float(p_data.get("calibrated_toa_offset_ms", 1.8080))
+            else:
+                f0 = 2609.73
+                offset_ms = 1.8080
+        else:
+            f0 = float(f_target) if f_target is not None else 2609.73
+            offset_ms = 1.8080 if calibrated_offset_ms is None else float(calibrated_offset_ms)
+
+        if calibrated_offset_ms is not None:
+            offset_ms = float(calibrated_offset_ms)
+
+        # 2. Ensure DMA 0 is running and allocate buffer for M=1 undecimated capture
+        if hasattr(self, "axi_dma_0"):
+            if not self.axi_dma_0.recvchannel.running:
+                self.axi_dma_0.mmio.write(0x30, 0x04)  # S2MM reset
+                time.sleep(0.005)
+                self.axi_dma_0.recvchannel.start()
+
+        if self._buf_time is None or len(self._buf_time) != packet_samples:
+            if self._buf_time is not None:
+                try:
+                    self._buf_time.close()
+                except Exception:
+                    pass
+            self._buf_time = allocate(shape=(packet_samples,), dtype="u2")
+
+        # 3. Configure hardware trigger: M=1 bypass, 3.29V ceiling to prevent premature triggers
+        fs = 500_000.0
         if hasattr(self, "trigger") and self.trigger is not None:
+            self.trigger.disarm()
+            self.trigger.set_decimation(1)
+            self.trigger.set_packet_size(packet_samples)
+            self.trigger.set_threshold(3.29)
             self.trigger.set_pulse_width_ms(pulse_width_ms)
-            self.trigger.set_mode("Single")
 
-        # 2. Pre-arm DMA receive channels
-        if hasattr(self, "axi_dma_0") and hasattr(self.axi_dma_0, "recvchannel"):
-            self.axi_dma_0.recvchannel.transfer(self._buf_time)
-            if hasattr(self, "axi_dma_1") and self._buf_fft is not None:
-                self.axi_dma_1.recvchannel.transfer(self._buf_fft)
+        # 4. Queue DMA 0 and fire pulse with self-clearing strobe
+        self.axi_dma_0.recvchannel.transfer(self._buf_time)
+        time.sleep(0.002)
 
-        # 3. Fire hardware pulse and sync acquisition
-        if hasattr(self, "trigger") and self.trigger is not None:
-            self.trigger.fire_pulse()
+        # Strobe sequence: Arm Single (0x09) -> Strobe Bit 7 (0x89) -> Restore (0x09)
+        self.trigger.mmio.write(0x00, 0x00000009)
+        self.trigger.mmio.write(0x00, 0x00000089)
+        self.trigger.mmio.write(0x00, 0x00000009)
 
-        # 4. Wait for DMA transfer completion
-        if hasattr(self, "axi_dma_0") and hasattr(self.axi_dma_0, "recvchannel"):
-            t0 = time.time()
-            while not self.axi_dma_0.recvchannel.idle:
-                if time.time() - t0 > timeout:
-                    if hasattr(self, "trigger") and self.trigger is not None:
-                        self.trigger.disarm()
-                    raise TimeoutError(f"Pulsed ToA DMA transfer timed out after {timeout}s.")
-                time.sleep(0.0005)
+        # 5. Wait for DMA transfer completion
+        t0 = time.time()
+        while not self.axi_dma_0.recvchannel.idle:
+            if time.time() - t0 > timeout:
+                self.trigger.disarm()
+                raise TimeoutError(f"Pulsed ToA DMA transfer timed out after {timeout}s.")
+            time.sleep(0.0005)
 
-        t_launch_cycles = self.axi_timer_0.mmio.read(0x08) if hasattr(self, "axi_timer_0") else 0
+        # 6. Unpack raw de-interleaved samples
+        raw = np.array(self._buf_time)
+        v_a0 = (raw[0::2] >> 4) * (3.3 / 4095.0)  # Mic 1 (A0, Vaux1)
+        v_a1 = (raw[1::2] >> 4) * (3.3 / 4095.0)  # Mic 2 (A1, Vaux9)
+        t_ms = (np.arange(len(v_a0)) / fs) * 1000.0
 
-        # 5. Unpack raw time domain samples
-        raw_samples = np.array(self._buf_time) if self._buf_time is not None else np.zeros(4096, dtype=np.uint16)
-        raw_a0 = raw_samples[0::2]
-        raw_a1 = raw_samples[1::2]
-        v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
-        v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
+        # 7. Bandpass filter around carrier (2610 Hz +/- 350 Hz)
+        nyq = fs / 2.0
+        b, a = signal.butter(2, [max(20.0, f0 - 350.0) / nyq, min(nyq - 20.0, f0 + 350.0) / nyq], btype="bandpass")
+        v1_bp = signal.filtfilt(b, a, v_a0 - np.mean(v_a0)) * 1000.0  # in mV
+        v2_bp = signal.filtfilt(b, a, v_a1 - np.mean(v_a1)) * 1000.0  # in mV
 
-        # 6. Instantiate TimeOfArrivalEstimator and solve
-        estimator = TimeOfArrivalEstimator(
-            nominal_f0_hz=f_target if f_target is not None else 2609.73,
-            profile=profile,
-            mic_distance_m=mic_distance_m,
-            temperature_c=temperature_c,
-            calibrated_offset_ms=calibrated_offset_ms,
-            noise_gate_v=noise_gate_v
-        )
+        env1 = np.abs(signal.hilbert(v1_bp))
+        env2 = np.abs(signal.hilbert(v2_bp))
 
-        toa_res = estimator.estimate_distance_and_tdoa(
-            v_a0=v_a0,
-            v_a1=v_a1,
-            fs=self.fs_per_ch,
-            t_emission_sec=0.0
-        )
+        # 8. Detect acoustic wavefronts
+        def find_wavefront(v_bp, env):
+            blank_idx = int((blanking_ms / 1000.0) * fs)
+            peak_val = np.max(env[blank_idx:])
+            thresh = max(min_thresh_mv, 0.20 * peak_val)
+            zc = np.where((v_bp[:-1] <= 0) & (v_bp[1:] > 0))[0]
+            for i in range(len(zc) - 1):
+                z0, z1 = zc[i], zc[i + 1]
+                if z0 < blank_idx:
+                    continue
+                p = z1 - z0
+                amp = np.max(v_bp[z0:z1]) - np.min(v_bp[z0:z1])
+                if (150 <= p <= 230) and (amp >= thresh):
+                    frac = -v_bp[z0] / (v_bp[z0 + 1] - v_bp[z0]) if abs(v_bp[z0 + 1] - v_bp[z0]) > 1e-6 else 0.0
+                    return (float(z0) + frac) / fs * 1000.0  # in ms
+            return np.nan
 
-        toa_res["v_a0"] = v_a0
-        toa_res["v_a1"] = v_a1
-        toa_res["t_launch_cycles"] = t_launch_cycles
+        t1_raw_ms = find_wavefront(v1_bp, env1)
+        t2_raw_ms = find_wavefront(v2_bp, env2)
 
-        return toa_res
+        # 9. Compute Calibrated Distances & TDOA
+        t1_flight_ms = max(0.0, t1_raw_ms - offset_ms) if np.isfinite(t1_raw_ms) else np.nan
+        t2_flight_ms = max(0.0, t2_raw_ms - offset_ms) if np.isfinite(t2_raw_ms) else np.nan
+
+        r1_cm = (c_sound * (t1_flight_ms / 1000.0)) * 100.0 if np.isfinite(t1_flight_ms) else np.nan
+        r2_cm = (c_sound * (t2_flight_ms / 1000.0)) * 100.0 if np.isfinite(t2_flight_ms) else np.nan
+
+        delta_t_ms = (t1_raw_ms - t2_raw_ms) if (np.isfinite(t1_raw_ms) and np.isfinite(t2_raw_ms)) else np.nan
+        delta_r_cm = (c_sound * (delta_t_ms / 1000.0)) * 100.0 if np.isfinite(delta_t_ms) else np.nan
+
+        # Invert TDOA to bearing angle if baseline is satisfied
+        if np.isfinite(delta_t_ms) and mic_distance_m > 0:
+            ratio = (c_sound * (delta_t_ms / 1000.0)) / mic_distance_m
+            clamped = float(np.clip(ratio, -1.0, 1.0))
+            theta_deg = float(np.degrees(np.arcsin(clamped)))
+        else:
+            theta_deg = np.nan
+
+        is_valid = np.isfinite(r1_cm) and np.isfinite(r2_cm)
+
+        return {
+            "r1_cm": r1_cm,
+            "r2_cm": r2_cm,
+            "distance_cm": r1_cm,  # Default reference distance (Mic 1)
+            "distance_m": r1_cm / 100.0 if np.isfinite(r1_cm) else np.nan,
+            "delta_r_cm": delta_r_cm,
+            "delta_t_ms": delta_t_ms,
+            "theta_tdoa_deg": theta_deg,
+            "t1_raw_ms": t1_raw_ms,
+            "t2_raw_ms": t2_raw_ms,
+            "t_flight_sec": t1_flight_ms / 1000.0 if np.isfinite(t1_flight_ms) else np.nan,
+            "amp_a0_v": float(np.max(env1)) / 1000.0,
+            "amp_a1_v": float(np.max(env2)) / 1000.0,
+            "status": "ACTIVE_VALID" if is_valid else "SILENCE",
+            "v_a0": v_a0,
+            "v_a1": v_a1,
+            "v1_bp": v1_bp,
+            "v2_bp": v2_bp,
+            "env1": env1,
+            "env2": env2,
+            "t_ms": t_ms,
+        }
 
     # =========================================================================
     # 3. Continuous Multi-Second Flight Recorder
