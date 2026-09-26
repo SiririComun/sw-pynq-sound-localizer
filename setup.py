@@ -36,8 +36,6 @@ setup(
     entry_points={
         "console_scripts": [
             "pynq-localizer-notebooks=pynq_localizer.notebooks:install_localizer_notebooks",
-            "localizer-get-notebooks=pynq_localizer.notebooks:install_localizer_notebooks",
-            "pynq-localizer-get-notebooks=pynq_localizer.notebooks:install_localizer_notebooks",
         ],
     },
 )
