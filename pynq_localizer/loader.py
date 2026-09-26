@@ -7,6 +7,8 @@ import os
 import json
 import urllib.request
 from pathlib import Path
+from typing import Optional, Dict
+
 try:
     from pynq import Overlay
 except (ImportError, ModuleNotFoundError):
@@ -19,22 +21,40 @@ class HardwareLoader:
     .bit and .hwh release binaries from GitHub Releases API based on hardware.json.
     """
 
+    DEFAULT_OVERLAY_REPO = "SiririComun/hw-xadc-dma-overlays"
+    DEFAULT_OVERLAY_VERSION = "v1.5.2-rc3"
+
     @staticmethod
     def get_project_root() -> Path:
         """Find the root directory of the package where hardware.json lives."""
         return Path(__file__).resolve().parent.parent
 
     @classmethod
-    def get_hardware_config(cls) -> dict:
-        """Load hardware pinning configuration from hardware.json."""
-        config_path = cls.get_project_root() / "hardware.json"
-        if not config_path.exists():
-            return {
-                "repo": "SiririComun/hw-xadc-dma-overlays",
-                "version": "v1.5.2-rc3"
-            }
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+    def get_hardware_config(cls) -> Dict[str, str]:
+        """
+        Load hardware pinning configuration from hardware.json.
+        Searches multiple standard locations across source trees and installed environments.
+        """
+        candidate_paths = [
+            Path(__file__).resolve().parent / "hardware.json",        # Inside installed package
+            cls.get_project_root() / "hardware.json",                  # Repo root
+            Path.cwd() / "hardware.json",                              # Current Jupyter workspace
+            Path.cwd().parent / "hardware.json",                       # Parent directory
+        ]
+
+        for config_path in candidate_paths:
+            if config_path.exists():
+                try:
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except Exception:
+                    pass
+
+        # Robust default fallback matching active validated release
+        return {
+            "repo": cls.DEFAULT_OVERLAY_REPO,
+            "version": cls.DEFAULT_OVERLAY_VERSION,
+        }
 
     @staticmethod
     def get_board_name() -> str:
@@ -63,14 +83,14 @@ class HardwareLoader:
         return "pynq_z2"
 
     @classmethod
-    def get_overlay_path(cls, version: str = None, download_dir: str = None) -> Path:
+    def get_overlay_path(cls, version: Optional[str] = None, download_dir: Optional[str] = None) -> Path:
         """
         Detects host board, downloads matching .bit and .hwh if missing or invalid,
         and returns the local Path to the .bit file.
         """
         config = cls.get_hardware_config()
-        repo = config.get("repo", "SiririComun/hw-xadc-dma-overlays")
-        target_version = version or config.get("version", "v1.5.1")
+        repo = config.get("repo", cls.DEFAULT_OVERLAY_REPO)
+        target_version = version or config.get("version", cls.DEFAULT_OVERLAY_VERSION)
 
         board_name = cls.get_board_name()
         bit_filename = f"{board_name}.bit"
@@ -129,7 +149,7 @@ class HardwareLoader:
         return local_bit
 
     @classmethod
-    def load_overlay(cls, version: str = None, download_dir: str = None) -> Overlay:
+    def load_overlay(cls, version: Optional[str] = None, download_dir: Optional[str] = None) -> Overlay:
         """Helper to load Overlay directly."""
         bit_path = cls.get_overlay_path(version, download_dir)
         print(f"[HardwareLoader] Loading overlay: {bit_path}")

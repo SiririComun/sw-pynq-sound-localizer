@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ c4fbeeb
+• Repository State    : feat/pulse-time-of-arrival @ 4020be1
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc3
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         c4fbeeb [origin/feat/pulse-time-of-arrival] feat(cli): add pynq-localizer-notebooks command and update loader search paths
+* feat/pulse-time-of-arrival                         4020be1 [origin/feat/pulse-time-of-arrival] fix(notebooks): isolate localizer notebooks from other packages and prune foreign files
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          c4fbeeb feat(cli): add pynq-localizer-notebooks command and update loader search paths
+  remotes/origin/feat/pulse-time-of-arrival          4020be1 fix(notebooks): isolate localizer notebooks from other packages and prune foreign files
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* c4fbeeb  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-26 : feat(cli): add pynq-localizer-notebooks command and update loader search paths (SiririComun)
+* 4020be1  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-26 : fix(notebooks): isolate localizer notebooks from other packages and prune foreign files (SiririComun)
+* c4fbeeb  - 2026-09-26 : feat(cli): add pynq-localizer-notebooks command and update loader search paths (SiririComun)
 * e903ba2  - 2026-09-26 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc3 (SiririComun)
 * 0276251  - 2026-09-25 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2 (SiririComun)
 * 8976cf7  - 2026-09-25 : chore(context): update repository summary with PL ToA driver extensions (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * 1a9fcca  - 2026-09-25 : chore(context): update repository context with capture_pulsed_toa_frame (SiririComun)
 * 1301e9e  - 2026-09-25 : feat(array): implement capture_pulsed_toa_frame for active ToA distance sounding (SiririComun)
 * b477312  - 2026-09-25 : chore(context): update repository context with test_toa (SiririComun)
-* 872aca7  - 2026-09-25 : test(toa): add strict unit verification suite for TimeOfArrivalEstimator (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -4559,6 +4559,8 @@ import os
 import json
 import urllib.request
 from pathlib import Path
+from typing import Optional, Dict
+
 try:
     from pynq import Overlay
 except (ImportError, ModuleNotFoundError):
@@ -4570,22 +4572,40 @@ class HardwareLoader:
     .bit and .hwh release binaries from GitHub Releases API based on hardware.json.
     """
 
+    DEFAULT_OVERLAY_REPO = "SiririComun/hw-xadc-dma-overlays"
+    DEFAULT_OVERLAY_VERSION = "v1.5.2-rc3"
+
     @staticmethod
     def get_project_root() -> Path:
         """Find the root directory of the package where hardware.json lives."""
         return Path(__file__).resolve().parent.parent
 
     @classmethod
-    def get_hardware_config(cls) -> dict:
-        """Load hardware pinning configuration from hardware.json."""
-        config_path = cls.get_project_root() / "hardware.json"
-        if not config_path.exists():
-            return {
-                "repo": "SiririComun/hw-xadc-dma-overlays",
-                "version": "v1.5.2-rc3"
-            }
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+    def get_hardware_config(cls) -> Dict[str, str]:
+        """
+        Load hardware pinning configuration from hardware.json.
+        Searches multiple standard locations across source trees and installed environments.
+        """
+        candidate_paths = [
+            Path(__file__).resolve().parent / "hardware.json",        # Inside installed package
+            cls.get_project_root() / "hardware.json",                  # Repo root
+            Path.cwd() / "hardware.json",                              # Current Jupyter workspace
+            Path.cwd().parent / "hardware.json",                       # Parent directory
+        ]
+
+        for config_path in candidate_paths:
+            if config_path.exists():
+                try:
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except Exception:
+                    pass
+
+        # Robust default fallback matching active validated release
+        return {
+            "repo": cls.DEFAULT_OVERLAY_REPO,
+            "version": cls.DEFAULT_OVERLAY_VERSION,
+        }
 
     @staticmethod
     def get_board_name() -> str:
@@ -4614,14 +4634,14 @@ class HardwareLoader:
         return "pynq_z2"
 
     @classmethod
-    def get_overlay_path(cls, version: str = None, download_dir: str = None) -> Path:
+    def get_overlay_path(cls, version: Optional[str] = None, download_dir: Optional[str] = None) -> Path:
         """
         Detects host board, downloads matching .bit and .hwh if missing or invalid,
         and returns the local Path to the .bit file.
         """
         config = cls.get_hardware_config()
-        repo = config.get("repo", "SiririComun/hw-xadc-dma-overlays")
-        target_version = version or config.get("version", "v1.5.1")
+        repo = config.get("repo", cls.DEFAULT_OVERLAY_REPO)
+        target_version = version or config.get("version", cls.DEFAULT_OVERLAY_VERSION)
 
         board_name = cls.get_board_name()
         bit_filename = f"{board_name}.bit"
@@ -4680,7 +4700,7 @@ class HardwareLoader:
         return local_bit
 
     @classmethod
-    def load_overlay(cls, version: str = None, download_dir: str = None) -> Overlay:
+    def load_overlay(cls, version: Optional[str] = None, download_dir: Optional[str] = None) -> Overlay:
         """Helper to load Overlay directly."""
         bit_path = cls.get_overlay_path(version, download_dir)
         print(f"[HardwareLoader] Loading overlay: {bit_path}")
