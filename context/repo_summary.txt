@@ -1,8 +1,8 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 8976cf7
-• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc2
+• Repository State    : feat/pulse-time-of-arrival @ 0276251
+• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc3
 • Package Version     : v1.3.0
 ==============================================================================
 
@@ -16,14 +16,14 @@ feat/differential-air-track-doppler                0caba84 [origin/feat/differen
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         8976cf7 [origin/feat/pulse-time-of-arrival] chore(context): update repository summary with PL ToA driver extensions
+* feat/pulse-time-of-arrival                         0276251 [origin/feat/pulse-time-of-arrival] chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          8976cf7 chore(context): update repository summary with PL ToA driver extensions
+  remotes/origin/feat/pulse-time-of-arrival          0276251 chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 8976cf7  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-25 : chore(context): update repository summary with PL ToA driver extensions (SiririComun)
+* 0276251  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-25 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2 (SiririComun)
+* 8976cf7  - 2026-09-25 : chore(context): update repository summary with PL ToA driver extensions (SiririComun)
 * fcb59e8  - 2026-09-25 : feat(trigger): add hardware ToA/TDOA 100MHz cycle registers and self-clearing pulse strobe (SiririComun)
 * a6314c3  - 2026-09-25 : chore(context): update repository summary after v1.3.0 version bump (SiririComun)
 * 7a880d0  - 2026-09-25 : chore(release): bump package version to v1.3.0 and include profiles in package data (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * 872aca7  - 2026-09-25 : test(toa): add strict unit verification suite for TimeOfArrivalEstimator (SiririComun)
 * ea90d35  - 2026-09-25 : chore(context): update repository summary with ToA/TDOA engine (SiririComun)
 * 0d8b776  - 2026-09-25 : feat(toa): implement TimeOfArrivalEstimator and sub-sample pulse arrival detector (SiririComun)
-* 08b2a60  - 2026-09-25 : chore(context): update repository summary with pulse trigger driver (SiririComun)
 ```
 
 LICENSE: (LICENSE)
