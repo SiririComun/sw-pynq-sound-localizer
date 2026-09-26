@@ -1,9 +1,14 @@
+"""
+pynq_localizer.notebooks: Automated Installer for Interactive Jupyter Lab Notebooks.
+Copies pynq_sound_localizer example notebooks directly into the Jupyter workspace.
+"""
+
 import os
 import shutil
 from pathlib import Path
 
 
-def copy_notebooks(target_dir: str = None):
+def install_localizer_notebooks(target_dir: str = None):
     """
     Copies pynq_sound_localizer example notebooks into the Jupyter root folder
     under a dedicated 'pynq_sound_localizer/' subfolder.
@@ -32,11 +37,14 @@ def copy_notebooks(target_dir: str = None):
             shutil.copy2(item, dest_file)
             copied_files.append(item.name)
 
-    print(f"[NotebookInstaller] Successfully copied {len(copied_files)} notebooks to:")
+    print(f"[NotebookInstaller] Successfully deployed {len(copied_files)} localizer notebooks to:")
     print(f"                   {dest_dir.resolve()}")
     for f in copied_files:
         print(f"  • {f}")
 
 
+# Backward-compatibility alias
+copy_notebooks = install_localizer_notebooks
+
 if __name__ == "__main__":
-    copy_notebooks()
+    install_localizer_notebooks()

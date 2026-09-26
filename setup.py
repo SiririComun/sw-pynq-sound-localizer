@@ -29,13 +29,15 @@ setup(
         "plotly>=5.10.0,<6.0.0",
         "ipywidgets>=8.0.0",
     ],
-    ppackage_data={
+    package_data={
         "pynq_localizer": ["../notebooks/*.ipynb", "../hardware.json", "../profiles/*.json"],
     },
     include_package_data=True,
     entry_points={
         "console_scripts": [
-            "pynq-localizer-get-notebooks=pynq_localizer.notebooks:copy_notebooks",
+            "pynq-localizer-notebooks=pynq_localizer.notebooks:install_localizer_notebooks",
+            "localizer-get-notebooks=pynq_localizer.notebooks:install_localizer_notebooks",
+            "pynq-localizer-get-notebooks=pynq_localizer.notebooks:install_localizer_notebooks",
         ],
     },
 )

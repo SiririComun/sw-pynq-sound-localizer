@@ -9,12 +9,11 @@ from pynq_localizer.kinematics import (
     DistanceEstimator,
     AcousticCalibrationProtocol,
     MultipathCalibrationProtocol,
-    AngleOfArrivalEstimator, 
+    AngleOfArrivalEstimator,
     DifferentialDopplerTracker,
     TimeOfArrivalEstimator,
-     
 )
-from pynq_localizer.notebooks import copy_notebooks
+from pynq_localizer.notebooks import install_localizer_notebooks, copy_notebooks
 
 try:
     from pynq_localizer.loader import HardwareLoader
@@ -44,5 +43,6 @@ __all__ = [
     "DifferentialDopplerTracker",
     "TimeOfArrivalEstimator",
     "KinematicsDashboard",
+    "install_localizer_notebooks",
     "copy_notebooks",
 ]

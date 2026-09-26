@@ -31,7 +31,7 @@ class HardwareLoader:
         if not config_path.exists():
             return {
                 "repo": "SiririComun/hw-xadc-dma-overlays",
-                "version": "v1.5.0"
+                "version": "v1.5.2-rc3"
             }
         with open(config_path, "r", encoding="utf-8") as f:
             return json.load(f)

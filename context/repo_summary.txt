@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 0276251
+• Repository State    : feat/pulse-time-of-arrival @ e903ba2
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc3
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (4 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         0276251 [origin/feat/pulse-time-of-arrival] chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2
+* feat/pulse-time-of-arrival                         e903ba2 [origin/feat/pulse-time-of-arrival] chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc3
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          0276251 chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2
+  remotes/origin/feat/pulse-time-of-arrival          e903ba2 chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc3
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 0276251  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-25 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2 (SiririComun)
+* e903ba2  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-26 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc3 (SiririComun)
+* 0276251  - 2026-09-25 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2 (SiririComun)
 * 8976cf7  - 2026-09-25 : chore(context): update repository summary with PL ToA driver extensions (SiririComun)
 * fcb59e8  - 2026-09-25 : feat(trigger): add hardware ToA/TDOA 100MHz cycle registers and self-clearing pulse strobe (SiririComun)
 * a6314c3  - 2026-09-25 : chore(context): update repository summary after v1.3.0 version bump (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * b477312  - 2026-09-25 : chore(context): update repository context with test_toa (SiririComun)
 * 872aca7  - 2026-09-25 : test(toa): add strict unit verification suite for TimeOfArrivalEstimator (SiririComun)
 * ea90d35  - 2026-09-25 : chore(context): update repository summary with ToA/TDOA engine (SiririComun)
-* 0d8b776  - 2026-09-25 : feat(toa): implement TimeOfArrivalEstimator and sub-sample pulse arrival detector (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -245,9 +245,8 @@ from pynq_localizer.kinematics import (
     AngleOfArrivalEstimator,
     DifferentialDopplerTracker,
     TimeOfArrivalEstimator,
-
 )
-from pynq_localizer.notebooks import copy_notebooks
+from pynq_localizer.notebooks import install_localizer_notebooks, copy_notebooks
 
 try:
     from pynq_localizer.loader import HardwareLoader
@@ -277,6 +276,7 @@ __all__ = [
     "DifferentialDopplerTracker",
     "TimeOfArrivalEstimator",
     "KinematicsDashboard",
+    "install_localizer_notebooks",
     "copy_notebooks",
 ]
 ```
@@ -4582,7 +4582,7 @@ class HardwareLoader:
         if not config_path.exists():
             return {
                 "repo": "SiririComun/hw-xadc-dma-overlays",
-                "version": "v1.5.0"
+                "version": "v1.5.2-rc3"
             }
         with open(config_path, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -4690,11 +4690,16 @@ class HardwareLoader:
 notebooks.py: (pynq_localizer/notebooks.py)
 
 ```python
+"""
+pynq_localizer.notebooks: Automated Installer for Interactive Jupyter Lab Notebooks.
+Copies pynq_sound_localizer example notebooks directly into the Jupyter workspace.
+"""
+
 import os
 import shutil
 from pathlib import Path
 
-def copy_notebooks(target_dir: str = None):
+def install_localizer_notebooks(target_dir: str = None):
     """
     Copies pynq_sound_localizer example notebooks into the Jupyter root folder
     under a dedicated 'pynq_sound_localizer/' subfolder.
@@ -4723,13 +4728,16 @@ def copy_notebooks(target_dir: str = None):
             shutil.copy2(item, dest_file)
             copied_files.append(item.name)
 
-    print(f"[NotebookInstaller] Successfully copied {len(copied_files)} notebooks to:")
+    print(f"[NotebookInstaller] Successfully deployed {len(copied_files)} localizer notebooks to:")
     print(f"                   {dest_dir.resolve()}")
     for f in copied_files:
         print(f"  • {f}")
 
+# Backward-compatibility alias
+copy_notebooks = install_localizer_notebooks
+
 if __name__ == "__main__":
-    copy_notebooks()
+    install_localizer_notebooks()
 ```
 
 requirements.txt: (requirements.txt)
@@ -4775,13 +4783,15 @@ setup(
         "plotly>=5.10.0,<6.0.0",
         "ipywidgets>=8.0.0",
     ],
-    ppackage_data={
+    package_data={
         "pynq_localizer": ["../notebooks/*.ipynb", "../hardware.json", "../profiles/*.json"],
     },
     include_package_data=True,
     entry_points={
         "console_scripts": [
-            "pynq-localizer-get-notebooks=pynq_localizer.notebooks:copy_notebooks",
+            "pynq-localizer-notebooks=pynq_localizer.notebooks:install_localizer_notebooks",
+            "localizer-get-notebooks=pynq_localizer.notebooks:install_localizer_notebooks",
+            "pynq-localizer-get-notebooks=pynq_localizer.notebooks:install_localizer_notebooks",
         ],
     },
 )
