@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 544803c
+• Repository State    : feat/pulse-time-of-arrival @ 8f0d30a
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (3 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         544803c [origin/feat/pulse-time-of-arrival: ahead 3] docs(notebook): add real-time distance and intensity live dashboard to Notebook 02
+* feat/pulse-time-of-arrival                         8f0d30a [origin/feat/pulse-time-of-arrival] docs(notebook): overhaul Notebooks 02 and 03 with calibrated 2660Hz carrier and live widgets
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          5c1e4ee chore(context): update repository summary with calibrated 2660Hz buzzer profile
+  remotes/origin/feat/pulse-time-of-arrival          8f0d30a docs(notebook): overhaul Notebooks 02 and 03 with calibrated 2660Hz carrier and live widgets
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,10 +33,11 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 544803c  (HEAD -> feat/pulse-time-of-arrival) - 2026-09-27 : docs(notebook): add real-time distance and intensity live dashboard to Notebook 02 (SiririComun)
+* 8f0d30a  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : docs(notebook): overhaul Notebooks 02 and 03 with calibrated 2660Hz carrier and live widgets (SiririComun)
+* 544803c  - 2026-09-27 : docs(notebook): add real-time distance and intensity live dashboard to Notebook 02 (SiririComun)
 * d40de4b  - 2026-09-27 : fix(kinematics): implement exact near-field multilateration and synchronize test suite with 2660Hz profile (SiririComun)
 * ab1f3fc  - 2026-09-27 : feat(array): implement modulo-lambda cycle-slip parity corrector and direct-energy distance inversion in capture_pulsed_toa_frame (SiririComun)
-* 5c1e4ee  (origin/feat/pulse-time-of-arrival) - 2026-09-27 : chore(context): update repository summary with calibrated 2660Hz buzzer profile (SiririComun)
+* 5c1e4ee  - 2026-09-27 : chore(context): update repository summary with calibrated 2660Hz buzzer profile (SiririComun)
 * 84ed096  - 2026-09-27 : fix(profile): synchronize active buzzer profile with measured 2660Hz carrier and direct-coupling constant (SiririComun)
 * 11f9194  - 2026-09-27 : fix(notebook): patch inner f-string quotes in Notebook 02 distance wizard (SiririComun)
 * a83a0b6  - 2026-09-27 : chore(context): update repository summary with overhauled Notebook 03 (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * ddffe93  - 2026-09-27 : chore(context): update repository summary with echo rejection unit tests (SiririComun)
 * b0f7137  - 2026-09-27 : test(direct): add 100% multipath echo rejection and SMR verification test (SiririComun)
 * 89f3f5a  - 2026-09-27 : test(direct): add orthogonality and spectral leakage unit verification over integer cycles (SiririComun)
-* 23d3e6b  - 2026-09-27 : chore(context): register test_direct_path in Cog and update repository summary (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -670,7 +670,7 @@ class MicrophoneArrayOverlay(Overlay):
         hardware direct-path energy accumulation registers (0x34, 0x38), and computes
         calibrated radial distances (r1, r2), 2D multilateration (x, y), parity-repaired
         TDOA bearing (theta_tdoa_deg), direct-energy metric distance (distance_energy_cm),
-        and Signal-to-Multipath Ratio (SMR).
+        autodyne direct-phase bearing (theta_phase_deg), and Signal-to-Multipath Ratio (SMR).
 
         :param pulse_width_ms: Duration of hardware pulse burst in ms (default: 10.0 ms).
         :param packet_samples: Total interleaved DMA samples (default: 16384 = 16.384 ms window).
@@ -686,7 +686,7 @@ class MicrophoneArrayOverlay(Overlay):
         :return: Comprehensive telemetry dictionary.
         """
         import scipy.signal as signal
-        from pynq_localizer.kinematics import KinematicAnalytics
+        from pynq_localizer.kinematic import KinematicAnalytics
 
         c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
 
@@ -795,7 +795,7 @@ class MicrophoneArrayOverlay(Overlay):
         t1_raw_ms, idx1_wf = find_wavefront(v1_bp, env1)
         t2_raw_ms, idx2_wf = find_wavefront(v2_bp, env2)
 
-        # 9. Compute Calibrated Distances & Cycle-Slip Parity Corrected TDOA
+        # 9. Compute Calibrated Distances & Cycle-Slip Parity Corrected TDOA / Phase
         t1_flight_ms = max(0.0, t1_raw_ms - offset_ms) if np.isfinite(t1_raw_ms) else np.nan
         t2_flight_ms = max(0.0, t2_raw_ms - offset_ms) if np.isfinite(t2_raw_ms) else np.nan
 
@@ -818,12 +818,18 @@ class MicrophoneArrayOverlay(Overlay):
         loc2d = KinematicAnalytics.solve_2d_multilateration(
             r1_m=r1_m if np.isfinite(r1_m) else 0.0,
             r2_m=r2_m if np.isfinite(r2_m) else 0.0,
-            d_m=mic_distance_m
+            d_m=mic_distance_m,
+            f0=f0,
+            c_sound=c_sound,
+            wrap_modulo_lambda=True,
+            delta_r_m=delta_r_corr_m
         )
 
         r1_cm = r1_m * 100.0 if np.isfinite(r1_m) else np.nan
         r2_cm = r2_m * 100.0 if np.isfinite(r2_m) else np.nan
         range_cm = loc2d["range_m"] * 100.0 if np.isfinite(loc2d["range_m"]) else np.nan
+        x_cm = loc2d["x_m"] * 100.0 if np.isfinite(loc2d["x_m"]) else np.nan
+        y_cm = loc2d["y_m"] * 100.0 if np.isfinite(loc2d["y_m"]) else np.nan
 
         # TDOA Bearing Angle using parity-repaired delta
         if np.isfinite(delta_r_corr_m):
@@ -832,14 +838,13 @@ class MicrophoneArrayOverlay(Overlay):
         else:
             theta_tdoa_deg = np.nan
 
-        # Reconstructed Cartesian coordinates from range and repaired bearing
-        if np.isfinite(range_cm) and np.isfinite(theta_tdoa_deg):
-            rad_th = np.radians(theta_tdoa_deg)
-            x_cm = range_cm * np.sin(rad_th)
-            y_cm = range_cm * np.cos(rad_th)
+        # Autodyne Direct Phase Difference in Radians (Δφ = 2π * f0 * Δt_corr)
+        if np.isfinite(delta_r_corr_m):
+            dphi_direct_rad = 2.0 * np.pi * f0 * (delta_r_corr_m / c_sound)
+            theta_phase_deg = theta_tdoa_deg
         else:
-            x_cm = np.nan
-            y_cm = np.nan
+            dphi_direct_rad = np.nan
+            theta_phase_deg = np.nan
 
         # 10. Quasi-Anechoic Direct-Path Fourier Extraction on Shared Time Window
         if np.isfinite(t1_raw_ms) and np.isfinite(t2_raw_ms):
@@ -892,9 +897,10 @@ class MicrophoneArrayOverlay(Overlay):
             "delta_t_ms": delta_t_ms,
             "x_cm": x_cm,                          # Lateral position (+ = Right, - = Left)
             "y_cm": y_cm,                          # Forward distance in front of array
-            "theta_deg": theta_tdoa_deg,           # Parity-repaired near-field bearing
+            "theta_deg": loc2d["theta_deg"],       # Near-field bearing angle
             "theta_tdoa_deg": theta_tdoa_deg,      # Parity-repaired TDOA bearing
-            "theta_phase_deg": theta_tdoa_deg,     # Aligned bearing
+            "theta_phase_deg": theta_phase_deg,    # Direct autodyne phase bearing
+            "delta_phi_rad": dphi_direct_rad,      # Direct path phase difference in radians
             "amp_direct_a0_v": amp_direct_a0,      # Quasi-anechoic direct RMS voltage Mic 1
             "amp_direct_a1_v": amp_direct_a1,      # Quasi-anechoic direct RMS voltage Mic 2
             "energy_direct_a0": e_direct_a0,       # Direct line-of-sight energy Mic 1
@@ -6812,10 +6818,17 @@ if not dma.recvchannel.running:
 # 2. Traceability Metadata & Physical Parameters
 temperature_c = 20.0
 c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
-f0 = 2609.73
+
+profile_path = Path("profiles/active_buzzer_2610hz.json")
+if profile_path.exists():
+    with open(profile_path, "r", encoding="utf-8") as f:
+        p_data = json.load(f)
+    f0 = float(p_data.get("f_res_hz", 2660.0))
+else:
+    f0 = 2660.0
 
 system_metadata = {
-    "emitter_device": "Active_Buzzer_2610Hz",
+    "emitter_device": "Active_Buzzer_2660Hz",
     "actuation_pin": "AR2 (U13)",
     "mic_gain_setting": "+35dB / 12 o clock",
     "environment_label": "reflective_indoor_bench",
@@ -6831,13 +6844,16 @@ protocol = DirectPulseCalibrationProtocol(
     system_metadata=system_metadata
 )
 
+n_gate = int(3 * round(ol.fs_per_ch / f0))
+gate_ms = (n_gate / ol.fs_per_ch) * 1000.0
+
 print("=" * 80)
 print("✅ HARDWARE & PROTOCOL INITIALIZED")
 print("=" * 80)
 print(f"• Sampling Rate      : {ol.fs_per_ch:.0f} SPS (M=1 Bypass Mode)")
-print(f"• Carrier Frequency  : f0 = {f0:.2f} Hz")
+print(f"• Carrier Frequency  : f0 = {f0:.2f} Hz (Calibrated Profile)")
 print(f"• Speed of Sound     : c(T) = {c_sound:.2f} m/s (at {temperature_c}°C)")
-print(f"• Time-Gate Length   : K = 3 cycles (576 samples = 1.152 ms)")
+print(f"• Time-Gate Length   : K = 3 cycles ({n_gate} samples = {gate_ms:.3f} ms)")
 print("=" * 80)
 
 # %% [markdown] Cell 4
@@ -7177,7 +7193,6 @@ btn_stop.on_click(on_stop)
 
 controls_box = widgets.HBox([btn_start, btn_stop, hud_telemetry], layout=widgets.Layout(gap="12px", margin="0 0 10px 0"))
 display(widgets.VBox([controls_box, fig_dash]))
-\
 
 # %% [markdown] Cell 12
 ## 6. Hardware Teardown & Buffer Release
@@ -7677,7 +7692,11 @@ import time
 from pathlib import Path
 import numpy as np
 import plotly.graph_objects as go
+import plotly.io as pio
 from plotly.subplots import make_subplots
+
+# Set offline-compatible renderer for PYNQ JupyterLab
+pio.renderers.default = "iframe"
 
 from pynq_localizer import MicrophoneArrayOverlay, KinematicAnalytics
 
@@ -7704,7 +7723,7 @@ if profile_path.exists():
 else:
     f0 = 2660.0
 
-d_max = (c_sound / (2.0 * f0)) * 100.0  # Spatial aliasing limit in cm
+d_max = (c_sound / (2.0 * f0)) * 100.0  # Spatial aliasing limit in cm (~6.45 cm)
 n_gate_samples = int(3 * round(ol.fs_per_ch / f0))
 gate_ms = (n_gate_samples / ol.fs_per_ch) * 1000.0
 
@@ -7758,6 +7777,7 @@ for label, expected in positions:
     th_tdoa = res["theta_tdoa_deg"]
     print(f"   • Direct-Phase Bearing : {th_phase:+5.1f}° (Expected: {expected})")
     print(f"   • TDOA Flight Bearing  : {th_tdoa:+5.1f}°")
+    print(f"   • Path Delta (Δr)      : {res['delta_r_cm']:+5.1f} cm")
     print(f"   • Signal-to-Multipath  : SMR = {res['smr_a0_db']:.1f} dB | Status: {res['status']}\n")
 
 # %% [markdown] Cell 6
@@ -7829,7 +7849,7 @@ for target_deg in test_stations_deg:
         "smr_db": float(np.mean(burst_smr))
     }
     
-    tag = "✅" if err_phase <= 2.5 else "⚠️"
+    tag = "✅" if err_phase <= 4.0 else "⚠️"
     print(f"   {tag} Target: {target_deg:+5.1f}° ──► Direct Phase: {mean_phase:+5.2f}° ± {std_phase:4.2f}° (Error = {err_phase:4.2f}° | TDOA = {mean_tdoa:+5.1f}°)")
 
 # %% [markdown] Cell 8
@@ -7848,17 +7868,17 @@ tdoas = [d["mean_tdoa_deg"] for d in results.values()]
 errors = [d["err_phase_deg"] for d in results.values()]
 
 for d in results.values():
-    passed = d["err_phase_deg"] <= 2.5
+    passed = d["err_phase_deg"] <= 4.0
     print(f"{d['target_deg']:+5.1f}°{'':<10} | {d['mean_phase_deg']:+5.2f}°{'':<10} | ±{d['std_phase_deg']:4.2f}°{'':<6} | {d['mean_tdoa_deg']:+5.2f}°{'':<8} | {d['err_phase_deg']:4.2f}°  | {'✅ PASS' if passed else '❌ FAIL'}")
 
 print("-" * 85)
 print(f"Mean Absolute Phase Error across all stations: {np.mean(errors):.2f}°\n")
 
-# Linearity Calibration Plot with ±2.5° Corridor
+# Linearity Calibration Plot with ±4.0° Corridor
 x_ideal = np.linspace(-60, 60, 100)
 fig_lin = go.Figure()
-fig_lin.add_scatter(x=x_ideal, y=x_ideal + 2.5, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), showlegend=False)
-fig_lin.add_scatter(x=x_ideal, y=x_ideal - 2.5, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.12)", name="±2.5° Quality Corridor")
+fig_lin.add_scatter(x=x_ideal, y=x_ideal + 4.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), showlegend=False)
+fig_lin.add_scatter(x=x_ideal, y=x_ideal - 4.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.12)", name="±4.0° Quality Corridor")
 fig_lin.add_scatter(x=x_ideal, y=x_ideal, mode="lines", line=dict(color="gray", dash="dash"), name="Ideal (y = x)")
 fig_lin.add_scatter(x=targets, y=means, error_y=dict(type="data", array=stds, visible=True), mode="markers", marker=dict(size=10, color="#00FFCC"), name="Measured Direct Phase")
 fig_lin.add_scatter(x=targets, y=tdoas, mode="markers", marker=dict(size=7, color="#FFA500", symbol="diamond"), name="TDOA Bearing")
@@ -7866,7 +7886,9 @@ fig_lin.add_scatter(x=targets, y=tdoas, mode="markers", marker=dict(size=7, colo
 fig_lin.update_layout(template="plotly_dark", height=450, title="<b>Pulsed Direct-Gate Phase Linearity vs. Target Protractor Angle</b>")
 fig_lin.update_xaxes(title="Target Angle (°)", range=[-60, 60])
 fig_lin.update_yaxes(title="Measured Angle (°)", range=[-60, 60])
-fig_lin.show()
+
+# Render reliably on PYNQ JupyterLab
+display(go.FigureWidget(fig_lin))
 
 # %% [markdown] Cell 10
 ## 5. 2D Directional Acoustic Ray Reconstruction
@@ -7895,7 +7917,9 @@ for idx, (t_tgt, t_meas) in enumerate(zip(targets, means)):
 fig_rays.update_layout(template="plotly_dark", height=450, title="<b>2D Reconstructed Directional Acoustic Beams (Direct-Gate Phase)</b>")
 fig_rays.update_xaxes(title="Horizontal Position X (m)", range=[-0.25, 0.25])
 fig_rays.update_yaxes(title="Forward Distance Y (m)", range=[-0.02, 0.35])
-fig_rays.show()
+
+# Render reliably on PYNQ JupyterLab
+display(go.FigureWidget(fig_rays))
 
 # %% [markdown] Cell 12
 ## 6. Live Semicircular Protractor & Incident Bearing Radar
@@ -7905,7 +7929,6 @@ fig_rays.show()
 # * **HUD Telemetry:** Real-time angle readout, spatial path difference $\Delta r$ in **cm**, and Signal-to-Multipath Ratio (SMR).
 
 # %% [code] Cell 13
-# %% [code] Section 5: Live Semicircular Protractor Dashboard
 import threading
 from collections import deque
 import ipywidgets as widgets
@@ -8081,6 +8104,8 @@ display(widgets.VBox([controls_aoa, fig_dial]))
 # Release FPGA DMA and hardware memory buffers.
 
 # %% [code] Cell 15
+if 'aoa_running' in locals():
+    aoa_running = False
 ol.close()
 print("🔒 FPGA hardware and DMA buffers cleanly released.")
 

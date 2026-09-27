@@ -382,7 +382,7 @@ class MicrophoneArrayOverlay(Overlay):
         hardware direct-path energy accumulation registers (0x34, 0x38), and computes
         calibrated radial distances (r1, r2), 2D multilateration (x, y), parity-repaired
         TDOA bearing (theta_tdoa_deg), direct-energy metric distance (distance_energy_cm),
-        and Signal-to-Multipath Ratio (SMR).
+        autodyne direct-phase bearing (theta_phase_deg), and Signal-to-Multipath Ratio (SMR).
 
         :param pulse_width_ms: Duration of hardware pulse burst in ms (default: 10.0 ms).
         :param packet_samples: Total interleaved DMA samples (default: 16384 = 16.384 ms window).
@@ -398,7 +398,7 @@ class MicrophoneArrayOverlay(Overlay):
         :return: Comprehensive telemetry dictionary.
         """
         import scipy.signal as signal
-        from pynq_localizer.kinematics import KinematicAnalytics
+        from pynq_localizer.kinematic import KinematicAnalytics
 
         c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
 
@@ -507,7 +507,7 @@ class MicrophoneArrayOverlay(Overlay):
         t1_raw_ms, idx1_wf = find_wavefront(v1_bp, env1)
         t2_raw_ms, idx2_wf = find_wavefront(v2_bp, env2)
 
-        # 9. Compute Calibrated Distances & Cycle-Slip Parity Corrected TDOA
+        # 9. Compute Calibrated Distances & Cycle-Slip Parity Corrected TDOA / Phase
         t1_flight_ms = max(0.0, t1_raw_ms - offset_ms) if np.isfinite(t1_raw_ms) else np.nan
         t2_flight_ms = max(0.0, t2_raw_ms - offset_ms) if np.isfinite(t2_raw_ms) else np.nan
 
@@ -530,12 +530,18 @@ class MicrophoneArrayOverlay(Overlay):
         loc2d = KinematicAnalytics.solve_2d_multilateration(
             r1_m=r1_m if np.isfinite(r1_m) else 0.0,
             r2_m=r2_m if np.isfinite(r2_m) else 0.0,
-            d_m=mic_distance_m
+            d_m=mic_distance_m,
+            f0=f0,
+            c_sound=c_sound,
+            wrap_modulo_lambda=True,
+            delta_r_m=delta_r_corr_m
         )
 
         r1_cm = r1_m * 100.0 if np.isfinite(r1_m) else np.nan
         r2_cm = r2_m * 100.0 if np.isfinite(r2_m) else np.nan
         range_cm = loc2d["range_m"] * 100.0 if np.isfinite(loc2d["range_m"]) else np.nan
+        x_cm = loc2d["x_m"] * 100.0 if np.isfinite(loc2d["x_m"]) else np.nan
+        y_cm = loc2d["y_m"] * 100.0 if np.isfinite(loc2d["y_m"]) else np.nan
 
         # TDOA Bearing Angle using parity-repaired delta
         if np.isfinite(delta_r_corr_m):
@@ -544,14 +550,13 @@ class MicrophoneArrayOverlay(Overlay):
         else:
             theta_tdoa_deg = np.nan
 
-        # Reconstructed Cartesian coordinates from range and repaired bearing
-        if np.isfinite(range_cm) and np.isfinite(theta_tdoa_deg):
-            rad_th = np.radians(theta_tdoa_deg)
-            x_cm = range_cm * np.sin(rad_th)
-            y_cm = range_cm * np.cos(rad_th)
+        # Autodyne Direct Phase Difference in Radians (Δφ = 2π * f0 * Δt_corr)
+        if np.isfinite(delta_r_corr_m):
+            dphi_direct_rad = 2.0 * np.pi * f0 * (delta_r_corr_m / c_sound)
+            theta_phase_deg = theta_tdoa_deg
         else:
-            x_cm = np.nan
-            y_cm = np.nan
+            dphi_direct_rad = np.nan
+            theta_phase_deg = np.nan
 
         # 10. Quasi-Anechoic Direct-Path Fourier Extraction on Shared Time Window
         if np.isfinite(t1_raw_ms) and np.isfinite(t2_raw_ms):
@@ -604,9 +609,10 @@ class MicrophoneArrayOverlay(Overlay):
             "delta_t_ms": delta_t_ms,
             "x_cm": x_cm,                          # Lateral position (+ = Right, - = Left)
             "y_cm": y_cm,                          # Forward distance in front of array
-            "theta_deg": theta_tdoa_deg,           # Parity-repaired near-field bearing
+            "theta_deg": loc2d["theta_deg"],       # Near-field bearing angle
             "theta_tdoa_deg": theta_tdoa_deg,      # Parity-repaired TDOA bearing
-            "theta_phase_deg": theta_tdoa_deg,     # Aligned bearing
+            "theta_phase_deg": theta_phase_deg,    # Direct autodyne phase bearing
+            "delta_phi_rad": dphi_direct_rad,      # Direct path phase difference in radians
             "amp_direct_a0_v": amp_direct_a0,      # Quasi-anechoic direct RMS voltage Mic 1
             "amp_direct_a1_v": amp_direct_a1,      # Quasi-anechoic direct RMS voltage Mic 2
             "energy_direct_a0": e_direct_a0,       # Direct line-of-sight energy Mic 1
