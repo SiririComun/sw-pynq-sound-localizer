@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ d40de4b
+• Repository State    : feat/pulse-time-of-arrival @ 544803c
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -16,7 +16,7 @@ feat/differential-air-track-doppler                0caba84 [origin/feat/differen
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         d40de4b [origin/feat/pulse-time-of-arrival: ahead 2] fix(kinematics): implement exact near-field multilateration and synchronize test suite with 2660Hz profile
+* feat/pulse-time-of-arrival                         544803c [origin/feat/pulse-time-of-arrival: ahead 3] docs(notebook): add real-time distance and intensity live dashboard to Notebook 02
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
@@ -33,7 +33,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* d40de4b  (HEAD -> feat/pulse-time-of-arrival) - 2026-09-27 : fix(kinematics): implement exact near-field multilateration and synchronize test suite with 2660Hz profile (SiririComun)
+* 544803c  (HEAD -> feat/pulse-time-of-arrival) - 2026-09-27 : docs(notebook): add real-time distance and intensity live dashboard to Notebook 02 (SiririComun)
+* d40de4b  - 2026-09-27 : fix(kinematics): implement exact near-field multilateration and synchronize test suite with 2660Hz profile (SiririComun)
 * ab1f3fc  - 2026-09-27 : feat(array): implement modulo-lambda cycle-slip parity corrector and direct-energy distance inversion in capture_pulsed_toa_frame (SiririComun)
 * 5c1e4ee  (origin/feat/pulse-time-of-arrival) - 2026-09-27 : chore(context): update repository summary with calibrated 2660Hz buzzer profile (SiririComun)
 * 84ed096  - 2026-09-27 : fix(profile): synchronize active buzzer profile with measured 2660Hz carrier and direct-coupling constant (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * b0f7137  - 2026-09-27 : test(direct): add 100% multipath echo rejection and SMR verification test (SiririComun)
 * 89f3f5a  - 2026-09-27 : test(direct): add orthogonality and spectral leakage unit verification over integer cycles (SiririComun)
 * 23d3e6b  - 2026-09-27 : chore(context): register test_direct_path in Cog and update repository summary (SiririComun)
-* 5ed727c  - 2026-09-27 : test(direct): add unit verification for 32-bit hardware energy count to physical voltage conversion (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -7694,17 +7694,28 @@ if not dma.recvchannel.running:
 mic_distance_m = 0.05  # 5.0 cm baseline
 temperature_c = 20.0
 c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
-f0 = 2609.73
-d_max = (c_sound / (2.0 * f0)) * 100.0  # ~6.58 cm aliasing limit
+
+# Dynamically resolve calibrated buzzer carrier
+profile_path = Path("profiles/active_buzzer_2610hz.json")
+if profile_path.exists():
+    with open(profile_path, "r", encoding="utf-8") as f:
+        p_data = json.load(f)
+    f0 = float(p_data.get("f_res_hz", 2660.0))
+else:
+    f0 = 2660.0
+
+d_max = (c_sound / (2.0 * f0)) * 100.0  # Spatial aliasing limit in cm
+n_gate_samples = int(3 * round(ol.fs_per_ch / f0))
+gate_ms = (n_gate_samples / ol.fs_per_ch) * 1000.0
 
 print("=" * 80)
 print("✅ HARDWARE & DIRECT-PHASE ENGINE INITIALIZED")
 print("=" * 80)
 print(f"• Sampling Rate      : {ol.fs_per_ch:.0f} SPS (0.00 µs inter-channel skew)")
-print(f"• Carrier Frequency  : f0 = {f0:.2f} Hz")
+print(f"• Carrier Frequency  : f0 = {f0:.2f} Hz (Calibrated Profile)")
 print(f"• Speed of Sound     : c(T) = {c_sound:.2f} m/s (at {temperature_c}°C)")
 print(f"• Baseline Spacing   : d = {mic_distance_m*100:.1f} cm (Aliasing limit: {d_max:.2f} cm)")
-print(f"• Direct Phase Gate  : K = 3 cycles (576 samples = 1.152 ms)")
+print(f"• Direct Phase Gate  : K = 3 cycles ({n_gate_samples} samples = {gate_ms:.3f} ms)")
 print("=" * 80)
 
 # %% [markdown] Cell 4
@@ -7887,10 +7898,189 @@ fig_rays.update_yaxes(title="Forward Distance Y (m)", range=[-0.02, 0.35])
 fig_rays.show()
 
 # %% [markdown] Cell 12
-## 6. Clean Hardware Teardown
-# Release FPGA DMA and hardware memory buffers.
+## 6. Live Semicircular Protractor & Incident Bearing Radar
+# Click **`Start Protractor`** and move the buzzer freely across the acoustic field in front of the microphone pair (from $-60^\circ$ on the left to $+60^\circ$ on the right).
+# * **Live Needle (Cyan):** Indicates the instantaneous incident acoustic bearing $\theta_{\text{phase}}$ in real time.
+# * **Corridor Arc (Orange):** Shows the analytical uncertainty wedge ($\pm \delta\theta$).
+# * **HUD Telemetry:** Real-time angle readout, spatial path difference $\Delta r$ in **cm**, and Signal-to-Multipath Ratio (SMR).
 
 # %% [code] Cell 13
+# %% [code] Section 5: Live Semicircular Protractor Dashboard
+import threading
+from collections import deque
+import ipywidgets as widgets
+import plotly.graph_objects as go
+
+# 1. UI Control Buttons & HUD
+btn_start_aoa = widgets.Button(
+    description="Start Protractor", button_style="success", icon="play", layout=widgets.Layout(width="150px")
+)
+btn_stop_aoa = widgets.Button(
+    description="Stop", button_style="danger", icon="stop", layout=widgets.Layout(width="100px")
+)
+hud_aoa = widgets.HTML(
+    "<span style='color:#00FFCC; font-family:monospace; font-size:14px; font-weight:bold;'>"
+    "Bearing θ: ---° | Path Δr: --- cm | SMR: --- dB | Status: IDLE"
+    "</span>"
+)
+
+# 2. Polar Semicircular Gauge Canvas
+fig_dial = go.FigureWidget()
+
+# Semicircular outer boundary arc (R = 1.0)
+arc_th = np.linspace(-np.pi / 2.0, np.pi / 2.0, 100)
+fig_dial.add_scatter(
+    x=np.sin(arc_th), y=np.cos(arc_th), mode="lines",
+    line=dict(color="rgba(255, 255, 255, 0.4)", width=2),
+    showlegend=False, hoverinfo="skip"
+)
+
+# Radial Grid Guidelines (-60, -45, -30, -15, 0, +15, +30, +45, +60)
+for deg in [-60, -45, -30, -15, 0, 15, 30, 45, 60]:
+    rad = np.radians(deg)
+    col = "#00FFCC" if deg == 0 else "rgba(255, 255, 255, 0.25)"
+    w = 2.0 if deg == 0 else 1.0
+    fig_dial.add_scatter(
+        x=[0.0, 1.02 * np.sin(rad)], y=[0.0, 1.02 * np.cos(rad)],
+        mode="lines+text",
+        line=dict(color=col, width=w, dash="dot" if deg != 0 else "solid"),
+        text=["", f"{deg:+d}°" if deg != 0 else "0°"],
+        textposition="top center",
+        textfont=dict(size=11, color="#888888"),
+        showlegend=False, hoverinfo="skip"
+    )
+
+# Uncertainty Wedge / Fan (Traces for ±δθ)
+fig_dial.add_scatter(
+    x=[0.0, 0.0], y=[0.0, 0.95], mode="lines",
+    line=dict(color="rgba(255, 165, 0, 0.35)", width=1.5, dash="dot"),
+    showlegend=False, hoverinfo="skip"
+)
+fig_dial.add_scatter(
+    x=[0.0, 0.0], y=[0.0, 0.95], mode="lines",
+    line=dict(color="rgba(255, 165, 0, 0.35)", width=1.5, dash="dot"),
+    showlegend=False, hoverinfo="skip"
+)
+
+# Live Needle Vector (Trace: index = len(traces) - 2)
+fig_dial.add_scatter(
+    x=[0.0, 0.0], y=[0.0, 0.95], mode="lines+markers",
+    line=dict(color="#00E5FF", width=3.5),
+    marker=dict(size=[0, 10], color="#00E5FF", symbol="circle"),
+    name="Bearing Needle"
+)
+
+# Center Baseline Hub
+fig_dial.add_scatter(
+    x=[0.0], y=[0.0], mode="markers",
+    marker=dict(size=14, color="#FF007F", line=dict(color="white", width=2)),
+    name="Mic Baseline (d=5cm)"
+)
+
+fig_dial.update_layout(
+    template="plotly_dark",
+    height=480, width=700,
+    title="<b>Live Semicircular Protractor Gauge: Direct-Gate Phase Interferometry</b>",
+    xaxis=dict(range=[-1.18, 1.18], zeroline=False, showgrid=False, showticklabels=False),
+    yaxis=dict(range=[-0.08, 1.18], zeroline=False, showgrid=False, showticklabels=False),
+    margin=dict(l=30, r=30, t=50, b=20),
+    uirevision="aoa_polar_dial"
+)
+
+# Identify needle trace index
+needle_idx = len(fig_dial.data) - 2
+wedge_neg_idx = needle_idx - 2
+wedge_pos_idx = needle_idx - 1
+
+# 3. Thread-Safe Live Acquisition Worker
+aoa_running = False
+aoa_thread = None
+hist_theta = deque(maxlen=3)
+
+def aoa_worker():
+    global aoa_running
+    while aoa_running:
+        try:
+            if not ol.axi_dma_0.recvchannel.running or not ol.axi_dma_0.recvchannel.idle:
+                ol.axi_dma_0.mmio.write(0x30, 0x04)
+                time.sleep(0.005)
+                ol.axi_dma_0.recvchannel.start()
+                time.sleep(0.002)
+
+            res = ol.capture_pulsed_toa_frame(
+                pulse_width_ms=10.0,
+                packet_samples=16384,
+                f_target=f0,
+                mic_distance_m=mic_distance_m,
+                calibrated_offset_ms=0.0,
+                temperature_c=temperature_c,
+                blanking_ms=2.0,
+                min_thresh_mv=15.0,
+                gate_cycles=3,
+                timeout=0.8
+            )
+
+            th_deg = res["theta_phase_deg"]
+            if np.isfinite(th_deg):
+                hist_theta.append(th_deg)
+                smooth_th = float(np.median(hist_theta))
+                delta_r = res["delta_r_cm"]
+
+                rad = np.radians(smooth_th)
+                rad_pos = np.radians(np.clip(smooth_th + 2.0, -90.0, 90.0))
+                rad_neg = np.radians(np.clip(smooth_th - 2.0, -90.0, 90.0))
+
+                with fig_dial.batch_update():
+                    # Needle
+                    fig_dial.data[needle_idx].x = [0.0, 0.95 * np.sin(rad)]
+                    fig_dial.data[needle_idx].y = [0.0, 0.95 * np.cos(rad)]
+                    # Uncertainty Wedge
+                    fig_dial.data[wedge_pos_idx].x = [0.0, 0.95 * np.sin(rad_pos)]
+                    fig_dial.data[wedge_pos_idx].y = [0.0, 0.95 * np.cos(rad_pos)]
+                    fig_dial.data[wedge_neg_idx].x = [0.0, 0.95 * np.sin(rad_neg)]
+                    fig_dial.data[wedge_neg_idx].y = [0.0, 0.95 * np.cos(rad_neg)]
+
+                direction = "RIGHT ──►" if smooth_th > 2.5 else ("◄── LEFT" if smooth_th < -2.5 else "BROADSIDE (0°)")
+                hud_aoa.value = (
+                    f"<span style='color:#00FFCC; font-family:monospace; font-size:14px; font-weight:bold;'>"
+                    f"Bearing θ: <b>{smooth_th:+5.1f}° ({direction})</b> | "
+                    f"Path Δr: <b>{delta_r:+5.1f} cm</b> | SMR: <b>{res['smr_a0_db']:4.1f} dB</b> | Status: ACTIVE"
+                    f"</span>"
+                )
+            else:
+                hud_aoa.value = (
+                    "<span style='color:#FFA500; font-family:monospace; font-size:14px; font-weight:bold;'>"
+                    "Bearing θ: ---° | Path Δr: --- cm | Status: WAITING FOR PULSE"
+                    "</span>"
+                )
+        except Exception:
+            pass
+        time.sleep(0.12)
+
+def on_start_aoa(_):
+    global aoa_running, aoa_thread
+    if not aoa_running:
+        aoa_running = True
+        aoa_thread = threading.Thread(target=aoa_worker, daemon=True)
+        aoa_thread.start()
+        hud_aoa.value = "<span style='color:#00FFCC; font-family:monospace; font-size:14px;'>Protractor Active... Tracking!</span>"
+
+def on_stop_aoa(_):
+    global aoa_running
+    aoa_running = False
+    hud_aoa.value = "<span style='color:#FFA500; font-family:monospace; font-size:14px;'>Protractor Stopped.</span>"
+
+btn_start_aoa.on_click(on_start_aoa)
+btn_stop_aoa.on_click(on_stop_aoa)
+
+controls_aoa = widgets.HBox([btn_start_aoa, btn_stop_aoa, hud_aoa], layout=widgets.Layout(gap="15px", margin="0 0 10px 0"))
+display(widgets.VBox([controls_aoa, fig_dial]))
+
+# %% [markdown] Cell 14
+## 7. Clean Hardware Teardown
+# Release FPGA DMA and hardware memory buffers.
+
+# %% [code] Cell 15
 ol.close()
 print("🔒 FPGA hardware and DMA buffers cleanly released.")
 
