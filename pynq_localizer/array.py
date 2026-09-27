@@ -398,7 +398,7 @@ class MicrophoneArrayOverlay(Overlay):
         :return: Comprehensive telemetry dictionary.
         """
         import scipy.signal as signal
-        from pynq_localizer.kinematic import KinematicAnalytics
+        from pynq_localizer.kinematics import KinematicAnalytics
 
         c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
 

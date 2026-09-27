@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 8f0d30a
+• Repository State    : feat/pulse-time-of-arrival @ 04cbd9a
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (3 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         8f0d30a [origin/feat/pulse-time-of-arrival] docs(notebook): overhaul Notebooks 02 and 03 with calibrated 2660Hz carrier and live widgets
+* feat/pulse-time-of-arrival                         04cbd9a [origin/feat/pulse-time-of-arrival] fix(array): align pulsed toa bearing with parity-repaired autodyne phase and enable offline plotly widgets in Notebook 03
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          8f0d30a docs(notebook): overhaul Notebooks 02 and 03 with calibrated 2660Hz carrier and live widgets
+  remotes/origin/feat/pulse-time-of-arrival          04cbd9a fix(array): align pulsed toa bearing with parity-repaired autodyne phase and enable offline plotly widgets in Notebook 03
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 8f0d30a  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : docs(notebook): overhaul Notebooks 02 and 03 with calibrated 2660Hz carrier and live widgets (SiririComun)
+* 04cbd9a  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : fix(array): align pulsed toa bearing with parity-repaired autodyne phase and enable offline plotly widgets in Notebook 03 (SiririComun)
+* 8f0d30a  - 2026-09-27 : docs(notebook): overhaul Notebooks 02 and 03 with calibrated 2660Hz carrier and live widgets (SiririComun)
 * 544803c  - 2026-09-27 : docs(notebook): add real-time distance and intensity live dashboard to Notebook 02 (SiririComun)
 * d40de4b  - 2026-09-27 : fix(kinematics): implement exact near-field multilateration and synchronize test suite with 2660Hz profile (SiririComun)
 * ab1f3fc  - 2026-09-27 : feat(array): implement modulo-lambda cycle-slip parity corrector and direct-energy distance inversion in capture_pulsed_toa_frame (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * 6ef9c15  - 2026-09-27 : test(direct): add zero-intercept spherical decay regression and profile inversion unit verification (SiririComun)
 * ddffe93  - 2026-09-27 : chore(context): update repository summary with echo rejection unit tests (SiririComun)
 * b0f7137  - 2026-09-27 : test(direct): add 100% multipath echo rejection and SMR verification test (SiririComun)
-* 89f3f5a  - 2026-09-27 : test(direct): add orthogonality and spectral leakage unit verification over integer cycles (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -686,7 +686,7 @@ class MicrophoneArrayOverlay(Overlay):
         :return: Comprehensive telemetry dictionary.
         """
         import scipy.signal as signal
-        from pynq_localizer.kinematic import KinematicAnalytics
+        from pynq_localizer.kinematics import KinematicAnalytics
 
         c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
 
