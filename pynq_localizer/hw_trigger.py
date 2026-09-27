@@ -1,11 +1,12 @@
 """
 pynq_localizer.hw_trigger: High-Level Driver for FPGA 'axis_trigger_unit' IP.
 Acts as the central Timing & Configuration Controller for Triggering, Decimation,
-FFT configuration, Hardware Active Buzzer Pulse Generation, and Hardware-Accelerated
-100 MHz ToA / TDOA Cycle-Accurate Counters.
+FFT configuration, Hardware Active Buzzer Pulse Generation, Hardware-Accelerated
+100 MHz ToA / TDOA Cycle-Accurate Counters, and Quasi-Anechoic Direct-Path Energy Gating.
 """
 
 import time
+import math
 from typing import Union, Optional, Tuple
 try:
     from pynq import MMIO
@@ -105,6 +106,8 @@ class HardwareTrigger:
             # Default ToA: 50 mV threshold above DC, 0.30 ms blanking (30,000 cycles)
             self.set_toa_config(threshold_mv=50.0, blanking_ms=0.30)
             self.set_mic_dc_references(dc_mic1_v=1.65, dc_mic2_v=1.65)
+            # Default direct-path gate: 576 samples (3 acoustic cycles @ 2610 Hz, 500 kSPS)
+            self.set_direct_gate_samples(576)
 
     def configure(
         self,
@@ -295,7 +298,7 @@ class HardwareTrigger:
     def fire_pulse(self):
         """
         Strobes the hardware active buzzer pulse on Arduino pin AR2 (Pin U13)
-        and synchronously triggers the ToA engine on cycle 0.
+        and synchronously triggers the ToA/Energy engine on cycle 0.
         Self-clears Bit 7 immediately to guarantee no sticky re-triggering.
         """
         ctrl = self._read_control_sanitized()
@@ -401,6 +404,72 @@ class HardwareTrigger:
 
         return self.get_toa_cycles()
 
+    # =========================================================================
+    # Quasi-Anechoic Direct-Path Energy Methods (0x34, 0x38, 0x3C & Bits 7, 8)
+    # =========================================================================
+
+    def set_direct_gate_samples(self, n_samples: int = 576):
+        """
+        Configures the direct-path integration sample count N_gate in REG_GATE_CONFIG (0x3C).
+        Default is 576 samples (3 acoustic cycles of 2610 Hz at 500 kSPS).
+        :param n_samples: Number of ADC samples to integrate (16 to 65535).
+        """
+        clamped = max(16, min(65535, int(n_samples)))
+        raw = self.mmio.read(self.REG_GATE_CONFIG)
+        # Preserve upper 16 bits if used for blanking, update lower 16 bits
+        word_val = (raw & 0xFFFF0000) | (clamped & 0xFFFF)
+        self.mmio.write(self.REG_GATE_CONFIG, word_val)
+
+    def get_direct_gate_samples(self) -> int:
+        """Reads configured direct-path integration sample count N_gate from REG_GATE_CONFIG (0x3C)."""
+        raw = self.mmio.read(self.REG_GATE_CONFIG)
+        n_samples = raw & 0xFFFF
+        return 576 if n_samples == 0 else n_samples
+
+    def get_mic1_direct_energy(self) -> int:
+        """Reads 32-bit line-of-sight squared sample sum for Mic 1 from REG_MIC1_DIRECT_ENERGY (0x34)."""
+        return self.mmio.read(self.REG_MIC1_DIRECT_ENERGY)
+
+    def get_mic2_direct_energy(self) -> int:
+        """Reads 32-bit line-of-sight squared sample sum for Mic 2 from REG_MIC2_DIRECT_ENERGY (0x38)."""
+        return self.mmio.read(self.REG_MIC2_DIRECT_ENERGY)
+
+    def get_direct_energy_counts(self) -> Tuple[int, int]:
+        """Returns raw (energy_mic1, energy_mic2) 32-bit counts from hardware registers."""
+        return self.get_mic1_direct_energy(), self.get_mic2_direct_energy()
+
+    @property
+    def is_mic1_gate_done(self) -> bool:
+        """True when Mic 1 direct-path time gate has accumulated N_gate samples."""
+        return bool(self.mmio.read(self.REG_STATUS) & self.STATUS_MIC1_GATE_DONE)
+
+    @property
+    def is_mic2_gate_done(self) -> bool:
+        """True when Mic 2 direct-path time gate has accumulated N_gate samples."""
+        return bool(self.mmio.read(self.REG_STATUS) & self.STATUS_MIC2_GATE_DONE)
+
+    @property
+    def is_direct_gate_done(self) -> bool:
+        """True when both microphones have completed direct-path energy accumulation."""
+        status = self.mmio.read(self.REG_STATUS)
+        return bool((status & self.STATUS_MIC1_GATE_DONE) and (status & self.STATUS_MIC2_GATE_DONE))
+
+    def get_direct_rms_voltage(self, n_samples: Optional[int] = None) -> Tuple[float, float]:
+        """
+        Converts 32-bit hardware energy counts to calibrated physical RMS Volts:
+        V_RMS = sqrt(E_counts / N_gate) * (3.3V / 4095.0)
+
+        :param n_samples: Optional override for integration length (defaults to active hardware setting).
+        :return: (v_rms_mic1, v_rms_mic2) in physical Volts.
+        """
+        n_gate = n_samples if n_samples is not None else self.get_direct_gate_samples()
+        e1, e2 = self.get_direct_energy_counts()
+        scale = self.max_voltage / 4095.0
+
+        v1 = math.sqrt(max(0, e1) / float(n_gate)) * scale if n_gate > 0 else 0.0
+        v2 = math.sqrt(max(0, e2) / float(n_gate)) * scale if n_gate > 0 else 0.0
+        return float(v1), float(v2)
+
     @property
     def is_pulse_active(self) -> bool:
         """True while the hardware pulse output pin is actively firing HIGH."""
@@ -422,5 +491,7 @@ class HardwareTrigger:
         m = self.get_decimation() if self.mmio else 10
         pulse_ms = self.get_pulse_width_ms() if self.mmio else 5.0
         c1, c2 = self.get_toa_cycles() if self.mmio else (0, 0)
+        e1, e2 = self.get_direct_energy_counts() if self.mmio else (0, 0)
+        n_gate = self.get_direct_gate_samples() if self.mmio else 576
         return (f"<HardwareTrigger: {armed}, Mode={mode}, TrigSrc={src}, M={m}x, Pulse={pulse_ms:.1f}ms, "
-                f"PL_ToA_Cycles=(M1:{c1}, M2:{c2})>")
+                f"PL_ToA=(M1:{c1}, M2:{c2}), Direct_E_N{n_gate}=(M1:{e1}, M2:{e2})>")

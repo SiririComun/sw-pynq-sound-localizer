@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 8fa1088
+• Repository State    : feat/pulse-time-of-arrival @ 1a52815
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (3 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         8fa1088 [origin/feat/pulse-time-of-arrival] chore(context): sync Cog configuration and update repository summary with Notebook 06
+* feat/pulse-time-of-arrival                         1a52815 [origin/feat/pulse-time-of-arrival] chore(context): update repository context with direct-energy register map
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          8fa1088 chore(context): sync Cog configuration and update repository summary with Notebook 06
+  remotes/origin/feat/pulse-time-of-arrival          1a52815 chore(context): update repository context with direct-energy register map
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,10 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 8fa1088  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-26 : chore(context): sync Cog configuration and update repository summary with Notebook 06 (SiririComun)
+* 1a52815  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : chore(context): update repository context with direct-energy register map (SiririComun)
+* 9480691  - 2026-09-27 : feat(trigger): add direct-path energy registers and gate status bitmasks (SiririComun)
+* 1c01e0f  - 2026-09-27 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc4 (SiririComun)
+* 8fa1088  - 2026-09-26 : chore(context): sync Cog configuration and update repository summary with Notebook 06 (SiririComun)
 * 8ca6f5f  - 2026-09-26 : feat(notebooks): add Notebook 06 for 2D planar acoustic localization and live radar tracking (SiririComun)
 * 20a0ec2  - 2026-09-26 : chore(context): update repository summary with passing 2D multilateration tests (SiririComun)
 * 885362a  - 2026-09-26 : test(toa): add synthetic 2D multilateration test suite and prioritize geometric anomaly gate (SiririComun)
@@ -45,9 +48,6 @@ Multi-Branch Git Commit Graph:
 * 5c789ea  - 2026-09-26 : fix(profile): update active buzzer turn-on delay to 1.808ms based on acoustic measurements (SiririComun)
 * cd56c8a  - 2026-09-26 : fix(loader): robust multi-path hardware.json resolution and v1.5.2-rc3 fallback (SiririComun)
 * 4020be1  - 2026-09-26 : fix(notebooks): isolate localizer notebooks from other packages and prune foreign files (SiririComun)
-* c4fbeeb  - 2026-09-26 : feat(cli): add pynq-localizer-notebooks command and update loader search paths (SiririComun)
-* e903ba2  - 2026-09-26 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc3 (SiririComun)
-* 0276251  - 2026-09-25 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2 (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -1080,11 +1080,12 @@ hw_trigger.py: (pynq_localizer/hw_trigger.py)
 """
 pynq_localizer.hw_trigger: High-Level Driver for FPGA 'axis_trigger_unit' IP.
 Acts as the central Timing & Configuration Controller for Triggering, Decimation,
-FFT configuration, Hardware Active Buzzer Pulse Generation, and Hardware-Accelerated
-100 MHz ToA / TDOA Cycle-Accurate Counters.
+FFT configuration, Hardware Active Buzzer Pulse Generation, Hardware-Accelerated
+100 MHz ToA / TDOA Cycle-Accurate Counters, and Quasi-Anechoic Direct-Path Energy Gating.
 """
 
 import time
+import math
 from typing import Union, Optional, Tuple
 try:
     from pynq import MMIO
@@ -1184,6 +1185,8 @@ class HardwareTrigger:
             # Default ToA: 50 mV threshold above DC, 0.30 ms blanking (30,000 cycles)
             self.set_toa_config(threshold_mv=50.0, blanking_ms=0.30)
             self.set_mic_dc_references(dc_mic1_v=1.65, dc_mic2_v=1.65)
+            # Default direct-path gate: 576 samples (3 acoustic cycles @ 2610 Hz, 500 kSPS)
+            self.set_direct_gate_samples(576)
 
     def configure(
         self,
@@ -1374,7 +1377,7 @@ class HardwareTrigger:
     def fire_pulse(self):
         """
         Strobes the hardware active buzzer pulse on Arduino pin AR2 (Pin U13)
-        and synchronously triggers the ToA engine on cycle 0.
+        and synchronously triggers the ToA/Energy engine on cycle 0.
         Self-clears Bit 7 immediately to guarantee no sticky re-triggering.
         """
         ctrl = self._read_control_sanitized()
@@ -1480,6 +1483,72 @@ class HardwareTrigger:
 
         return self.get_toa_cycles()
 
+    # =========================================================================
+    # Quasi-Anechoic Direct-Path Energy Methods (0x34, 0x38, 0x3C & Bits 7, 8)
+    # =========================================================================
+
+    def set_direct_gate_samples(self, n_samples: int = 576):
+        """
+        Configures the direct-path integration sample count N_gate in REG_GATE_CONFIG (0x3C).
+        Default is 576 samples (3 acoustic cycles of 2610 Hz at 500 kSPS).
+        :param n_samples: Number of ADC samples to integrate (16 to 65535).
+        """
+        clamped = max(16, min(65535, int(n_samples)))
+        raw = self.mmio.read(self.REG_GATE_CONFIG)
+        # Preserve upper 16 bits if used for blanking, update lower 16 bits
+        word_val = (raw & 0xFFFF0000) | (clamped & 0xFFFF)
+        self.mmio.write(self.REG_GATE_CONFIG, word_val)
+
+    def get_direct_gate_samples(self) -> int:
+        """Reads configured direct-path integration sample count N_gate from REG_GATE_CONFIG (0x3C)."""
+        raw = self.mmio.read(self.REG_GATE_CONFIG)
+        n_samples = raw & 0xFFFF
+        return 576 if n_samples == 0 else n_samples
+
+    def get_mic1_direct_energy(self) -> int:
+        """Reads 32-bit line-of-sight squared sample sum for Mic 1 from REG_MIC1_DIRECT_ENERGY (0x34)."""
+        return self.mmio.read(self.REG_MIC1_DIRECT_ENERGY)
+
+    def get_mic2_direct_energy(self) -> int:
+        """Reads 32-bit line-of-sight squared sample sum for Mic 2 from REG_MIC2_DIRECT_ENERGY (0x38)."""
+        return self.mmio.read(self.REG_MIC2_DIRECT_ENERGY)
+
+    def get_direct_energy_counts(self) -> Tuple[int, int]:
+        """Returns raw (energy_mic1, energy_mic2) 32-bit counts from hardware registers."""
+        return self.get_mic1_direct_energy(), self.get_mic2_direct_energy()
+
+    @property
+    def is_mic1_gate_done(self) -> bool:
+        """True when Mic 1 direct-path time gate has accumulated N_gate samples."""
+        return bool(self.mmio.read(self.REG_STATUS) & self.STATUS_MIC1_GATE_DONE)
+
+    @property
+    def is_mic2_gate_done(self) -> bool:
+        """True when Mic 2 direct-path time gate has accumulated N_gate samples."""
+        return bool(self.mmio.read(self.REG_STATUS) & self.STATUS_MIC2_GATE_DONE)
+
+    @property
+    def is_direct_gate_done(self) -> bool:
+        """True when both microphones have completed direct-path energy accumulation."""
+        status = self.mmio.read(self.REG_STATUS)
+        return bool((status & self.STATUS_MIC1_GATE_DONE) and (status & self.STATUS_MIC2_GATE_DONE))
+
+    def get_direct_rms_voltage(self, n_samples: Optional[int] = None) -> Tuple[float, float]:
+        """
+        Converts 32-bit hardware energy counts to calibrated physical RMS Volts:
+        V_RMS = sqrt(E_counts / N_gate) * (3.3V / 4095.0)
+
+        :param n_samples: Optional override for integration length (defaults to active hardware setting).
+        :return: (v_rms_mic1, v_rms_mic2) in physical Volts.
+        """
+        n_gate = n_samples if n_samples is not None else self.get_direct_gate_samples()
+        e1, e2 = self.get_direct_energy_counts()
+        scale = self.max_voltage / 4095.0
+
+        v1 = math.sqrt(max(0, e1) / float(n_gate)) * scale if n_gate > 0 else 0.0
+        v2 = math.sqrt(max(0, e2) / float(n_gate)) * scale if n_gate > 0 else 0.0
+        return float(v1), float(v2)
+
     @property
     def is_pulse_active(self) -> bool:
         """True while the hardware pulse output pin is actively firing HIGH."""
@@ -1501,8 +1570,10 @@ class HardwareTrigger:
         m = self.get_decimation() if self.mmio else 10
         pulse_ms = self.get_pulse_width_ms() if self.mmio else 5.0
         c1, c2 = self.get_toa_cycles() if self.mmio else (0, 0)
+        e1, e2 = self.get_direct_energy_counts() if self.mmio else (0, 0)
+        n_gate = self.get_direct_gate_samples() if self.mmio else 576
         return (f"<HardwareTrigger: {armed}, Mode={mode}, TrigSrc={src}, M={m}x, Pulse={pulse_ms:.1f}ms, "
-                f"PL_ToA_Cycles=(M1:{c1}, M2:{c2})>")
+                f"PL_ToA=(M1:{c1}, M2:{c2}), Direct_E_N{n_gate}=(M1:{e1}, M2:{e2})>")
 ```
 
 kinematics.py: (pynq_localizer/kinematics.py)
