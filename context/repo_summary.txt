@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 2750362
+• Repository State    : feat/pulse-time-of-arrival @ a83a0b6
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -16,14 +16,14 @@ feat/differential-air-track-doppler                0caba84 [origin/feat/differen
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         2750362 [origin/feat/pulse-time-of-arrival] chore(context): update repository summary with overhauled Notebook 02
+* feat/pulse-time-of-arrival                         a83a0b6 [origin/feat/pulse-time-of-arrival] chore(context): update repository summary with overhauled Notebook 03
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          2750362 chore(context): update repository summary with overhauled Notebook 02
+  remotes/origin/feat/pulse-time-of-arrival          a83a0b6 chore(context): update repository summary with overhauled Notebook 03
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 2750362  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : chore(context): update repository summary with overhauled Notebook 02 (SiririComun)
+* a83a0b6  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : chore(context): update repository summary with overhauled Notebook 03 (SiririComun)
+* 44056f4  - 2026-09-27 : docs(notebook): overhaul Notebook 03 with pulsed direct-gate phase interferometry (SiririComun)
+* 2750362  - 2026-09-27 : chore(context): update repository summary with overhauled Notebook 02 (SiririComun)
 * 1bb0d0f  - 2026-09-27 : docs(notebook): overhaul Notebook 02 with quasi-anechoic direct-pulse calibration and zero-intercept solver (SiririComun)
 * 6ef9c15  - 2026-09-27 : test(direct): add zero-intercept spherical decay regression and profile inversion unit verification (SiririComun)
 * ddffe93  - 2026-09-27 : chore(context): update repository summary with echo rejection unit tests (SiririComun)
@@ -46,8 +48,6 @@ Multi-Branch Git Commit Graph:
 * 99dfd66  - 2026-09-27 : feat(kinematics): implement DirectPulseCalibrationProtocol for zero-intercept 1/r metrology (SiririComun)
 * 04e8de8  - 2026-09-27 : feat(kinematics): implement integer-cycle coherent direct-path Fourier demodulation (SiririComun)
 * a90bc38  - 2026-09-27 : chore(context): register verify_hw_energy_gate tool in Cog configuration (SiririComun)
-* 607f6d2  - 2026-09-27 : test(trigger): add standalone smoke verification tool for hardware energy gate (SiririComun)
-* 9016a5a  - 2026-09-27 : fix(loader): remove syntax typo in typing import (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -6691,9 +6691,11 @@ calibration_distances_m = [
 n_pulses_per_station = 15
 protocol.clear()
 
+stations_str = [f"{d*100:.0f}cm" for d in calibration_distances_m]
+
 print("=" * 82)
 print("🚀 STARTING GUIDED DIRECT-PULSE CALIBRATION WIZARD")
-print(f"   • Distance Stations ({len(calibration_distances_m)} pts) : {[f"{d*100:.0f}cm" for d in calibration_distances_m]}")
+print(f"   • Distance Stations ({len(calibration_distances_m)} pts) : {stations_str}")
 print(f"   • Pulses Per Station : N = {n_pulses_per_station} pulses")
 print("=" * 82)
 
@@ -6724,7 +6726,7 @@ for idx, dist_m in enumerate(calibration_distances_m):
         amp_direct = res["amp_direct_a0_v"]
         if amp_direct > 0.0005:
             burst_samples.append(amp_direct)
-        time.sleep(0.12)
+        time.sleep(0.12)  # Acoustic decay rest
         
     if len(burst_samples) < 5:
         print(f"    ⚠️ Weak acoustic signal at {dist_cm:.1f} cm! Check buzzer alignment.")
@@ -6752,6 +6754,7 @@ print(f"   • Goodness-of-Fit R²         : {res['r_squared']:.4f} (Quality Gat
 print(f"   • Passed Quality Gate        : {'✅ YES' if res['passed_gate'] else '❌ NO'}")
 print(f"   • Distance Bounds            : [{res['r_valid_min_m']*100:.0f} cm -> {res['r_valid_max_m']*100:.0f} cm]")
 
+# Diagnostic Plotting
 stations = res["raw_stations"]
 r_m = np.array([st["r_m"] for st in stations])
 v_mv = np.array([st["mean_v"] for st in stations]) * 1000.0
@@ -6803,7 +6806,10 @@ print(f"   • R² Score  : {res['r_squared']:.4f}")
 print(f"   • c_room    : 0.0 mV (Vanished via hardware time-gating)")
 
 # %% [markdown] Cell 8
-## 4. Live Metric Distance Inversion Test ($r = k_{\text{direct}} / A_{\text{direct}}$)\nNow we test whether distance inversion makes physical sense:\n1. Move your buzzer to an arbitrary ruler mark (e.g. $\approx 45\,\text{cm}$).\n2. The cell fires a pulse, extracts {\text{direct}}$, and inverts the distance directly using the zero-intercept profile.
+## 4. Live Metric Distance Inversion Test ($r = k_{\text{direct}} / A_{\text{direct}}$)\n
+# Now we test whether distance inversion makes physical sense:\n
+# 1. Move your buzzer to an arbitrary ruler mark (e.g. $\approx 45\,\text{cm}$).\n
+# 2. The cell fires a pulse, extracts {\text{direct}}$, and inverts the distance directly using the zero-intercept profile.
 
 # %% [code] Cell 9
 loaded_profile = AcousticProfile.from_json(export_path)
