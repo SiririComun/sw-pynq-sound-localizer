@@ -7,11 +7,7 @@ import os
 import json
 import urllib.request
 from pathlib import Path
-from typing import Optional, Dict{
-  "repo": "SiririComun/hw-xadc-dma-overlays",
-  "version": "v1.5.2-rc3",
-  "overlay_name": "pynq_z2"
-}
+from typing import Optional, Dict
 
 try:
     from pynq import Overlay
