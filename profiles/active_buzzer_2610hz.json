@@ -1,10 +1,10 @@
 {
-  "name": "Active_Buzzer_2610Hz_Certified",
-  "description": "Certified acoustic calibration profile for 2610 Hz active piezo transducer on PYNQ-Z2",
+  "name": "Active_Buzzer_2660Hz",
+  "description": "Synchronous 2660 Hz Active Piezo Buzzer Profile for ToA, Direct-Energy & Phase Metrology",
   "device_model": "Active_Piezo_Buzzer_5V",
-  "f_res_hz": 2609.73,
-  "calibrated_toa_offset_ms": 1.8758,
-  "max_mic_spacing_aoa_cm": 6.58,
+  "f_res_hz": 2660.0,
+  "calibrated_toa_offset_ms": 1.808,
+  "max_mic_spacing_aoa_cm": 6.45,
   "system_metadata": {
     "carrier_frequency_hz": 2609.73,
     "operating_mode": "pulsed_toa_and_continuous_aoa",
@@ -13,24 +13,26 @@
     "driver_switch": "2N2222A_NPN_star_ground"
   },
   "frequencies_hz": [
-    2609.73
+    2660.0
   ],
   "k_values": [
-    0.045
+    0.0196
   ],
   "r_squared": [
-    0.985
+    0.9977
   ],
   "k_uncertainty": [
-    0.0015
+    0.0002
   ],
   "operational_bounds": {
-    "2609.73": {
-      "r_min_m": 0.1,
-      "r_max_m": 2.5,
-      "v_sat_v": 0.45,
-      "v_min_v": 0.008,
-      "c_room_v": 0.002
+    "2660.0": {
+      "r_min_m": 0.15,
+      "r_max_m": 1.0,
+      "v_sat_v": 0.133,
+      "v_min_v": 0.022,
+      "c_room_v": 0.0
     }
-  }
+  },
+  "k_direct": 0.0196,
+  "wavelength_cm": 12.9
 }
