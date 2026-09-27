@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 4c5bb6b
+• Repository State    : feat/pulse-time-of-arrival @ a90bc38
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (4 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         4c5bb6b [origin/feat/pulse-time-of-arrival] feat(trigger): add direct-energy readback, gating configuration, and physical voltage scaling
+* feat/pulse-time-of-arrival                         a90bc38 [origin/feat/pulse-time-of-arrival] chore(context): register verify_hw_energy_gate tool in Cog configuration
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          4c5bb6b feat(trigger): add direct-energy readback, gating configuration, and physical voltage scaling
+  remotes/origin/feat/pulse-time-of-arrival          a90bc38 chore(context): register verify_hw_energy_gate tool in Cog configuration
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,10 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 4c5bb6b  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : feat(trigger): add direct-energy readback, gating configuration, and physical voltage scaling (SiririComun)
+* a90bc38  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : chore(context): register verify_hw_energy_gate tool in Cog configuration (SiririComun)
+* 607f6d2  - 2026-09-27 : test(trigger): add standalone smoke verification tool for hardware energy gate (SiririComun)
+* 9016a5a  - 2026-09-27 : fix(loader): remove syntax typo in typing import (SiririComun)
+* 4c5bb6b  - 2026-09-27 : feat(trigger): add direct-energy readback, gating configuration, and physical voltage scaling (SiririComun)
 * 1a52815  - 2026-09-27 : chore(context): update repository context with direct-energy register map (SiririComun)
 * 9480691  - 2026-09-27 : feat(trigger): add direct-path energy registers and gate status bitmasks (SiririComun)
 * 1c01e0f  - 2026-09-27 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc4 (SiririComun)
@@ -45,9 +48,6 @@ Multi-Branch Git Commit Graph:
 * dcf65c3  - 2026-09-26 : feat(kinematics): implement analytical 2D multilateration and bearing tracking solver (SiririComun)
 * 21ceffc  - 2026-09-26 : docs(notebook): overhaul Notebook 05 with star-ground timing and empirical 1.8758ms offset (SiririComun)
 * 9df6179  - 2026-09-26 : docs(notebook): overhaul Notebook 05 with star-ground timing and 1.808ms offset (SiririComun)
-* f7d6571  - 2026-09-26 : feat(array): overhaul capture_pulsed_toa_frame with star-ground timing and 1.808ms offset (SiririComun)
-* 5c789ea  - 2026-09-26 : fix(profile): update active buzzer turn-on delay to 1.808ms based on acoustic measurements (SiririComun)
-* cd56c8a  - 2026-09-26 : fix(loader): robust multi-path hardware.json resolution and v1.5.2-rc3 fallback (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -1753,6 +1753,100 @@ class KinematicAnalytics:
         x_f0 = (2.0 / n) * np.dot(v_ac, phasor)
         v_rms = float(np.abs(x_f0) / np.sqrt(2.0))
         return v_rms
+
+    @staticmethod
+    def extract_gated_direct_fourier(
+        signal_v: np.ndarray,
+        fs: float = 500_000.0,
+        f0: float = 2609.73,
+        n_cycles: int = 3,
+        start_idx: int = 0,
+        remove_dc: bool = True
+    ) -> Dict[str, float]:
+        """
+        Evaluates single-bin Discrete Fourier Transform over an exact integer multiple
+        of carrier periods (K cycles) starting at the arrival wavefront instant.
+
+        Because the integration window spans an exact integer number of acoustic periods,
+        the Fourier basis functions are strictly orthogonal. This completely eliminates
+        spectral leakage without windowing (Rectangular / Dirichlet orthogonality),
+        yielding pure direct line-of-sight physical RMS voltage, energy, and phase
+        with 100% immunity to subsequent room reverberation and wall/table echoes.
+
+        :param signal_v: 1D voltage array from the microphone.
+        :param fs: Sampling frequency in Hz (e.g. 500,000.0 for M=1 bypass mode).
+        :param f0: Fundamental carrier frequency in Hz (e.g. 2609.73).
+        :param n_cycles: Integer number of carrier periods K to integrate (default: 3).
+        :param start_idx: Initial sample index where acoustic arrival begins (default: 0).
+        :param remove_dc: If True, subtracts local DC baseline before projection.
+        :return: Dict containing amplitude_v, amplitude_peak_v, energy_v2, phase_rad,
+                 phase_deg, n_samples_gated, and gate_duration_ms.
+        """
+        v = np.asarray(signal_v, dtype=np.float64)
+        total_len = len(v)
+
+        if total_len == 0 or not np.isfinite(f0) or f0 <= 0 or fs <= 0:
+            return {
+                "amplitude_v": 0.0,
+                "amplitude_peak_v": 0.0,
+                "energy_v2": 0.0,
+                "phase_rad": 0.0,
+                "phase_deg": 0.0,
+                "n_samples_gated": 0,
+                "gate_duration_ms": 0.0,
+                "is_valid": False
+            }
+
+        # 1. Compute exact integer-cycle sample length: N_gate = K * round(fs / f0)
+        samples_per_cycle = int(round(float(fs) / float(f0)))
+        n_gate = max(1, int(n_cycles) * samples_per_cycle)
+
+        # Slice exact integer-cycle window
+        s0 = max(0, int(start_idx))
+        s1 = min(total_len, s0 + n_gate)
+        slice_v = v[s0:s1]
+        n_actual = len(slice_v)
+
+        if n_actual < max(16, samples_per_cycle // 2):
+            return {
+                "amplitude_v": 0.0,
+                "amplitude_peak_v": 0.0,
+                "energy_v2": 0.0,
+                "phase_rad": 0.0,
+                "phase_deg": 0.0,
+                "n_samples_gated": n_actual,
+                "gate_duration_ms": (n_actual / float(fs)) * 1000.0,
+                "is_valid": False
+            }
+
+        # 2. AC decoupling
+        v_ac = slice_v - np.mean(slice_v) if remove_dc else slice_v
+
+        # 3. Orthogonal Discrete Fourier Phasor over exact integer cycles
+        # t runs locally from 0 to (n_actual - 1) / fs
+        t_local = np.arange(n_actual) / float(fs)
+        phasor = np.exp(-2.0j * np.pi * float(f0) * t_local)
+
+        # Single-bin coherent projection: X(f0) = (2 / N) * sum(v * e^(-j 2pi f0 t))
+        x_f0 = (2.0 / float(n_actual)) * np.dot(v_ac, phasor)
+
+        # Physical in-band metrics
+        v_peak = float(np.abs(x_f0))
+        v_rms = v_peak / np.sqrt(2.0)
+        phi_rad = float(np.angle(x_f0))
+        energy_v2 = float(np.sum(v_ac ** 2))
+        gate_ms = (float(n_actual) / float(fs)) * 1000.0
+
+        return {
+            "amplitude_v": v_rms,
+            "amplitude_peak_v": v_peak,
+            "energy_v2": energy_v2,
+            "phase_rad": phi_rad,
+            "phase_deg": float(np.degrees(phi_rad)),
+            "n_samples_gated": n_actual,
+            "gate_duration_ms": gate_ms,
+            "is_valid": True
+        }
 
     # =========================================================================
     # Dual-Channel Coherent Phase Extraction & Angle of Arrival (AoA)

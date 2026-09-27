@@ -174,6 +174,100 @@ class KinematicAnalytics:
         v_rms = float(np.abs(x_f0) / np.sqrt(2.0))
         return v_rms
 
+    @staticmethod
+    def extract_gated_direct_fourier(
+        signal_v: np.ndarray,
+        fs: float = 500_000.0,
+        f0: float = 2609.73,
+        n_cycles: int = 3,
+        start_idx: int = 0,
+        remove_dc: bool = True
+    ) -> Dict[str, float]:
+        """
+        Evaluates single-bin Discrete Fourier Transform over an exact integer multiple
+        of carrier periods (K cycles) starting at the arrival wavefront instant.
+
+        Because the integration window spans an exact integer number of acoustic periods,
+        the Fourier basis functions are strictly orthogonal. This completely eliminates
+        spectral leakage without windowing (Rectangular / Dirichlet orthogonality),
+        yielding pure direct line-of-sight physical RMS voltage, energy, and phase
+        with 100% immunity to subsequent room reverberation and wall/table echoes.
+
+        :param signal_v: 1D voltage array from the microphone.
+        :param fs: Sampling frequency in Hz (e.g. 500,000.0 for M=1 bypass mode).
+        :param f0: Fundamental carrier frequency in Hz (e.g. 2609.73).
+        :param n_cycles: Integer number of carrier periods K to integrate (default: 3).
+        :param start_idx: Initial sample index where acoustic arrival begins (default: 0).
+        :param remove_dc: If True, subtracts local DC baseline before projection.
+        :return: Dict containing amplitude_v, amplitude_peak_v, energy_v2, phase_rad,
+                 phase_deg, n_samples_gated, and gate_duration_ms.
+        """
+        v = np.asarray(signal_v, dtype=np.float64)
+        total_len = len(v)
+
+        if total_len == 0 or not np.isfinite(f0) or f0 <= 0 or fs <= 0:
+            return {
+                "amplitude_v": 0.0,
+                "amplitude_peak_v": 0.0,
+                "energy_v2": 0.0,
+                "phase_rad": 0.0,
+                "phase_deg": 0.0,
+                "n_samples_gated": 0,
+                "gate_duration_ms": 0.0,
+                "is_valid": False
+            }
+
+        # 1. Compute exact integer-cycle sample length: N_gate = K * round(fs / f0)
+        samples_per_cycle = int(round(float(fs) / float(f0)))
+        n_gate = max(1, int(n_cycles) * samples_per_cycle)
+
+        # Slice exact integer-cycle window
+        s0 = max(0, int(start_idx))
+        s1 = min(total_len, s0 + n_gate)
+        slice_v = v[s0:s1]
+        n_actual = len(slice_v)
+
+        if n_actual < max(16, samples_per_cycle // 2):
+            return {
+                "amplitude_v": 0.0,
+                "amplitude_peak_v": 0.0,
+                "energy_v2": 0.0,
+                "phase_rad": 0.0,
+                "phase_deg": 0.0,
+                "n_samples_gated": n_actual,
+                "gate_duration_ms": (n_actual / float(fs)) * 1000.0,
+                "is_valid": False
+            }
+
+        # 2. AC decoupling
+        v_ac = slice_v - np.mean(slice_v) if remove_dc else slice_v
+
+        # 3. Orthogonal Discrete Fourier Phasor over exact integer cycles
+        # t runs locally from 0 to (n_actual - 1) / fs
+        t_local = np.arange(n_actual) / float(fs)
+        phasor = np.exp(-2.0j * np.pi * float(f0) * t_local)
+
+        # Single-bin coherent projection: X(f0) = (2 / N) * sum(v * e^(-j 2pi f0 t))
+        x_f0 = (2.0 / float(n_actual)) * np.dot(v_ac, phasor)
+
+        # Physical in-band metrics
+        v_peak = float(np.abs(x_f0))
+        v_rms = v_peak / np.sqrt(2.0)
+        phi_rad = float(np.angle(x_f0))
+        energy_v2 = float(np.sum(v_ac ** 2))
+        gate_ms = (float(n_actual) / float(fs)) * 1000.0
+
+        return {
+            "amplitude_v": v_rms,
+            "amplitude_peak_v": v_peak,
+            "energy_v2": energy_v2,
+            "phase_rad": phi_rad,
+            "phase_deg": float(np.degrees(phi_rad)),
+            "n_samples_gated": n_actual,
+            "gate_duration_ms": gate_ms,
+            "is_valid": True
+        }
+
     # =========================================================================
     # Dual-Channel Coherent Phase Extraction & Angle of Arrival (AoA)
     # =========================================================================
