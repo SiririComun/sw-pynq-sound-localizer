@@ -7,7 +7,11 @@ import os
 import json
 import urllib.request
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict{
+  "repo": "SiririComun/hw-xadc-dma-overlays",
+  "version": "v1.5.2-rc3",
+  "overlay_name": "pynq_z2"
+}
 
 try:
     from pynq import Overlay
@@ -22,7 +26,7 @@ class HardwareLoader:
     """
 
     DEFAULT_OVERLAY_REPO = "SiririComun/hw-xadc-dma-overlays"
-    DEFAULT_OVERLAY_VERSION = "v1.5.2-rc3"
+    DEFAULT_OVERLAY_VERSION = "v1.5.2-rc4"
 
     @staticmethod
     def get_project_root() -> Path:
