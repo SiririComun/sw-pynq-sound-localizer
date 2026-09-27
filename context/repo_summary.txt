@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 6ef9c15
+• Repository State    : feat/pulse-time-of-arrival @ 2750362
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         6ef9c15 [origin/feat/pulse-time-of-arrival] test(direct): add zero-intercept spherical decay regression and profile inversion unit verification
+* feat/pulse-time-of-arrival                         2750362 [origin/feat/pulse-time-of-arrival] chore(context): update repository summary with overhauled Notebook 02
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          6ef9c15 test(direct): add zero-intercept spherical decay regression and profile inversion unit verification
+  remotes/origin/feat/pulse-time-of-arrival          2750362 chore(context): update repository summary with overhauled Notebook 02
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 6ef9c15  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : test(direct): add zero-intercept spherical decay regression and profile inversion unit verification (SiririComun)
+* 2750362  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : chore(context): update repository summary with overhauled Notebook 02 (SiririComun)
+* 1bb0d0f  - 2026-09-27 : docs(notebook): overhaul Notebook 02 with quasi-anechoic direct-pulse calibration and zero-intercept solver (SiririComun)
+* 6ef9c15  - 2026-09-27 : test(direct): add zero-intercept spherical decay regression and profile inversion unit verification (SiririComun)
 * ddffe93  - 2026-09-27 : chore(context): update repository summary with echo rejection unit tests (SiririComun)
 * b0f7137  - 2026-09-27 : test(direct): add 100% multipath echo rejection and SMR verification test (SiririComun)
 * 89f3f5a  - 2026-09-27 : test(direct): add orthogonality and spectral leakage unit verification over integer cycles (SiririComun)
@@ -46,8 +48,6 @@ Multi-Branch Git Commit Graph:
 * a90bc38  - 2026-09-27 : chore(context): register verify_hw_energy_gate tool in Cog configuration (SiririComun)
 * 607f6d2  - 2026-09-27 : test(trigger): add standalone smoke verification tool for hardware energy gate (SiririComun)
 * 9016a5a  - 2026-09-27 : fix(loader): remove syntax typo in typing import (SiririComun)
-* 4c5bb6b  - 2026-09-27 : feat(trigger): add direct-energy readback, gating configuration, and physical voltage scaling (SiririComun)
-* 1a52815  - 2026-09-27 : chore(context): update repository context with direct-energy register map (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -7309,59 +7309,70 @@ class TestAngleOfArrivalEngine:
 
 ```python
 # %% [markdown] Cell 1
-# 🧭 Notebook 3: Acoustic Phase Interferometry & Direction of Arrival (AoA)
-# Welcome to the **Acoustic Direction of Arrival (AoA) Laboratory**.
-# This notebook guides you step-by-step through measuring the physical angle of an incident sound wave using a **two-microphone phase interferometer** on the **PYNQ-Z2 board**.
+# 🧭 Notebook 3: Pulsed Direct-Gate Acoustic Phase Interferometry & Angle of Arrival (AoA)
+# Welcome to the **Pulsed Acoustic Direction of Arrival (AoA) Laboratory** (`v1.3.0`).
+# This notebook demonstrates high-precision incident bearing angle determination using **hardware-triggered acoustic pulse time-gating** and two-microphone phase interferometry on the **PYNQ-Z2 board**.
 # ---
-### 🏛️ Physical Operating Principle
-# When a sound wave arrives at an angle $\theta$ relative to array broadside ($0^\circ$):
-# * The path difference between the two microphones separated by distance $d$ is $\Delta r = d \cdot \sin(\theta)$.
-# * This spatial path difference produces an acoustic phase delay $\Delta \phi$:
-# $$\Delta \phi = \frac{2\pi f_0}{c(T)} \cdot d \cdot \sin(\theta)$$
-# * Inverting this equation gives the incident bearing angle $\theta$:
-# $$\theta = \arcsin\left(\frac{c(T) \cdot \Delta \phi}{2\pi f_0 \cdot d}\right)$$
-# > **Spatial Aliasing Constraint:** To prevent phase wrapping ambiguity, the microphone spacing $d$ must satisfy $d \le \frac{\lambda}{2} = \frac{c}{2 f_0}$. For our $2610\,\text{Hz}$ buzzer, $d \le 6.58\,\text{cm}$. We use a baseline of **$d = 5.0\,\text{cm}$**.
+### 🏛️ Operating Principle
+# In classical continuous-wave phase interferometry, room reflections create standing waves that pull and distort the apparent phase delay between microphones.
+# By contrast, this laboratory uses **Quasi-Anechoic Direct-Pulse Phase Interferometry**:
+# 1. **Synchronous Hardware Emission:** The FPGA fires Arduino pin **`AR2` (Pin `U13`)** to actuate the active buzzer on cycle 0.
+# 2. **Direct-Gate Phase Extraction ($K = 3$ Cycles $\approx 1.15\,\text{ms}$):** Extracts individual phases $\phi_1$ and $\phi_2$ strictly over the initial $3$ cycles of the direct wavefront, **locking out table and wall reflections before they can reach the array**.
+# 3. **Reflection-Free Bearing Inversion:**
+# $$\Delta \phi_{\text{direct}} = \phi_2 - \phi_1$$
+# $$\theta_{\text{phase}} = \arcsin\left(\text{clip}\left(\frac{c(T) \cdot \Delta \phi_{\text{direct}}}{2\pi f_0 \cdot d},\, -1.0,\, 1.0\right)\right)$$
+# > **Spatial Aliasing Constraint:** To prevent phase wrapping ambiguity, baseline spacing must satisfy $d \le \frac{\lambda}{2} = \frac{c}{2 f_0} \approx 6.58\,\text{cm}$ at $2610\,\text{Hz}$. We use a baseline of **$d = 5.0\,\text{cm}$**.
 
 # %% [markdown] Cell 2
-## 1. Hardware Initialization & Profile Loading
-# Connect your setup:
-# 1. **Mic 1** $\to$ Arduino **A0** (`Vaux1`).
-# 2. **Mic 2** $\to$ Arduino **A1** (`Vaux9`).
-# 3. Place microphone capsules side-by-side with center-to-center spacing **$d = 5.0\,\text{cm}$**.
-# 4. Power your buzzer circuit ($2\text{N}2222\text{A}$ switch with control wire plugged into $3.3\,\text{V}$ for steady tone).
+## 1. Hardware Initialization & Star-Ground Wiring
+# Ensure your hardware is connected according to the **Star Ground** topology:
+# * **Mic 1 (Left):** PYNQ Arduino Header **A0** (`Vaux1`). Powered from **3.3V / Clean GND**.
+# * **Mic 2 (Right):** PYNQ Arduino Header **A1** (`Vaux9`). Center-to-center baseline **$d = 5.0\,\text{cm}$**.
+# * **Actuator:** PYNQ Arduino Digital **AR2** (Pin `U13`) $\to 1\,\text{k}\Omega$ resistor $\to$ 2N2222A Transistor Base.
+# * **Buzzer Actuator:** Powered from external **5V / Noisy GND**.
 
 # %% [code] Cell 3
 import json
+import time
 from pathlib import Path
 import numpy as np
-from pynq_localizer import MicrophoneArrayOverlay
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-# 1. Initialize Hardware Overlay (50 kSPS dual continuous streaming)
-ol = MicrophoneArrayOverlay()
+from pynq_localizer import MicrophoneArrayOverlay, KinematicAnalytics
 
-# 2. Physical Array Parameters
+# 1. Initialize Hardware Overlay (M=1 bypass, 500 kSPS per channel)
+ol = MicrophoneArrayOverlay(version="v1.5.2-rc4")
+dma = ol.axi_dma_0
+
+if not dma.recvchannel.running:
+    dma.mmio.write(0x30, 0x04)
+    time.sleep(0.005)
+    dma.recvchannel.start()
+
+# 2. Array & Physics Constants
 mic_distance_m = 0.05  # 5.0 cm baseline
-profile_path = Path("profiles/active_buzzer_2610hz.json")
+temperature_c = 20.0
+c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
+f0 = 2609.73
+d_max = (c_sound / (2.0 * f0)) * 100.0  # ~6.58 cm aliasing limit
 
-if profile_path.exists():
-    with open(profile_path, "r", encoding="utf-8") as f:
-        p_data = json.load(f)
-    f0 = p_data.get("f_res_hz", 2609.73)
-    d_max = p_data.get("max_mic_spacing_aoa_cm", 6.58)
-else:
-    f0 = 2609.73
-    d_max = 6.58
-
-print(f"✅ Hardware Overlay Active: {ol.fs_per_ch:.0f} SPS per channel")
-print(f"✅ Target Carrier Frequency : f0 = {f0:.2f} Hz")
-print(f"✅ Microphone Baseline     : d  = {mic_distance_m*100:.1f} cm (Aliasing Limit <= {d_max:.2f} cm)")
+print("=" * 80)
+print("✅ HARDWARE & DIRECT-PHASE ENGINE INITIALIZED")
+print("=" * 80)
+print(f"• Sampling Rate      : {ol.fs_per_ch:.0f} SPS (0.00 µs inter-channel skew)")
+print(f"• Carrier Frequency  : f0 = {f0:.2f} Hz")
+print(f"• Speed of Sound     : c(T) = {c_sound:.2f} m/s (at {temperature_c}°C)")
+print(f"• Baseline Spacing   : d = {mic_distance_m*100:.1f} cm (Aliasing limit: {d_max:.2f} cm)")
+print(f"• Direct Phase Gate  : K = 3 cycles (576 samples = 1.152 ms)")
+print("=" * 80)
 
 # %% [markdown] Cell 4
-## 2. Quick 3-Position Sanity Check
-# Before marking an entire protractor, test the 3 cardinal positions:
-# * **Center ($0^\circ$):** Hold buzzer directly in front $\approx 30\,\text{cm}$ away.
-# * **Right ($+45^\circ$):** Hold buzzer to the right (closer to Mic 2 / A1).
-# * **Left ($-45^\circ$):** Hold buzzer to the left (closer to Mic 1 / A0).
+## 2. Cardinal Positions Sanity Check (Pulsed Ping)
+# Before setting up an entire protractor, test the 3 cardinal positions:
+# * **CENTER ($0^\circ$):** Hold buzzer directly in front $\approx 30\,\text{cm}$ away.
+# * **RIGHT ($+45^\circ$):** Hold buzzer to the right (closer to Mic 2 / A1 $\implies \Delta\phi > 0, \theta > 0$).
+# * **LEFT ($-45^\circ$):** Hold buzzer to the left (closer to Mic 1 / A0 $\implies \Delta\phi < 0, \theta < 0$).
 
 # %% [code] Cell 5
 positions = [
@@ -7373,145 +7384,173 @@ positions = [
 for label, expected in positions:
     input(f"👉 Place buzzer at {label} (~30 cm away) and press [Enter]...")
     
-    res = ol.capture_aoa_frame(
+    if not ol.axi_dma_0.recvchannel.running or not ol.axi_dma_0.recvchannel.idle:
+        ol.axi_dma_0.mmio.write(0x30, 0x04)
+        time.sleep(0.005)
+        ol.axi_dma_0.recvchannel.start()
+        time.sleep(0.002)
+
+    res = ol.capture_pulsed_toa_frame(
+        pulse_width_ms=10.0,
+        packet_samples=16384,
         f_target=f0,
         mic_distance_m=mic_distance_m,
-        noise_gate_v=0.010
+        calibrated_offset_ms=0.0,
+        temperature_c=temperature_c,
+        blanking_ms=2.0,
+        min_thresh_mv=15.0,
+        gate_cycles=3,
+        timeout=1.0
     )
     
-    print(f"   • Measured Angle : {res['theta_deg']:+5.1f}° (Expected: {expected})")
-    print(f"   • Phase Shift Δφ : {res['delta_phi_rad']:+5.3f} rad ({np.degrees(res['delta_phi_rad']):+5.1f}°)")
-    print(f"   • Wave Coherence : {res['coherence']:.3f} | Status: {res['status']}\n")
+    th_phase = res["theta_phase_deg"]
+    th_tdoa = res["theta_tdoa_deg"]
+    print(f"   • Direct-Phase Bearing : {th_phase:+5.1f}° (Expected: {expected})")
+    print(f"   • TDOA Flight Bearing  : {th_tdoa:+5.1f}°")
+    print(f"   • Signal-to-Multipath  : SMR = {res['smr_a0_db']:.1f} dB | Status: {res['status']}\n")
 
 # %% [markdown] Cell 6
-## 3. Multi-Station Protractor Benchmark
+## 3. Multi-Station Protractor Benchmark (Guided Sweep)
 # Place a protractor or mark radial lines at $r \approx 30\,\text{cm}$ on your desk for:
 # $$\theta_{\text{target}} \in \{-45^\circ, -30^\circ, 0^\circ, +30^\circ, +45^\circ\}$$
-# The cell below records **$N=20$ frames per station** to compute mean bearing $\bar{\theta}$ and standard deviation $\sigma_\theta$.
+# For each station:
+# 1. Move the buzzer to the marked angle and press **`[Enter]`**.
+# 2. The system fires $N=10$ pulses, extracting direct-gate phase $\theta_{\text{phase}}$ and TDOA bearing $\theta_{\text{tdoa}}$.
+# 3. It computes the mean angle $\bar{\theta}$, jitter $\sigma_\theta$, and absolute error.
 
 # %% [code] Cell 7
-import time
-
 test_stations_deg = [-45.0, -30.0, 0.0, +30.0, +45.0]
-n_bursts = 20
+n_bursts = 10
 results = {}
 
-print("🚀 Starting Guided Protractor Loop...")
+print("=" * 82)
+print("🚀 STARTING GUIDED PULSED PROTRACTOR BENCHMARK")
+print("=" * 82)
 
 for target_deg in test_stations_deg:
-    input(f"\n👉 Place buzzer at {target_deg:+5.1f}° mark and press [Enter]...")
+    input(f"\n👉 Place buzzer at {target_deg:+5.1f}° mark (~30 cm away) and press [Enter]...")
     
-    measured_angles = []
-    measured_coherences = []
+    burst_phase = []
+    burst_tdoa = []
+    burst_smr = []
     
     for _ in range(n_bursts):
-        frame = ol.capture_aoa_frame(
+        if not ol.axi_dma_0.recvchannel.running or not ol.axi_dma_0.recvchannel.idle:
+            ol.axi_dma_0.mmio.write(0x30, 0x04)
+            time.sleep(0.005)
+            ol.axi_dma_0.recvchannel.start()
+            time.sleep(0.002)
+
+        res = ol.capture_pulsed_toa_frame(
+            pulse_width_ms=10.0,
+            packet_samples=16384,
             f_target=f0,
             mic_distance_m=mic_distance_m,
-            noise_gate_v=0.010,
-            timeout=0.5
+            calibrated_offset_ms=0.0,
+            temperature_c=temperature_c,
+            blanking_ms=2.0,
+            min_thresh_mv=15.0,
+            gate_cycles=3,
+            timeout=1.0
         )
-        if frame["status"] == "ACTIVE_VALID":
-            measured_angles.append(frame["theta_deg"])
-            measured_coherences.append(frame["coherence"])
-        time.sleep(0.01)
         
-    mean_th = float(np.mean(measured_angles))
-    std_th = float(np.std(measured_angles))
-    err = abs(mean_th - target_deg)
+        if np.isfinite(res["theta_phase_deg"]):
+            burst_phase.append(res["theta_phase_deg"])
+            burst_tdoa.append(res["theta_tdoa_deg"])
+            burst_smr.append(res["smr_a0_db"])
+        time.sleep(0.12)
+        
+    if len(burst_phase) < 3:
+        print(f"   ⚠️ Weak acoustic signals at {target_deg:+5.1f}°! Check buzzer alignment.")
+        continue
+        
+    mean_phase = float(np.mean(burst_phase))
+    std_phase = float(np.std(burst_phase))
+    mean_tdoa = float(np.mean(burst_tdoa))
+    err_phase = abs(mean_phase - target_deg)
     
     results[str(target_deg)] = {
         "target_deg": target_deg,
-        "measured_mean_deg": mean_th,
-        "measured_std_deg": std_th,
-        "abs_error_deg": err,
-        "coherence": float(np.mean(measured_coherences))
+        "mean_phase_deg": mean_phase,
+        "std_phase_deg": std_phase,
+        "mean_tdoa_deg": mean_tdoa,
+        "err_phase_deg": err_phase,
+        "smr_db": float(np.mean(burst_smr))
     }
     
-    tag = "✅" if err <= 3.0 else "⚠️"
-    print(f"   {tag} Target: {target_deg:+5.1f}° ──► Measured: {mean_th:+5.2f}° ± {std_th:4.2f}° (Error = {err:4.2f}°)")
+    tag = "✅" if err_phase <= 2.5 else "⚠️"
+    print(f"   {tag} Target: {target_deg:+5.1f}° ──► Direct Phase: {mean_phase:+5.2f}° ± {std_phase:4.2f}° (Error = {err_phase:4.2f}° | TDOA = {mean_tdoa:+5.1f}°)")
 
 # %% [markdown] Cell 8
 ## 4. Angular Linearity & Quality Gate Evaluation
-# Evaluate whether your physical interferometry setup meets the **$\le 3.0^\circ$ accuracy gate** across the central $[-45^\circ, +45^\circ]$ sector.
+# Evaluate whether direct-gate phase interferometry meets the **$\le 2.5^\circ$ accuracy gate** across the central $[-45^\circ, +45^\circ]$ sector.
 
 # %% [code] Cell 9
-import plotly.graph_objects as go
-
-# Summary Table Printout
-print(f"{'Target Station':<16} | {'Measured Mean':<16} | {'Std Dev (σ)':<12} | {'Abs Error':<10} | {'Status'}")
-print("-" * 72)
+print("=" * 85)
+print(f"{'Target Station':<16} | {'Direct Phase':<16} | {'Std Dev (σ)':<12} | {'TDOA Bearing':<14} | {'Error':<8} | {'Status'}")
+print("-" * 85)
 
 targets = [d["target_deg"] for d in results.values()]
-means = [d["measured_mean_deg"] for d in results.values()]
-stds = [d["measured_std_deg"] for d in results.values()]
-errors = [d["abs_error_deg"] for d in results.values()]
+means = [d["mean_phase_deg"] for d in results.values()]
+stds = [d["std_phase_deg"] for d in results.values()]
+tdoas = [d["mean_tdoa_deg"] for d in results.values()]
+errors = [d["err_phase_deg"] for d in results.values()]
 
 for d in results.values():
-    passed = d["abs_error_deg"] <= 3.0
-    print(f"{d['target_deg']:+5.1f}°{'':<10} | {d['measured_mean_deg']:+5.2f}°{'':<10} | ±{d['measured_std_deg']:4.2f}°{'':<6} | {d['abs_error_deg']:4.2f}°{'':<5} | {'✅ PASS' if passed else '❌ FAIL'}")
+    passed = d["err_phase_deg"] <= 2.5
+    print(f"{d['target_deg']:+5.1f}°{'':<10} | {d['mean_phase_deg']:+5.2f}°{'':<10} | ±{d['std_phase_deg']:4.2f}°{'':<6} | {d['mean_tdoa_deg']:+5.2f}°{'':<8} | {d['err_phase_deg']:4.2f}°  | {'✅ PASS' if passed else '❌ FAIL'}")
 
-print("-" * 72)
-print(f"Mean Absolute Error across all stations: {np.mean(errors):.2f}°\n")
+print("-" * 85)
+print(f"Mean Absolute Phase Error across all stations: {np.mean(errors):.2f}°\n")
 
-# Linearity Calibration Plot with ±3.0° Gate Corridor
+# Linearity Calibration Plot with ±2.5° Corridor
 x_ideal = np.linspace(-60, 60, 100)
 fig_lin = go.Figure()
-fig_lin.add_scatter(x=x_ideal, y=x_ideal + 3.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), showlegend=False)
-fig_lin.add_scatter(x=x_ideal, y=x_ideal - 3.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.12)", name="±3.0° Quality Corridor")
+fig_lin.add_scatter(x=x_ideal, y=x_ideal + 2.5, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), showlegend=False)
+fig_lin.add_scatter(x=x_ideal, y=x_ideal - 2.5, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.12)", name="±2.5° Quality Corridor")
 fig_lin.add_scatter(x=x_ideal, y=x_ideal, mode="lines", line=dict(color="gray", dash="dash"), name="Ideal (y = x)")
-fig_lin.add_scatter(x=targets, y=means, error_y=dict(type="data", array=stds, visible=True), mode="markers", marker=dict(size=10, color="#00FFCC"), name="Measured Stations")
+fig_lin.add_scatter(x=targets, y=means, error_y=dict(type="data", array=stds, visible=True), mode="markers", marker=dict(size=10, color="#00FFCC"), name="Measured Direct Phase")
+fig_lin.add_scatter(x=targets, y=tdoas, mode="markers", marker=dict(size=7, color="#FFA500", symbol="diamond"), name="TDOA Bearing")
 
-fig_lin.update_layout(template="plotly_dark", height=450, title="<b>Angular Linearity: Measured vs. Target Protractor Angle</b>")
+fig_lin.update_layout(template="plotly_dark", height=450, title="<b>Pulsed Direct-Gate Phase Linearity vs. Target Protractor Angle</b>")
 fig_lin.update_xaxes(title="Target Angle (°)", range=[-60, 60])
 fig_lin.update_yaxes(title="Measured Angle (°)", range=[-60, 60])
 fig_lin.show()
 
 # %% [markdown] Cell 10
-## 5. 2D Spatial Acoustic Beam Reconstruction
-# Reconstruct the physical acoustic ray vectors in 2D Euclidean space originating from the microphone baseline ($d = 5.0\,\text{cm}$) and pointing toward the measured buzzer locations.
+## 5. 2D Directional Acoustic Ray Reconstruction
+# Reconstruct the physical acoustic ray vectors in 2D Euclidean space originating from the baseline center $(0, 0)$ and pointing toward the measured buzzer locations.
 
 # %% [code] Cell 11
-r_beam = 0.30  # 30 cm distance
+r_beam = 0.30  # 30 cm beam length
 colors = ["#FFA500", "#00E5FF", "#76FF03", "#E040FB", "#FFD600"]
 
 fig_rays = go.Figure()
-# Draw physical microphone baseline
-fig_rays.add_scatter(x=[-0.025, 0.025], y=[0, 0], mode="lines+markers", marker=dict(size=8, color=["#00FFCC", "#FF007F"]), line=dict(color="white", width=3), name="Mic Baseline (d=5cm)")
+# Baseline markers
+fig_rays.add_scatter(
+    x=[-0.025, 0.025], y=[0, 0], mode="lines+markers",
+    marker=dict(size=8, color=["#00FFCC", "#FF007F"]),
+    line=dict(color="white", width=3),
+    name="Mic Baseline (d=5cm)"
+)
 
 for idx, (t_tgt, t_meas) in enumerate(zip(targets, means)):
     c = colors[idx % len(colors)]
-    # Target direction (dashed line)
     rad_t = np.radians(t_tgt)
     fig_rays.add_scatter(x=[0, r_beam * np.sin(rad_t)], y=[0, r_beam * np.cos(rad_t)], mode="lines", line=dict(color=c, dash="dot", width=1.5), showlegend=False)
-    # Measured direction (solid ray)
     rad_m = np.radians(t_meas)
     fig_rays.add_scatter(x=[0, r_beam * np.sin(rad_m)], y=[0, r_beam * np.cos(rad_m)], mode="lines+markers", line=dict(color=c, width=2.5), marker=dict(size=[0, 7]), name=f"Ray {t_tgt:+.0f}°")
 
-fig_rays.update_layout(template="plotly_dark", height=450, title="<b>2D Reconstructed Directional Acoustic Beams</b>")
+fig_rays.update_layout(template="plotly_dark", height=450, title="<b>2D Reconstructed Directional Acoustic Beams (Direct-Gate Phase)</b>")
 fig_rays.update_xaxes(title="Horizontal Position X (m)", range=[-0.25, 0.25])
 fig_rays.update_yaxes(title="Forward Distance Y (m)", range=[-0.02, 0.35])
 fig_rays.show()
 
 # %% [markdown] Cell 12
-## 6. Live 100 Hz Streaming Dashboard
-# Launch the interactive dashboard.
+## 6. Clean Hardware Teardown
+# Release FPGA DMA and hardware memory buffers.
 
 # %% [code] Cell 13
-# Launch the real-time 4-tab dashboard with AoA enabled
-app = ol.kinematics_dashboard(
-    window_duration_sec=10.0,
-    hop_ms=10.0,
-    aoa_mic_distance_m=mic_distance_m
-)
-
-# %% [markdown] Cell 14
-## 7. Clean Hardware Teardown
-# When finished, stop the dashboard threads and release the FPGA DMA memory buffers.
-
-# %% [code] Cell 15
-if 'app' in locals():
-    app.stop()
 ol.close()
 print("🔒 FPGA hardware and DMA buffers cleanly released.")
 
