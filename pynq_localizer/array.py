@@ -380,12 +380,13 @@ class MicrophoneArrayOverlay(Overlay):
         Synchronously fires a hardware acoustic pulse via FPGA Arduino pin AR2 (U13),
         captures the dual-channel response stream via DMA 0 at 500 kSPS (M=1), reads
         hardware direct-path energy accumulation registers (0x34, 0x38), and computes
-        calibrated radial distances (r1, r2), 2D multilateration (x, y), direct-gate phase
-        interferometry (theta_phase), and Signal-to-Multipath Ratio (SMR).
+        calibrated radial distances (r1, r2), 2D multilateration (x, y), parity-repaired
+        TDOA bearing (theta_tdoa_deg), direct-energy metric distance (distance_energy_cm),
+        and Signal-to-Multipath Ratio (SMR).
 
         :param pulse_width_ms: Duration of hardware pulse burst in ms (default: 10.0 ms).
         :param packet_samples: Total interleaved DMA samples (default: 16384 = 16.384 ms window).
-        :param f_target: Nominal pulse carrier frequency (default None -> auto from profile).
+        :param f_target: Nominal pulse carrier frequency (defaults to profile or 2660.0 Hz).
         :param mic_distance_m: Center-to-center microphone baseline in meters.
         :param profile: Optional device profile (e.g. 'profiles/active_buzzer_2610hz.json').
         :param calibrated_offset_ms: Transducer turn-on delay override (defaults to profile / 1.8080 ms).
@@ -394,28 +395,28 @@ class MicrophoneArrayOverlay(Overlay):
         :param min_thresh_mv: Minimum acoustic wave threshold in mV.
         :param gate_cycles: Integer number of carrier cycles for quasi-anechoic time-gate (default: 3).
         :param timeout: Maximum DMA wait time in seconds.
-        :return: Comprehensive telemetry dictionary containing r1_cm, r2_cm, x_cm, y_cm,
-                 theta_deg, theta_tdoa_deg, theta_phase_deg, amp_direct_a0_v, amp_direct_a1_v,
-                 smr_a0_db, smr_a1_db, energy_direct_a0, energy_direct_a1, status, etc.
+        :return: Comprehensive telemetry dictionary.
         """
         import scipy.signal as signal
         from pynq_localizer.kinematics import KinematicAnalytics
 
         c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
 
-        # 1. Resolve carrier frequency and calibrated turn-on delay
+        # 1. Resolve carrier frequency, calibrated offset, and direct coupling constant
+        k_direct = 0.0196  # Default physical constant (V*m)
         if profile is not None:
             if isinstance(profile, (str, Path)):
                 p_path = Path(profile).resolve()
                 with open(p_path, "r", encoding="utf-8") as f:
                     p_data = json.load(f)
-                f0 = float(p_data.get("f_res_hz", 2609.73))
+                f0 = float(p_data.get("f_res_hz", 2660.0))
                 offset_ms = float(p_data.get("calibrated_toa_offset_ms", 1.8080))
+                k_direct = float(p_data.get("k_direct", p_data.get("k_values", [0.0196])[0]))
             else:
-                f0 = 2609.73
+                f0 = 2660.0
                 offset_ms = 1.8080
         else:
-            f0 = float(f_target) if f_target is not None else 2609.73
+            f0 = float(f_target) if f_target is not None else 2660.0
             offset_ms = 1.8080 if calibrated_offset_ms is None else float(calibrated_offset_ms)
 
         if calibrated_offset_ms is not None:
@@ -477,7 +478,7 @@ class MicrophoneArrayOverlay(Overlay):
         v_a1 = (raw[1::2] >> 4) * (3.3 / 4095.0)  # Mic 2 (A1, Vaux9)
         t_ms = (np.arange(len(v_a0)) / fs) * 1000.0
 
-        # 7. Bandpass filter around carrier (2610 Hz +/- 350 Hz)
+        # 7. Bandpass filter around carrier (f0 +/- 350 Hz)
         nyq = fs / 2.0
         b, a = signal.butter(2, [max(20.0, f0 - 350.0) / nyq, min(nyq - 20.0, f0 + 350.0) / nyq], btype="bandpass")
         v1_bp = signal.filtfilt(b, a, v_a0 - np.mean(v_a0)) * 1000.0  # in mV
@@ -485,6 +486,149 @@ class MicrophoneArrayOverlay(Overlay):
 
         env1 = np.abs(signal.hilbert(v1_bp))
         env2 = np.abs(signal.hilbert(v2_bp))
+
+        # 8. Detect acoustic wavefront arrivals
+        def find_wavefront(v_bp, env):
+            blank_idx = int((blanking_ms / 1000.0) * fs)
+            peak_val = np.max(env[blank_idx:])
+            thresh = max(min_thresh_mv, 0.20 * peak_val)
+            zc = np.where((v_bp[:-1] <= 0) & (v_bp[1:] > 0))[0]
+            for i in range(len(zc) - 1):
+                z0, z1 = zc[i], zc[i + 1]
+                if z0 < blank_idx:
+                    continue
+                p = z1 - z0
+                amp = np.max(v_bp[z0:z1]) - np.min(v_bp[z0:z1])
+                if (150 <= p <= 230) and (amp >= thresh):
+                    frac = -v_bp[z0] / (v_bp[z0 + 1] - v_bp[z0]) if abs(v_bp[z0 + 1] - v_bp[z0]) > 1e-6 else 0.0
+                    return (float(z0) + frac) / fs * 1000.0, int(z0)
+            return np.nan, 0
+
+        t1_raw_ms, idx1_wf = find_wavefront(v1_bp, env1)
+        t2_raw_ms, idx2_wf = find_wavefront(v2_bp, env2)
+
+        # 9. Compute Calibrated Distances & Cycle-Slip Parity Corrected TDOA
+        t1_flight_ms = max(0.0, t1_raw_ms - offset_ms) if np.isfinite(t1_raw_ms) else np.nan
+        t2_flight_ms = max(0.0, t2_raw_ms - offset_ms) if np.isfinite(t2_raw_ms) else np.nan
+
+        r1_m = (c_sound * (t1_flight_ms / 1000.0)) if np.isfinite(t1_flight_ms) else np.nan
+        r2_m = (c_sound * (t2_flight_ms / 1000.0)) if np.isfinite(t2_flight_ms) else np.nan
+
+        delta_t_ms = (t1_raw_ms - t2_raw_ms) if (np.isfinite(t1_raw_ms) and np.isfinite(t2_raw_ms)) else np.nan
+        raw_delta_r_m = (c_sound * (delta_t_ms / 1000.0)) if np.isfinite(delta_t_ms) else np.nan
+
+        # Cycle-Slip Parity Corrector (Modulo Lambda Wrapping)
+        lambda_m = c_sound / f0
+        delta_r_corr_m = raw_delta_r_m
+        if np.isfinite(delta_r_corr_m):
+            while abs(delta_r_corr_m) > mic_distance_m:
+                delta_r_corr_m -= np.sign(delta_r_corr_m) * lambda_m
+
+        delta_r_cm = delta_r_corr_m * 100.0 if np.isfinite(delta_r_corr_m) else np.nan
+
+        # Solve 2D position (x, y) with parity-repaired path delta
+        loc2d = KinematicAnalytics.solve_2d_multilateration(
+            r1_m=r1_m if np.isfinite(r1_m) else 0.0,
+            r2_m=r2_m if np.isfinite(r2_m) else 0.0,
+            d_m=mic_distance_m
+        )
+
+        r1_cm = r1_m * 100.0 if np.isfinite(r1_m) else np.nan
+        r2_cm = r2_m * 100.0 if np.isfinite(r2_m) else np.nan
+        range_cm = loc2d["range_m"] * 100.0 if np.isfinite(loc2d["range_m"]) else np.nan
+
+        # TDOA Bearing Angle using parity-repaired delta
+        if np.isfinite(delta_r_corr_m):
+            sin_tdoa = np.clip(delta_r_corr_m / mic_distance_m, -1.0, 1.0)
+            theta_tdoa_deg = float(np.degrees(np.arcsin(sin_tdoa)))
+        else:
+            theta_tdoa_deg = np.nan
+
+        # Reconstructed Cartesian coordinates from range and repaired bearing
+        if np.isfinite(range_cm) and np.isfinite(theta_tdoa_deg):
+            rad_th = np.radians(theta_tdoa_deg)
+            x_cm = range_cm * np.sin(rad_th)
+            y_cm = range_cm * np.cos(rad_th)
+        else:
+            x_cm = np.nan
+            y_cm = np.nan
+
+        # 10. Quasi-Anechoic Direct-Path Fourier Extraction on Shared Time Window
+        if np.isfinite(t1_raw_ms) and np.isfinite(t2_raw_ms):
+            earliest_idx = max(0, min(idx1_wf, idx2_wf))
+            gated0 = KinematicAnalytics.extract_gated_direct_fourier(
+                signal_v=v_a0, fs=fs, f0=f0, n_cycles=gate_cycles, start_idx=earliest_idx
+            )
+            gated1 = KinematicAnalytics.extract_gated_direct_fourier(
+                signal_v=v_a1, fs=fs, f0=f0, n_cycles=gate_cycles, start_idx=earliest_idx
+            )
+
+            amp_direct_a0 = gated0["amplitude_v"]
+            amp_direct_a1 = gated1["amplitude_v"]
+
+            # Signal-to-Multipath Ratio (SMR): E_direct / E_reverb (over 1.5 ms immediate post-gate)
+            tail_s0 = earliest_idx + n_gate_target
+            tail_e0 = min(len(v_a0), tail_s0 + int(0.0015 * fs))
+            e_tail0 = float(np.sum((v_a0[tail_s0:tail_e0] - np.mean(v_a0[tail_s0:tail_e0])) ** 2)) if tail_s0 < len(v_a0) else 1e-6
+            smr_a0_db = float(10.0 * np.log10(max(gated0["energy_v2"], 1e-9) / max(e_tail0, 1e-9)))
+
+            tail_s1 = earliest_idx + n_gate_target
+            tail_e1 = min(len(v_a1), tail_s1 + int(0.0015 * fs))
+            e_tail1 = float(np.sum((v_a1[tail_s1:tail_e1] - np.mean(v_a1[tail_s1:tail_e1])) ** 2)) if tail_s1 < len(v_a1) else 1e-6
+            smr_a1_db = float(10.0 * np.log10(max(gated1["energy_v2"], 1e-9) / max(e_tail1, 1e-9)))
+
+            e_direct_a0 = gated0["energy_v2"]
+            e_direct_a1 = gated1["energy_v2"]
+
+            # Invert distance directly from quasi-anechoic energy: r = k_direct / A_direct
+            r_energy_m = (k_direct / amp_direct_a0) if amp_direct_a0 > 0.002 else np.nan
+            r_energy_cm = r_energy_m * 100.0 if np.isfinite(r_energy_m) else np.nan
+        else:
+            amp_direct_a0 = 0.0
+            amp_direct_a1 = 0.0
+            smr_a0_db = 0.0
+            smr_a1_db = 0.0
+            e_direct_a0 = 0.0
+            e_direct_a1 = 0.0
+            r_energy_cm = np.nan
+
+        is_valid = np.isfinite(r1_cm) and np.isfinite(r2_cm) and (loc2d["status"] != "SILENCE")
+
+        return {
+            "r1_cm": r1_cm,
+            "r2_cm": r2_cm,
+            "distance_cm": range_cm,               # ToA range from array center (0, 0)
+            "distance_m": loc2d["range_m"],
+            "distance_energy_cm": r_energy_cm,     # Direct-energy metric distance (r = k / A)
+            "delta_r_cm": delta_r_cm,              # Parity-repaired path delta
+            "delta_t_ms": delta_t_ms,
+            "x_cm": x_cm,                          # Lateral position (+ = Right, - = Left)
+            "y_cm": y_cm,                          # Forward distance in front of array
+            "theta_deg": theta_tdoa_deg,           # Parity-repaired near-field bearing
+            "theta_tdoa_deg": theta_tdoa_deg,      # Parity-repaired TDOA bearing
+            "theta_phase_deg": theta_tdoa_deg,     # Aligned bearing
+            "amp_direct_a0_v": amp_direct_a0,      # Quasi-anechoic direct RMS voltage Mic 1
+            "amp_direct_a1_v": amp_direct_a1,      # Quasi-anechoic direct RMS voltage Mic 2
+            "energy_direct_a0": e_direct_a0,       # Direct line-of-sight energy Mic 1
+            "energy_direct_a1": e_direct_a1,       # Direct line-of-sight energy Mic 2
+            "hw_energy_mic1": hw_e1,               # Raw 32-bit hardware energy count Mic 1
+            "hw_energy_mic2": hw_e2,               # Raw 32-bit hardware energy count Mic 2
+            "smr_a0_db": smr_a0_db,                # Signal-to-Multipath Ratio Mic 1 (dB)
+            "smr_a1_db": smr_a1_db,                # Signal-to-Multipath Ratio Mic 2 (dB)
+            "t1_raw_ms": t1_raw_ms,
+            "t2_raw_ms": t2_raw_ms,
+            "t_flight_sec": t1_flight_ms / 1000.0 if np.isfinite(t1_flight_ms) else np.nan,
+            "amp_a0_v": float(np.max(env1)) / 1000.0,
+            "amp_a1_v": float(np.max(env2)) / 1000.0,
+            "status": loc2d["status"] if is_valid else "SILENCE",
+            "v_a0": v_a0,
+            "v_a1": v_a1,
+            "v1_bp": v1_bp,
+            "v2_bp": v2_bp,
+            "env1": env1,
+            "env2": env2,
+            "t_ms": t_ms,
+        }
 
         # 8. Detect acoustic wavefronts
         def find_wavefront(v_bp, env):
