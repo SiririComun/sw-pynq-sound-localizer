@@ -241,4 +241,79 @@ class TestDirectPathMetrology:
         assert err_ungated_pct > 15.0, "Expected ungated window to be corrupted by multipath echo!"
         assert res_gated["is_valid"] is True
     
+    def test_zero_intercept_regression(self):
+        """
+        Verify that DirectPulseCalibrationProtocol recovers ground-truth k_direct
+        with < 0.75% error and R^2 >= 0.998, verifies that the unconstrained room
+        intercept c_room vanishes (< 0.3 mV), and validates profile export and runtime inversion.
+        """
+        import tempfile
+        from pathlib import Path
+        from pynq_localizer.kinematics import DistanceEstimator, AcousticProfile
+
+        f0 = 2609.73
+        k_true = 0.0480  # 0.0480 V*m (48 mV at 1.0 m)
+        test_distances = [0.20, 0.30, 0.40, 0.50, 0.60, 0.80, 1.00]
+        n_bursts = 20
+
+        protocol = DirectPulseCalibrationProtocol(
+            nominal_f0_hz=f0,
+            r2_threshold=0.98,
+            temperature_c=20.0,
+            system_metadata={"emitter_device": "Active_Buzzer_2610Hz", "mic_gain": "+35dB"}
+        )
+
+        # 1. Synthesize multi-burst observations with realistic noise (sigma = 0.5 mV)
+        np.random.seed(42)
+        for r in test_distances:
+            v_direct_true = k_true / r  # Exact 1/r with ZERO room reverberation floor
+            samples = np.random.normal(loc=v_direct_true, scale=0.0005, size=n_bursts)
+            protocol.add_measurement(distance_m=r, amplitude_v=samples)
+
+        # 2. Execute zero-intercept WLS regression
+        fit_results = protocol.fit()
+        res = fit_results[f0]
+
+        k_recovered = res["k"]
+        err_k_pct = abs(k_recovered - k_true) / k_true * 100.0
+        c_uncon_mv = res["c_room_unconstrained_v"] * 1000.0
+
+        print(f"\n[Zero-Intercept Fit] True k       : {k_true:.4f} V*m")
+        print(f"[Zero-Intercept Fit] Recovered k  : {k_recovered:.4f} V*m (Error = {err_k_pct:.3f}%)")
+        print(f"[Zero-Intercept Fit] R^2 Score    : {res['r_squared']:.5f}")
+        print(f"[Zero-Intercept Fit] Uncon c_room : {c_uncon_mv:+.3f} mV (Target: < 0.3 mV)")
+
+        # Assertions on fit quality
+        assert err_k_pct < 0.75, f"k recovery error too high: {err_k_pct}%"
+        assert res["r_squared"] >= 0.998, f"R^2 too low: {res['r_squared']}"
+        assert abs(c_uncon_mv) < 0.30, f"Unconstrained c_room is non-zero: {c_uncon_mv} mV"
+        assert res["c_room"] == 0.0
+        assert res["passed_gate"] is True
+
+        # 3. Export profile to JSON, reload, and verify runtime distance estimation
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+            tmp_json = Path(tmp.name)
+
+        try:
+            saved_path = protocol.save_profile_json(tmp_json, name="Direct_Pulse_Test_Profile")
+            assert saved_path.exists()
+
+            loaded_profile = AcousticProfile.from_json(tmp_json)
+            assert loaded_profile.system_metadata["calibration_regime"] == "quasi_anechoic_direct_pulse"
+
+            # Test runtime DistanceEstimator inversion at uncalibrated station r = 0.45 m
+            estimator = DistanceEstimator(profile=loaded_profile, noise_gate_v=0.005)
+            r_test = 0.450
+            amp_test = k_true / r_test  # ~0.1067 V
+
+            r_est, r_err, status = estimator.estimate_distance(amplitude_v=amp_test, frequency_hz=f0)
+
+            print(f"[Runtime Inversion] Target r: {r_test*100:.1f} cm | Inverted r: {r_est*100:.2f} cm (Status: {status})")
+
+            assert abs(r_est - r_test) < 0.005, f"Distance inversion error too high: {abs(r_est - r_test)*100:.2f} cm"
+            assert status == "ACTIVE_VALID"
+        finally:
+            if tmp_json.exists():
+                tmp_json.unlink()
+
     
