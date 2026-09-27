@@ -14,6 +14,7 @@ LOCALIZER_NOTEBOOKS = [
     "03_phase_angle_of_arrival_lab.ipynb",
     "04_air_track_differential_doppler.ipynb",
     "05_pulse_time_of_arrival_lab.ipynb",
+    "06_planar_tdoa_sound_localizer.ipynb",
 ]
 
 
