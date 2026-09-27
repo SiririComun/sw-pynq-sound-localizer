@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ ab1f3fc
+• Repository State    : feat/pulse-time-of-arrival @ d40de4b
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,14 +9,14 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (4 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         ab1f3fc [origin/feat/pulse-time-of-arrival: ahead 1] feat(array): implement modulo-lambda cycle-slip parity corrector and direct-energy distance inversion in capture_pulsed_toa_frame
+* feat/pulse-time-of-arrival                         d40de4b [origin/feat/pulse-time-of-arrival: ahead 2] fix(kinematics): implement exact near-field multilateration and synchronize test suite with 2660Hz profile
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
@@ -33,7 +33,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* ab1f3fc  (HEAD -> feat/pulse-time-of-arrival) - 2026-09-27 : feat(array): implement modulo-lambda cycle-slip parity corrector and direct-energy distance inversion in capture_pulsed_toa_frame (SiririComun)
+* d40de4b  (HEAD -> feat/pulse-time-of-arrival) - 2026-09-27 : fix(kinematics): implement exact near-field multilateration and synchronize test suite with 2660Hz profile (SiririComun)
+* ab1f3fc  - 2026-09-27 : feat(array): implement modulo-lambda cycle-slip parity corrector and direct-energy distance inversion in capture_pulsed_toa_frame (SiririComun)
 * 5c1e4ee  (origin/feat/pulse-time-of-arrival) - 2026-09-27 : chore(context): update repository summary with calibrated 2660Hz buzzer profile (SiririComun)
 * 84ed096  - 2026-09-27 : fix(profile): synchronize active buzzer profile with measured 2660Hz carrier and direct-coupling constant (SiririComun)
 * 11f9194  - 2026-09-27 : fix(notebook): patch inner f-string quotes in Notebook 02 distance wizard (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * 89f3f5a  - 2026-09-27 : test(direct): add orthogonality and spectral leakage unit verification over integer cycles (SiririComun)
 * 23d3e6b  - 2026-09-27 : chore(context): register test_direct_path in Cog and update repository summary (SiririComun)
 * 5ed727c  - 2026-09-27 : test(direct): add unit verification for 32-bit hardware energy count to physical voltage conversion (SiririComun)
-* bef5b8c  - 2026-09-27 : feat(array): integrate hardware direct-energy readback and quasi-anechoic Fourier metrics in capture_pulsed_toa_frame (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -7014,10 +7014,176 @@ print(f"• Operational Status       : {status}")
 print("=" * 76)
 
 # %% [markdown] Cell 10
-## 5. Hardware Teardown & Buffer Release
-# Release FPGA DMA and hardware memory buffers.
+## 5. Real-Time Distance & Intensity Live Dashboard
+# Click **`Start Sounding`** and move the buzzer freely toward and away from Microphone 1 along your desk or ruler (from $10\,\text{cm}$ out to $100\,\text{cm}$).
+# * **Meter 1:** Instantaneous physical direct line-of-sight amplitude $A_{\text{direct}}$ in **mV RMS**.
+# * **Meter 2:** Real-time inverted metric distance $r(t) = \frac{k_{\text{direct}}}{A_{\text{direct}}}$ in **cm** with confidence bounds ($\pm \delta r$).
+# * **Strip Chart:** Rolling 20-pulse live history displaying intensity decay and distance trajectory in real time.
 
 # %% [code] Cell 11
+# %% [code] Section 5: Real-Time Distance & Intensity Live Dashboard
+import threading
+from collections import deque
+import ipywidgets as widgets
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# 1. UI Control Widgets
+btn_start = widgets.Button(
+    description="Start Sounding", button_style="success", icon="play", layout=widgets.Layout(width="140px")
+)
+btn_stop = widgets.Button(
+    description="Stop", button_style="danger", icon="stop", layout=widgets.Layout(width="100px")
+)
+hud_telemetry = widgets.HTML(
+    "<span style='color:#00FFCC; font-family:monospace; font-size:13px; font-weight:bold;'>"
+    "Direct Amp: --- mV | Distance: --- cm | SMR: --- dB | Status: IDLE"
+    "</span>"
+)
+
+# 2. 2-Row Synchronized Plotly Strip Chart
+n_history = 20
+pulse_indices = list(range(1, n_history + 1))
+
+fig_dash = make_subplots(
+    rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
+    subplot_titles=(
+        "<b>1. Quasi-Anechoic Direct Amplitude A_direct [mV RMS]</b>",
+        "<b>2. Inverted Metric Distance r = k / A [cm]</b>"
+    )
+)
+fig_dash = go.FigureWidget(fig_dash)
+
+# Row 1: Amplitude History (Trace 0: Signal, Trace 1: Squelch Floor)
+fig_dash.add_scatter(
+    x=pulse_indices, y=[0.0] * n_history, mode="lines+markers",
+    marker=dict(size=7, color="#00FFCC"), line=dict(color="#00FFCC", width=2.0),
+    name="A_direct (mV)", row=1, col=1
+)
+fig_dash.add_hline(y=3.0, line=dict(color="#FFA500", dash="dash", width=1.5), annotation_text="Noise Floor (3 mV)", row=1, col=1)
+
+# Row 2: Distance History (Trace 2: +err, Trace 3: -err fill, Trace 4: Distance)
+fig_dash.add_scatter(
+    x=pulse_indices, y=[np.nan] * n_history, mode="lines",
+    line=dict(width=0.5, color="rgba(255, 165, 0, 0.3)", dash="dot"), showlegend=False, name="+δr", row=2, col=1
+)
+fig_dash.add_scatter(
+    x=pulse_indices, y=[np.nan] * n_history, mode="lines",
+    line=dict(width=0.5, color="rgba(255, 165, 0, 0.3)", dash="dot"), fill="tonexty",
+    fillcolor="rgba(255, 165, 0, 0.18)", name="±δr Band", row=2, col=1
+)
+fig_dash.add_scatter(
+    x=pulse_indices, y=[np.nan] * n_history, mode="lines+markers",
+    marker=dict(size=7, color="#FFA500"), line=dict(color="#FFA500", width=2.2),
+    name="Distance (cm)", row=2, col=1
+)
+
+fig_dash.update_layout(
+    template="plotly_dark", height=500, margin=dict(l=55, r=30, t=45, b=35), uirevision="direct_dashboard"
+)
+fig_dash.update_yaxes(title="Amplitude (mV)", range=[0, 220], row=1, col=1)
+fig_dash.update_yaxes(title="Distance (cm)", range=[0, 120], row=2, col=1)
+fig_dash.update_xaxes(title="Recent Pulses (History)", range=[1, n_history], row=2, col=1)
+
+# 3. Thread-Safe Live Acquisition Worker
+dash_running = False
+dash_thread = None
+buf_amp = deque([0.0] * n_history, maxlen=n_history)
+buf_dist = deque([np.nan] * n_history, maxlen=n_history)
+buf_err = deque([np.nan] * n_history, maxlen=n_history)
+
+# Load calibrated profile if not already instantiated
+if 'loaded_profile' not in locals():
+    loaded_profile = AcousticProfile.from_json("calibrated_room_profile.json")
+if 'estimator' not in locals():
+    estimator = DistanceEstimator(profile=loaded_profile, noise_gate_v=0.003)
+
+def dashboard_worker():
+    global dash_running
+    while dash_running:
+        try:
+            if not ol.axi_dma_0.recvchannel.running or not ol.axi_dma_0.recvchannel.idle:
+                ol.axi_dma_0.mmio.write(0x30, 0x04)
+                time.sleep(0.005)
+                ol.axi_dma_0.recvchannel.start()
+                time.sleep(0.002)
+
+            ping = ol.capture_pulsed_toa_frame(
+                pulse_width_ms=10.0,
+                packet_samples=16384,
+                f_target=f0,
+                calibrated_offset_ms=0.0,
+                temperature_c=temperature_c,
+                blanking_ms=2.0,
+                min_thresh_mv=15.0,
+                gate_cycles=3,
+                timeout=0.8
+            )
+
+            amp_mv = ping["amp_direct_a0_v"] * 1000.0
+            r_m, r_err_m, status = estimator.estimate_distance(
+                amplitude_v=ping["amp_direct_a0_v"],
+                frequency_hz=f0
+            )
+
+            if np.isfinite(r_m):
+                dist_cm = r_m * 100.0
+                err_cm = r_err_m * 100.0
+            else:
+                dist_cm = np.nan
+                err_cm = np.nan
+
+            buf_amp.append(amp_mv)
+            buf_dist.append(dist_cm)
+            buf_err.append(err_cm)
+
+            arr_dist = np.array(buf_dist)
+            arr_err = np.array(buf_err)
+            dist_upper = arr_dist + arr_err
+            dist_lower = np.maximum(0.0, arr_dist - arr_err)
+
+            with fig_dash.batch_update():
+                fig_dash.data[0].y = list(buf_amp)
+                fig_dash.data[2].y = dist_upper
+                fig_dash.data[3].y = dist_lower
+                fig_dash.data[4].y = list(buf_dist)
+
+            dist_str = f"<b>{dist_cm:5.1f} cm</b> (±{err_cm:.1f})" if np.isfinite(dist_cm) else "---"
+            hud_telemetry.value = (
+                f"<span style='color:#00FFCC; font-family:monospace; font-size:13px; font-weight:bold;'>"
+                f"Direct Amp: <b>{amp_mv:5.1f} mV</b> | Distance: {dist_str} | "
+                f"SMR: <b>{ping['smr_a0_db']:4.1f} dB</b> | Status: {status}"
+                f"</span>"
+            )
+        except Exception:
+            pass
+        time.sleep(0.12)  # ~8 pings/sec with acoustic rest
+
+def on_start(_):
+    global dash_running, dash_thread
+    if not dash_running:
+        dash_running = True
+        dash_thread = threading.Thread(target=dashboard_worker, daemon=True)
+        dash_thread.start()
+        hud_telemetry.value = "<span style='color:#00FFCC; font-family:monospace; font-size:13px;'>Sounder Active... Pinging!</span>"
+
+def on_stop(_):
+    global dash_running
+    dash_running = False
+    hud_telemetry.value = "<span style='color:#FFA500; font-family:monospace; font-size:13px;'>Sounder Stopped.</span>"
+
+btn_start.on_click(on_start)
+btn_stop.on_click(on_stop)
+
+controls_box = widgets.HBox([btn_start, btn_stop, hud_telemetry], layout=widgets.Layout(gap="12px", margin="0 0 10px 0"))
+display(widgets.VBox([controls_box, fig_dash]))
+\
+
+# %% [markdown] Cell 12
+## 6. Hardware Teardown & Buffer Release
+# Release FPGA DMA and hardware memory buffers.
+
+# %% [code] Cell 13
 ol.close()
 print("🔒 FPGA hardware resources cleanly released.")
 
