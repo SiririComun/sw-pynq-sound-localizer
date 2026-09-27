@@ -95,7 +95,6 @@ class TestAngleOfArrivalEngine:
         res = aoa.estimate_angle(v0, v1, fs=50000.0)
 
         err = abs(res["theta_deg"] - theta_true)
-        print(f"\n[AoA Noise Test] True={theta_true}° | Est={res['theta_deg']:.2f}° | Err={err:.2f}°")
         assert err < 0.80, f"Noisy AoA error too high: {err}°"
         assert res["status"] == "ACTIVE_VALID"
 
@@ -111,8 +110,6 @@ class TestAngleOfArrivalEngine:
 
     def test_spatial_aliasing_boundary_flag(self):
         """Verify that microphone spacing d > lambda/2 sets OUT_OF_BOUNDS_SPATIAL_ALIASING status."""
-        # For f0 = 4000 Hz, lambda/2 = 343.2 / (2 * 4000) = 0.0429 m (4.29 cm)
-        # Spacing d = 0.06 m (6 cm) exceeds the spatial aliasing limit
         aoa = AngleOfArrivalEstimator(mic_distance_m=0.060, target_freq_hz=4000.0)
         v0, v1 = generate_synthetic_aoa_stereo_frame(theta_deg=10.0, f0=4000.0, mic_distance_m=0.060)
         res = aoa.estimate_angle(v0, v1, fs=50000.0)
@@ -124,8 +121,12 @@ class TestAngleOfArrivalEngine:
         profile_path = Path("profiles/active_buzzer_2610hz.json")
         assert profile_path.exists(), "Profile file missing!"
 
+        with open(profile_path, "r", encoding="utf-8") as f:
+            profile_data = json.load(f)
+        expected_f0 = float(profile_data.get("f_res_hz", 2660.0))
+
         aoa = AngleOfArrivalEstimator(mic_distance_m=0.05, profile=profile_path)
-        assert abs(aoa.target_freq_hz - 2609.73) < 0.1
+        assert abs(aoa.target_freq_hz - expected_f0) < 0.1
 
         v0, v1 = generate_synthetic_aoa_stereo_frame(theta_deg=-35.0, f0=aoa.target_freq_hz)
         res = aoa.estimate_angle(v0, v1, fs=50000.0)

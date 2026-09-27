@@ -808,10 +808,15 @@ class KinematicAnalytics:
     def solve_2d_multilateration(
         r1_m: float,
         r2_m: float,
-        d_m: float
+        d_m: float,
+        f0: float = 2660.0,
+        c_sound: float = 343.21,
+        wrap_modulo_lambda: bool = False,
+        delta_r_m: Optional[float] = None
     ) -> Dict[str, Union[float, str]]:
         """
-        Solves exact 2D Cartesian and polar acoustic multilateration from dual-channel ranges.
+        Solves exact 2D Cartesian and polar acoustic multilateration from dual-channel ranges
+        with optional modulo-lambda cycle-slip parity protection.
 
         Geometry convention (matching Notebook 03):
           - Origin (0, 0) is the midpoint between microphones.
@@ -819,11 +824,6 @@ class KinematicAnalytics:
           - Mic 2 (Right / A1) is at (+d/2, 0).
           - Forward axis is +y (theta = 0° at broadside).
           - Transverse axis is +x (theta > 0° to the Right, theta < 0° to the Left).
-
-        :param r1_m: Calibrated radial distance to Mic 1 in meters.
-        :param r2_m: Calibrated radial distance to Mic 2 in meters.
-        :param d_m: Inter-microphone baseline distance in meters.
-        :return: Dict containing x_m, y_m, range_m, theta_deg, theta_far_deg, and status.
         """
         r1 = float(r1_m)
         r2 = float(r2_m)
@@ -839,42 +839,61 @@ class KinematicAnalytics:
                 "status": "SILENCE"
             }
 
-        delta_r = r1 - r2
+        delta_r = float(delta_r_m) if delta_r_m is not None else (r1 - r2)
         is_geometric_anomaly = False
 
-        # 1. Hyperbolic Path Length Gate (Triangle Inequality: |r1 - r2| <= d)
-        if abs(delta_r) > d:
-            is_geometric_anomaly = True
-            delta_r_clamped = np.sign(delta_r) * d
+        if wrap_modulo_lambda:
+            lambda_m = c_sound / f0 if f0 > 0 else 0.129
+            delta_r_corr = delta_r
+            if abs(delta_r_corr) > d:
+                while abs(delta_r_corr) > d:
+                    delta_r_corr -= np.sign(delta_r_corr) * lambda_m
+
+            if abs(delta_r_corr) > d:
+                is_geometric_anomaly = True
+                delta_r_clamped = np.sign(delta_r_corr) * d
+            else:
+                delta_r_clamped = delta_r_corr
         else:
-            delta_r_clamped = delta_r
+            if abs(delta_r) > d:
+                is_geometric_anomaly = True
+                delta_r_clamped = np.sign(delta_r) * d
+            else:
+                delta_r_clamped = delta_r
 
-        # 2. Transverse Cartesian Coordinate x = (r1^2 - r2^2) / (2 * d)
-        x = (r1**2 - r2**2) / (2.0 * d)
-
-        # 3. Forward Cartesian Coordinate y = sqrt(max(0, (r1^2 + r2^2)/2 - x^2 - d^2/4))
-        y_radicand = ((r1**2 + r2**2) / 2.0) - (x**2) - ((d**2) / 4.0)
+        # Far-field bearing angle
+        ratio_far = delta_r_clamped / d
+        theta_far_rad = float(np.arcsin(np.clip(ratio_far, -1.0, 1.0)))
+        theta_far_deg = float(np.degrees(theta_far_rad))
 
         if is_geometric_anomaly:
+            range_approx = 0.5 * (r1 + r2)
+            x = range_approx * np.sin(theta_far_rad)
             y = 0.0
             status = "GEOMETRIC_OUT_OF_BOUNDS"
-        elif y_radicand < 0.0:
-            y = 0.0
-            status = "OUT_OF_PLANE_COLLAPSE"
         else:
-            y = float(np.sqrt(y_radicand))
-            status = "ACTIVE_VALID"
+            if wrap_modulo_lambda or delta_r_m is not None:
+                # Reconstruct corrected effective r1, r2 around midpoint range
+                r_mean = 0.5 * (r1 + r2)
+                r1_eff = r_mean + 0.5 * delta_r_clamped
+                r2_eff = r_mean - 0.5 * delta_r_clamped
+            else:
+                r1_eff = r1
+                r2_eff = r2
 
-        # 4. Polar Coordinates from array center (0, 0)
-        range_center = float(np.sqrt(x**2 + y**2))
+            # Exact near-field Cartesian multilateration
+            x = (r1_eff ** 2 - r2_eff ** 2) / (2.0 * d)
+            y_radicand = ((r1_eff ** 2 + r2_eff ** 2) / 2.0) - (x ** 2) - ((d ** 2) / 4.0)
 
-        # theta = arctan2(x, y): 0° = broadside (+y), +deg = right (+x), -deg = left (-x)
-        theta_rad = float(np.arctan2(x, y))
-        theta_deg = float(np.degrees(theta_rad))
+            if y_radicand < 0.0:
+                y = 0.0
+                status = "OUT_OF_PLANE_COLLAPSE"
+            else:
+                y = float(np.sqrt(y_radicand))
+                status = "ACTIVE_VALID"
 
-        # 5. Far-field plane-wave approximation: sin(theta) = delta_r / d
-        ratio_far = delta_r_clamped / d
-        theta_far_deg = float(np.degrees(np.arcsin(np.clip(ratio_far, -1.0, 1.0))))
+        range_center = float(np.sqrt(x ** 2 + y ** 2))
+        theta_deg = float(np.degrees(np.arctan2(x, y)))
 
         return {
             "x_m": float(x),
@@ -2483,7 +2502,7 @@ class TimeOfArrivalEstimator:
 
     def __init__(
         self,
-        nominal_f0_hz: float = 2609.73,
+        nominal_f0_hz: float = 2660.0,
         profile: Optional[Union[AcousticProfile, str, Path]] = None,
         mic_distance_m: float = 0.05,
         temperature_c: float = 20.0,
@@ -2505,19 +2524,23 @@ class TimeOfArrivalEstimator:
                 p_path = Path(profile).resolve()
                 with open(p_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                self.f0_hz = float(data.get("f_res_hz", 2609.73))
+                self.f0_hz = float(data.get("f_res_hz", 2660.0))
                 offset_from_prof = float(data.get("calibrated_toa_offset_ms", DEFAULT_TOA_OFFSET_MS))
                 self.offset_ms = offset_from_prof if calibrated_offset_ms is None else float(calibrated_offset_ms)
+                self.k_direct = float(data.get("k_direct", 0.0196))
             elif isinstance(profile, AcousticProfile):
                 self.f0_hz = float(profile.frequencies[0]) if len(profile.frequencies) > 0 else float(nominal_f0_hz)
                 offset_from_prof = float(profile.system_metadata.get("calibrated_toa_offset_ms", DEFAULT_TOA_OFFSET_MS))
                 self.offset_ms = offset_from_prof if calibrated_offset_ms is None else float(calibrated_offset_ms)
+                self.k_direct = float(profile.k_values[0]) if len(profile.k_values) > 0 else 0.0196
             else:
                 self.f0_hz = float(nominal_f0_hz)
                 self.offset_ms = DEFAULT_TOA_OFFSET_MS if calibrated_offset_ms is None else float(calibrated_offset_ms)
+                self.k_direct = 0.0196
         else:
             self.f0_hz = float(nominal_f0_hz)
             self.offset_ms = DEFAULT_TOA_OFFSET_MS if calibrated_offset_ms is None else float(calibrated_offset_ms)
+            self.k_direct = 0.0196
 
         self.offset_sec = self.offset_ms / 1000.0
 

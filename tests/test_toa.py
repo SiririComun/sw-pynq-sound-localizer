@@ -11,7 +11,6 @@ import pytest
 
 from pynq_localizer.kinematics import KinematicAnalytics, TimeOfArrivalEstimator
 
-
 def generate_synthetic_2d_stereo_frame(
     x_m: float,
     y_m: float,
@@ -61,7 +60,6 @@ def generate_synthetic_2d_stereo_frame(
         v_a1 += np.random.normal(0, noise_sigma, n_samples)
 
     return v_a0, v_a1, r1, r2, t_start0, t_start1
-
 
 class TestTimeOfArrivalEngine:
 
@@ -131,11 +129,29 @@ class TestTimeOfArrivalEngine:
         d = 0.050
         # Physical impossibility: delta_r = 0.080 m > d (0.050 m)
         r1, r2 = 0.500, 0.420
-        res = KinematicAnalytics.solve_2d_multilateration(r1, r2, d)
+        res = KinematicAnalytics.solve_2d_multilateration(r1, r2, d, wrap_modulo_lambda=False)
 
         assert res["status"] == "GEOMETRIC_OUT_OF_BOUNDS"
         assert np.isfinite(res["x_m"])
         assert np.isfinite(res["theta_far_deg"])
+
+    def test_cycle_slip_parity_reconstruction(self):
+        """Verify that delta_r exceeding baseline is repaired via modulo-lambda wrapping."""
+        d = 0.050  # 5 cm baseline
+        f0 = 2660.0
+        c_sound = 343.21
+
+        # Emulate a cycle slip: delta_r_raw = 0.080 m (> d = 0.050 m)
+        # Should wrap by -lambda_m: 0.080 - 0.129 = -0.049 m (<= d)
+        r1, r2 = 0.500, 0.420
+        res = KinematicAnalytics.solve_2d_multilateration(
+            r1, r2, d, f0=f0, c_sound=c_sound, wrap_modulo_lambda=True
+        )
+
+        assert res["status"] == "ACTIVE_VALID"
+        assert abs(res["theta_far_deg"]) <= 90.0
+        assert np.isfinite(res["x_m"])
+        assert res["y_m"] > 0.0
 
     # =========================================================================
     # 2. End-to-End Waveform Localization Tests
@@ -238,8 +254,9 @@ class TestTimeOfArrivalEngine:
 
         with open(profile_path, "r", encoding="utf-8") as f:
             profile_data = json.load(f)
-        expected_offset = float(profile_data.get("calibrated_toa_offset_ms", 1.8758))
+        expected_offset = float(profile_data.get("calibrated_toa_offset_ms", 1.8080))
+        expected_f0 = float(profile_data.get("f_res_hz", 2660.0))
 
         estimator = TimeOfArrivalEstimator(profile=profile_path)
-        assert abs(estimator.f0_hz - 2609.73) < 0.1
+        assert abs(estimator.f0_hz - expected_f0) < 0.1
         assert abs(estimator.offset_ms - expected_offset) < 0.001
