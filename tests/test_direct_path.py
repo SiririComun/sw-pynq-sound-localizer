@@ -157,3 +157,88 @@ class TestDirectPathMetrology:
 
         # Fractional cut must exhibit substantial spectral leakage (> 2.0%) compared to integer cut
         assert err_leak_pct > 2.0, "Expected fractional cut to exhibit significant leakage bias!"
+    
+    def test_multipath_echo_rejection(self):
+        """
+        Verify that quasi-anechoic time-gating achieves 100% rejection of strong
+        delayed multipath reflections (echoes), while ungated windows suffer severe bias.
+        """
+        fs = 500_000.0
+        f0 = 2609.73
+        c_sound = 343.21  # m/s
+
+        # 1. Timeline configuration (Total window = 10.0 ms = 5000 samples)
+        n_total = 5000
+        t_axis = np.arange(n_total) / fs
+
+        # Direct wave parameters (Standoff r_direct = 40.0 cm -> t = 1.165 ms)
+        t_direct = 0.0020  # Direct arrival at 2.0 ms
+        v_direct_peak = 0.100  # 100 mV peak -> V_RMS = 70.71 mV
+        v_expected_rms = v_direct_peak / np.sqrt(2.0)
+
+        # Delayed echo parameters (Table bounce arriving 1.8 ms later with 75% amplitude)
+        t_echo = 0.0038  # Echo arrival at 3.8 ms
+        v_echo_peak = 0.075  # 75 mV peak reflection
+
+        # Direct-gate duration: K = 3 cycles (576 samples = 1.152 ms)
+        n_gate = int(3 * round(fs / f0))
+        t_gate_sec = n_gate / fs
+
+        # 2. Synthesize composite acoustic signal: Direct Wave + Delayed Multipath Echo
+        signal_composite = np.zeros(n_total, dtype=np.float64)
+
+        # Direct pulse burst (lasts 1.152 ms, from 2.000 ms to 3.152 ms)
+        mask_direct = (t_axis >= t_direct) & (t_axis < (t_direct + t_gate_sec))
+        signal_composite[mask_direct] += v_direct_peak * np.cos(
+            2.0 * np.pi * f0 * (t_axis[mask_direct] - t_direct) + (np.pi / 6.0)
+        )
+
+        # Multipath reflection burst (starts at 3.800 ms, outside the direct gate)
+        mask_echo = (t_axis >= t_echo) & (t_axis < (t_echo + 0.0030))
+        signal_composite[mask_echo] += v_echo_peak * np.cos(
+            2.0 * np.pi * f0 * (t_axis[mask_echo] - t_echo) - (np.pi / 4.0)
+        )
+
+        # Add realistic background noise (sigma = 1.0 mV)
+        np.random.seed(42)
+        signal_composite += np.random.normal(0, 0.001, n_total)
+
+        # 3. Time-Gated Extraction starting at exact direct wavefront index
+        idx_direct = int(round(t_direct * fs))
+        res_gated = KinematicAnalytics.extract_gated_direct_fourier(
+            signal_v=signal_composite,
+            fs=fs,
+            f0=f0,
+            n_cycles=3,
+            start_idx=idx_direct,
+            remove_dc=True
+        )
+
+        v_gated_rms = res_gated["amplitude_v"]
+        err_gated_pct = abs(v_gated_rms - v_expected_rms) / v_expected_rms * 100.0
+
+        # 4. Classical Ungated Window Extraction (spans direct pulse + reflection)
+        # Slices across 6.0 ms, ingesting both the direct wave and the echo
+        ungated_slice = signal_composite[idx_direct : idx_direct + int(0.0050 * fs)]
+        v_ungated_rms = np.sqrt(np.mean((ungated_slice - np.mean(ungated_slice)) ** 2))
+        err_ungated_pct = abs(v_ungated_rms - v_expected_rms) / v_expected_rms * 100.0
+
+        # 5. SMR (Signal-to-Multipath Ratio) Calculation
+        e_direct = res_gated["energy_v2"]
+        idx_tail = idx_direct + n_gate
+        e_tail = float(np.sum((signal_composite[idx_tail:] - np.mean(signal_composite[idx_tail:])) ** 2))
+        smr_db = 10.0 * np.log10(max(e_direct, 1e-9) / max(e_tail, 1e-9))
+
+        print(f"\n[Multipath Rejection Test] Expected Direct RMS : {v_expected_rms*1000:.3f} mV")
+        print(f"[Multipath Rejection Test] Gated Direct RMS    : {v_gated_rms*1000:.3f} mV (Error = {err_gated_pct:.3f}%)")
+        print(f"[Multipath Rejection Test] Ungated RMS (w/ Echo): {v_ungated_rms*1000:.3f} mV (Error = {err_ungated_pct:.1f}%)")
+        print(f"[Multipath Rejection Test] Measured SMR        : {smr_db:.2f} dB")
+
+        # Assertions:
+        # Time-gated extraction must reject the echo and achieve < 1.5% error under noise
+        assert err_gated_pct < 1.50, f"Gated direct extraction failed: {err_gated_pct}%"
+        # Ungated extraction must show severe distortion (> 15% error) due to echo ingestion
+        assert err_ungated_pct > 15.0, "Expected ungated window to be corrupted by multipath echo!"
+        assert res_gated["is_valid"] is True
+    
+    
