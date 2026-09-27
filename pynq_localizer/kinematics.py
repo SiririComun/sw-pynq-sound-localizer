@@ -844,10 +844,12 @@ class KinematicAnalytics:
 
         if wrap_modulo_lambda:
             lambda_m = c_sound / f0 if f0 > 0 else 0.129
-            delta_r_corr = delta_r
+            delta_r_corr = (delta_r + (lambda_m / 2.0)) % lambda_m - (lambda_m / 2.0)
             if abs(delta_r_corr) > d:
-                while abs(delta_r_corr) > d:
-                    delta_r_corr -= np.sign(delta_r_corr) * lambda_m
+                is_geometric_anomaly = True
+                delta_r_clamped = np.clip(delta_r_corr, -d, d)
+            else:
+                delta_r_clamped = delta_r_corr
 
             if abs(delta_r_corr) > d:
                 is_geometric_anomaly = True

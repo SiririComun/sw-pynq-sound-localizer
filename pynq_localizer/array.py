@@ -383,19 +383,6 @@ class MicrophoneArrayOverlay(Overlay):
         calibrated radial distances (r1, r2), 2D multilateration (x, y), parity-repaired
         TDOA bearing (theta_tdoa_deg), direct-energy metric distance (distance_energy_cm),
         autodyne direct-phase bearing (theta_phase_deg), and Signal-to-Multipath Ratio (SMR).
-
-        :param pulse_width_ms: Duration of hardware pulse burst in ms (default: 10.0 ms).
-        :param packet_samples: Total interleaved DMA samples (default: 16384 = 16.384 ms window).
-        :param f_target: Nominal pulse carrier frequency (defaults to profile or 2660.0 Hz).
-        :param mic_distance_m: Center-to-center microphone baseline in meters.
-        :param profile: Optional device profile (e.g. 'profiles/active_buzzer_2610hz.json').
-        :param calibrated_offset_ms: Transducer turn-on delay override (defaults to profile / 1.8080 ms).
-        :param temperature_c: Air temperature in °C for c(T) calculation.
-        :param blanking_ms: Initial time in ms to ignore electrical transients (default: 0.25 ms).
-        :param min_thresh_mv: Minimum acoustic wave threshold in mV.
-        :param gate_cycles: Integer number of carrier cycles for quasi-anechoic time-gate (default: 3).
-        :param timeout: Maximum DMA wait time in seconds.
-        :return: Comprehensive telemetry dictionary.
         """
         import scipy.signal as signal
         from pynq_localizer.kinematics import KinematicAnalytics
@@ -507,7 +494,7 @@ class MicrophoneArrayOverlay(Overlay):
         t1_raw_ms, idx1_wf = find_wavefront(v1_bp, env1)
         t2_raw_ms, idx2_wf = find_wavefront(v2_bp, env2)
 
-        # 9. Compute Calibrated Distances & Cycle-Slip Parity Corrected TDOA / Phase
+        # 9. Compute Calibrated Distances & Non-Iterative Cycle-Slip Parity Wrap
         t1_flight_ms = max(0.0, t1_raw_ms - offset_ms) if np.isfinite(t1_raw_ms) else np.nan
         t2_flight_ms = max(0.0, t2_raw_ms - offset_ms) if np.isfinite(t2_raw_ms) else np.nan
 
@@ -517,16 +504,16 @@ class MicrophoneArrayOverlay(Overlay):
         delta_t_ms = (t1_raw_ms - t2_raw_ms) if (np.isfinite(t1_raw_ms) and np.isfinite(t2_raw_ms)) else np.nan
         raw_delta_r_m = (c_sound * (delta_t_ms / 1000.0)) if np.isfinite(delta_t_ms) else np.nan
 
-        # Cycle-Slip Parity Corrector (Modulo Lambda Wrapping)
+        # O(1) Non-Iterative Modulo-Lambda Symmetric Wrap (No while loop!)
         lambda_m = c_sound / f0
-        delta_r_corr_m = raw_delta_r_m
-        if np.isfinite(delta_r_corr_m):
-            while abs(delta_r_corr_m) > mic_distance_m:
-                delta_r_corr_m -= np.sign(delta_r_corr_m) * lambda_m
+        if np.isfinite(raw_delta_r_m):
+            delta_r_corr_m = (raw_delta_r_m + (lambda_m / 2.0)) % lambda_m - (lambda_m / 2.0)
+        else:
+            delta_r_corr_m = np.nan
 
         delta_r_cm = delta_r_corr_m * 100.0 if np.isfinite(delta_r_corr_m) else np.nan
 
-        # Solve 2D position (x, y) with parity-repaired path delta
+        # Solve exact 2D position (x, y) with parity-repaired path delta
         loc2d = KinematicAnalytics.solve_2d_multilateration(
             r1_m=r1_m if np.isfinite(r1_m) else 0.0,
             r2_m=r2_m if np.isfinite(r2_m) else 0.0,
@@ -571,7 +558,7 @@ class MicrophoneArrayOverlay(Overlay):
             amp_direct_a0 = gated0["amplitude_v"]
             amp_direct_a1 = gated1["amplitude_v"]
 
-            # Signal-to-Multipath Ratio (SMR): E_direct / E_reverb (over 1.5 ms immediate post-gate)
+            # Signal-to-Multipath Ratio (SMR)
             tail_s0 = earliest_idx + n_gate_target
             tail_e0 = min(len(v_a0), tail_s0 + int(0.0015 * fs))
             e_tail0 = float(np.sum((v_a0[tail_s0:tail_e0] - np.mean(v_a0[tail_s0:tail_e0])) ** 2)) if tail_s0 < len(v_a0) else 1e-6
@@ -602,25 +589,25 @@ class MicrophoneArrayOverlay(Overlay):
         return {
             "r1_cm": r1_cm,
             "r2_cm": r2_cm,
-            "distance_cm": range_cm,               # ToA range from array center (0, 0)
+            "distance_cm": range_cm,
             "distance_m": loc2d["range_m"],
-            "distance_energy_cm": r_energy_cm,     # Direct-energy metric distance (r = k / A)
-            "delta_r_cm": delta_r_cm,              # Parity-repaired path delta
+            "distance_energy_cm": r_energy_cm,
+            "delta_r_cm": delta_r_cm,
             "delta_t_ms": delta_t_ms,
-            "x_cm": x_cm,                          # Lateral position (+ = Right, - = Left)
-            "y_cm": y_cm,                          # Forward distance in front of array
-            "theta_deg": loc2d["theta_deg"],       # Near-field bearing angle
-            "theta_tdoa_deg": theta_tdoa_deg,      # Parity-repaired TDOA bearing
-            "theta_phase_deg": theta_phase_deg,    # Direct autodyne phase bearing
-            "delta_phi_rad": dphi_direct_rad,      # Direct path phase difference in radians
-            "amp_direct_a0_v": amp_direct_a0,      # Quasi-anechoic direct RMS voltage Mic 1
-            "amp_direct_a1_v": amp_direct_a1,      # Quasi-anechoic direct RMS voltage Mic 2
-            "energy_direct_a0": e_direct_a0,       # Direct line-of-sight energy Mic 1
-            "energy_direct_a1": e_direct_a1,       # Direct line-of-sight energy Mic 2
-            "hw_energy_mic1": hw_e1,               # Raw 32-bit hardware energy count Mic 1
-            "hw_energy_mic2": hw_e2,               # Raw 32-bit hardware energy count Mic 2
-            "smr_a0_db": smr_a0_db,                # Signal-to-Multipath Ratio Mic 1 (dB)
-            "smr_a1_db": smr_a1_db,                # Signal-to-Multipath Ratio Mic 2 (dB)
+            "x_cm": x_cm,
+            "y_cm": y_cm,
+            "theta_deg": loc2d["theta_deg"],
+            "theta_tdoa_deg": theta_tdoa_deg,
+            "theta_phase_deg": theta_phase_deg,
+            "delta_phi_rad": dphi_direct_rad,
+            "amp_direct_a0_v": amp_direct_a0,
+            "amp_direct_a1_v": amp_direct_a1,
+            "energy_direct_a0": e_direct_a0,
+            "energy_direct_a1": e_direct_a1,
+            "hw_energy_mic1": hw_e1,
+            "hw_energy_mic2": hw_e2,
+            "smr_a0_db": smr_a0_db,
+            "smr_a1_db": smr_a1_db,
             "t1_raw_ms": t1_raw_ms,
             "t2_raw_ms": t2_raw_ms,
             "t_flight_sec": t1_flight_ms / 1000.0 if np.isfinite(t1_flight_ms) else np.nan,
