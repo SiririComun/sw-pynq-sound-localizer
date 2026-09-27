@@ -19,12 +19,13 @@ class HardwareTrigger:
     Interfaces via AXI4-Lite registers to configure hardware-level edge detection,
     trigger channel source selection (CH1/A0 vs CH2/A1), FFT channel routing (A0 vs A1),
     voltage thresholds, decimation factors (M=1, 10, 20, 50), FFT transform length (N=512, 1024, 2048),
-    packetizer boundaries, hardware pulse generation, and hardware-accelerated 100 MHz ToA / TDOA counters.
+    packetizer boundaries, hardware pulse generation, hardware-accelerated 100 MHz ToA / TDOA counters,
+    and quasi-anechoic direct-path energy accumulation registers.
     """
 
     # Register Byte Offsets matching axis_trigger_unit.vhd (6-bit address decoder)
     REG_CONTROL     = 0x00  # [0]=Arm, [1]=Auto, [2]=Fall, [3]=Single, [4]=Force, [5]=TrigSrc, [6]=FFTSrc, [7]=FIRE_PULSE
-    REG_STATUS      = 0x04  # [0]=Armed, [1]=Triggered, [2]=Streaming, [3]=PulseActive, [4]=Mic1Locked, [5]=Mic2Locked, [6]=ToaDone
+    REG_STATUS      = 0x04  # [0]=Armed, [1]=Triggered, [2]=Streaming, [3]=PulseActive, [4]=Mic1Locked, [5]=Mic2Locked, [6]=ToaDone, [7]=Mic1GateDone, [8]=Mic2GateDone
     REG_THRESHOLD   = 0x08  # [15:0] 12-bit left-aligned comparator threshold
     REG_TIMEOUT     = 0x0C  # [31:0] Auto-trigger timeout in clock cycles
     REG_HYSTERESIS  = 0x10  # [15:0] Noise rejection band
@@ -32,12 +33,17 @@ class HardwareTrigger:
     REG_FFT_CONFIG  = 0x18  # [15:0] (FWD_INV << 8) | NFFT (PG109 Format)
     REG_PACKET_SIZE = 0x1C  # [15:0] Samples per DMA frame
     REG_PULSE_WIDTH = 0x20  # [31:0] Hardware pulse duration in 100 MHz clock cycles (default 500,000 = 5.0 ms)
-    
+
     # Hardware-Accelerated ToA / TDOA Registers
     REG_MIC1_TOA    = 0x24  # [31:0] Mic 1 arrival timestamp in 100 MHz clock cycles (10.0 ns ticks)
     REG_MIC2_TOA    = 0x28  # [31:0] Mic 2 arrival timestamp in 100 MHz clock cycles (10.0 ns ticks)
     REG_TOA_CONFIG  = 0x2C  # [31:16]=Blanking cycles (10 ns ticks), [15:0]=Threshold delta counts
     REG_MIC_DC_REF  = 0x30  # [31:16]=Mic 2 DC baseline, [15:0]=Mic 1 DC baseline
+
+    # Quasi-Anechoic Direct-Path Energy Registers
+    REG_MIC1_DIRECT_ENERGY = 0x34  # [31:0] Direct line-of-sight squared sample sum for Mic 1
+    REG_MIC2_DIRECT_ENERGY = 0x38  # [31:0] Direct line-of-sight squared sample sum for Mic 2
+    REG_GATE_CONFIG        = 0x3C  # [15:0] Direct gate integration sample count N_gate (Default 576 = 0x0240)
 
     # Bit masks for REG_CONTROL (0x00)
     BIT_ARM          = 1 << 0  # Bit 0: Arm trigger unit
@@ -57,6 +63,8 @@ class HardwareTrigger:
     STATUS_MIC1_TOA_LOCKED = 1 << 4  # Bit 4: 1 when Mic 1 (A0) wavefront arrival is latched
     STATUS_MIC2_TOA_LOCKED = 1 << 5  # Bit 5: 1 when Mic 2 (A1) wavefront arrival is latched
     STATUS_TOA_DONE        = 1 << 6  # Bit 6: 1 when both channels locked or 50 ms timeout expired
+    STATUS_MIC1_GATE_DONE  = 1 << 7  # Bit 7: 1 when Mic 1 direct gate has accumulated N_gate samples
+    STATUS_MIC2_GATE_DONE  = 1 << 8  # Bit 8: 1 when Mic 2 direct gate has accumulated N_gate samples
 
     DECIMATION_MAP = {
         1: 0,   # "00" -> M = 1 (Bypass: 500 kSPS Lab Scope)
