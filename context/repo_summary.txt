@@ -1,29 +1,29 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 20a0ec2
-• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc3
+• Repository State    : feat/pulse-time-of-arrival @ 8fa1088
+• Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
 
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (4 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (3 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         20a0ec2 [origin/feat/pulse-time-of-arrival] chore(context): update repository summary with passing 2D multilateration tests
+* feat/pulse-time-of-arrival                         8fa1088 [origin/feat/pulse-time-of-arrival] chore(context): sync Cog configuration and update repository summary with Notebook 06
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          20a0ec2 chore(context): update repository summary with passing 2D multilateration tests
+  remotes/origin/feat/pulse-time-of-arrival          8fa1088 chore(context): sync Cog configuration and update repository summary with Notebook 06
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 20a0ec2  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-26 : chore(context): update repository summary with passing 2D multilateration tests (SiririComun)
+* 8fa1088  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-26 : chore(context): sync Cog configuration and update repository summary with Notebook 06 (SiririComun)
+* 8ca6f5f  - 2026-09-26 : feat(notebooks): add Notebook 06 for 2D planar acoustic localization and live radar tracking (SiririComun)
+* 20a0ec2  - 2026-09-26 : chore(context): update repository summary with passing 2D multilateration tests (SiririComun)
 * 885362a  - 2026-09-26 : test(toa): add synthetic 2D multilateration test suite and prioritize geometric anomaly gate (SiririComun)
 * 35715ff  - 2026-09-26 : chore(context): update repository summary with 2D multilateration engine (SiririComun)
 * dcf65c3  - 2026-09-26 : feat(kinematics): implement analytical 2D multilateration and bearing tracking solver (SiririComun)
@@ -46,8 +48,6 @@ Multi-Branch Git Commit Graph:
 * c4fbeeb  - 2026-09-26 : feat(cli): add pynq-localizer-notebooks command and update loader search paths (SiririComun)
 * e903ba2  - 2026-09-26 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc3 (SiririComun)
 * 0276251  - 2026-09-25 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2 (SiririComun)
-* 8976cf7  - 2026-09-25 : chore(context): update repository summary with PL ToA driver extensions (SiririComun)
-* fcb59e8  - 2026-09-25 : feat(trigger): add hardware ToA/TDOA 100MHz cycle registers and self-clearing pulse strobe (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -1098,12 +1098,13 @@ class HardwareTrigger:
     Interfaces via AXI4-Lite registers to configure hardware-level edge detection,
     trigger channel source selection (CH1/A0 vs CH2/A1), FFT channel routing (A0 vs A1),
     voltage thresholds, decimation factors (M=1, 10, 20, 50), FFT transform length (N=512, 1024, 2048),
-    packetizer boundaries, hardware pulse generation, and hardware-accelerated 100 MHz ToA / TDOA counters.
+    packetizer boundaries, hardware pulse generation, hardware-accelerated 100 MHz ToA / TDOA counters,
+    and quasi-anechoic direct-path energy accumulation registers.
     """
 
     # Register Byte Offsets matching axis_trigger_unit.vhd (6-bit address decoder)
     REG_CONTROL     = 0x00  # [0]=Arm, [1]=Auto, [2]=Fall, [3]=Single, [4]=Force, [5]=TrigSrc, [6]=FFTSrc, [7]=FIRE_PULSE
-    REG_STATUS      = 0x04  # [0]=Armed, [1]=Triggered, [2]=Streaming, [3]=PulseActive, [4]=Mic1Locked, [5]=Mic2Locked, [6]=ToaDone
+    REG_STATUS      = 0x04  # [0]=Armed, [1]=Triggered, [2]=Streaming, [3]=PulseActive, [4]=Mic1Locked, [5]=Mic2Locked, [6]=ToaDone, [7]=Mic1GateDone, [8]=Mic2GateDone
     REG_THRESHOLD   = 0x08  # [15:0] 12-bit left-aligned comparator threshold
     REG_TIMEOUT     = 0x0C  # [31:0] Auto-trigger timeout in clock cycles
     REG_HYSTERESIS  = 0x10  # [15:0] Noise rejection band
@@ -1117,6 +1118,11 @@ class HardwareTrigger:
     REG_MIC2_TOA    = 0x28  # [31:0] Mic 2 arrival timestamp in 100 MHz clock cycles (10.0 ns ticks)
     REG_TOA_CONFIG  = 0x2C  # [31:16]=Blanking cycles (10 ns ticks), [15:0]=Threshold delta counts
     REG_MIC_DC_REF  = 0x30  # [31:16]=Mic 2 DC baseline, [15:0]=Mic 1 DC baseline
+
+    # Quasi-Anechoic Direct-Path Energy Registers
+    REG_MIC1_DIRECT_ENERGY = 0x34  # [31:0] Direct line-of-sight squared sample sum for Mic 1
+    REG_MIC2_DIRECT_ENERGY = 0x38  # [31:0] Direct line-of-sight squared sample sum for Mic 2
+    REG_GATE_CONFIG        = 0x3C  # [15:0] Direct gate integration sample count N_gate (Default 576 = 0x0240)
 
     # Bit masks for REG_CONTROL (0x00)
     BIT_ARM          = 1 << 0  # Bit 0: Arm trigger unit
@@ -1136,6 +1142,8 @@ class HardwareTrigger:
     STATUS_MIC1_TOA_LOCKED = 1 << 4  # Bit 4: 1 when Mic 1 (A0) wavefront arrival is latched
     STATUS_MIC2_TOA_LOCKED = 1 << 5  # Bit 5: 1 when Mic 2 (A1) wavefront arrival is latched
     STATUS_TOA_DONE        = 1 << 6  # Bit 6: 1 when both channels locked or 50 ms timeout expired
+    STATUS_MIC1_GATE_DONE  = 1 << 7  # Bit 7: 1 when Mic 1 direct gate has accumulated N_gate samples
+    STATUS_MIC2_GATE_DONE  = 1 << 8  # Bit 8: 1 when Mic 2 direct gate has accumulated N_gate samples
 
     DECIMATION_MAP = {
         1: 0,   # "00" -> M = 1 (Bypass: 500 kSPS Lab Scope)
@@ -4825,7 +4833,11 @@ import os
 import json
 import urllib.request
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict{
+  "repo": "SiririComun/hw-xadc-dma-overlays",
+  "version": "v1.5.2-rc3",
+  "overlay_name": "pynq_z2"
+}
 
 try:
     from pynq import Overlay
@@ -4839,7 +4851,7 @@ class HardwareLoader:
     """
 
     DEFAULT_OVERLAY_REPO = "SiririComun/hw-xadc-dma-overlays"
-    DEFAULT_OVERLAY_VERSION = "v1.5.2-rc3"
+    DEFAULT_OVERLAY_VERSION = "v1.5.2-rc4"
 
     @staticmethod
     def get_project_root() -> Path:
