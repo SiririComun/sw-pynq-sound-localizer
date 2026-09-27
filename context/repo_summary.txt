@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 35715ff
+• Repository State    : feat/pulse-time-of-arrival @ 20a0ec2
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc3
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (4 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         35715ff [origin/feat/pulse-time-of-arrival: ahead 2] chore(context): update repository summary with 2D multilateration engine
+* feat/pulse-time-of-arrival                         20a0ec2 [origin/feat/pulse-time-of-arrival] chore(context): update repository summary with passing 2D multilateration tests
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          21ceffc docs(notebook): overhaul Notebook 05 with star-ground timing and empirical 1.8758ms offset
+  remotes/origin/feat/pulse-time-of-arrival          20a0ec2 chore(context): update repository summary with passing 2D multilateration tests
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,9 +33,11 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 35715ff  (HEAD -> feat/pulse-time-of-arrival) - 2026-09-26 : chore(context): update repository summary with 2D multilateration engine (SiririComun)
+* 20a0ec2  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-26 : chore(context): update repository summary with passing 2D multilateration tests (SiririComun)
+* 885362a  - 2026-09-26 : test(toa): add synthetic 2D multilateration test suite and prioritize geometric anomaly gate (SiririComun)
+* 35715ff  - 2026-09-26 : chore(context): update repository summary with 2D multilateration engine (SiririComun)
 * dcf65c3  - 2026-09-26 : feat(kinematics): implement analytical 2D multilateration and bearing tracking solver (SiririComun)
-* 21ceffc  (origin/feat/pulse-time-of-arrival) - 2026-09-26 : docs(notebook): overhaul Notebook 05 with star-ground timing and empirical 1.8758ms offset (SiririComun)
+* 21ceffc  - 2026-09-26 : docs(notebook): overhaul Notebook 05 with star-ground timing and empirical 1.8758ms offset (SiririComun)
 * 9df6179  - 2026-09-26 : docs(notebook): overhaul Notebook 05 with star-ground timing and 1.808ms offset (SiririComun)
 * f7d6571  - 2026-09-26 : feat(array): overhaul capture_pulsed_toa_frame with star-ground timing and 1.808ms offset (SiririComun)
 * 5c789ea  - 2026-09-26 : fix(profile): update active buzzer turn-on delay to 1.808ms based on acoustic measurements (SiririComun)
@@ -46,8 +48,6 @@ Multi-Branch Git Commit Graph:
 * 0276251  - 2026-09-25 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc2 (SiririComun)
 * 8976cf7  - 2026-09-25 : chore(context): update repository summary with PL ToA driver extensions (SiririComun)
 * fcb59e8  - 2026-09-25 : feat(trigger): add hardware ToA/TDOA 100MHz cycle registers and self-clearing pulse strobe (SiririComun)
-* a6314c3  - 2026-09-25 : chore(context): update repository summary after v1.3.0 version bump (SiririComun)
-* 7a880d0  - 2026-09-25 : chore(release): bump package version to v1.3.0 and include profiles in package data (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -4992,6 +4992,7 @@ LOCALIZER_NOTEBOOKS = [
     "03_phase_angle_of_arrival_lab.ipynb",
     "04_air_track_differential_doppler.ipynb",
     "05_pulse_time_of_arrival_lab.ipynb",
+    "06_planar_tdoa_sound_localizer.ipynb",
 ]
 
 def install_localizer_notebooks(target_dir: str = None):
@@ -8123,5 +8124,419 @@ print("=" * 85)
 # %% [code] Cell 6: Clean Teardown & FPGA Memory Release
 ol.close()
 print("🔒 FPGA hardware resources cleanly released.")
+
+```
+
+06_planar_tdoa_sound_localizer.ipynb: (notebooks/06_planar_tdoa_sound_localizer.ipynb)
+
+```python
+# %% [markdown] Cell 1
+# 🎯 Notebook 6: 2D Planar Acoustic Sound Source Localization & Tracking
+# Welcome to the **2D Acoustic Sound Source Localizer & Radar Laboratory** (`v1.3.0`).
+# This notebook expands the 1D Time of Arrival (ToA) engine into a **complete 2D planar acoustic tracking radar** on the **PYNQ-Z2 board (`xc7z020clg400-1`)**:
+# ---
+### 🏛️ 2D Planar Operating Principles
+# 1. **Synchronous Pulse Emission ($10\,\text{ns}$ Resolution):**
+# The FPGA drives Arduino digital pin **`AR2` (Pin `U13`)** HIGH to actuate the 2N2222A buzzer switch, starting cycle 0 at the exact moment of emission.
+# 2. **Dual-Channel Radial Distances ($r_1, r_2$):**
+# Subtracting calibrated piezo ignition delays ($t_{\text{offset}, 1}, t_{\text{offset}, 2}$) gives absolute flight times and ranges:
+# $$r_1 = c(T) \cdot (t_1 - t_{\text{offset}, 1}), \quad r_2 = c(T) \cdot (t_2 - t_{\text{offset}, 2})$$
+# 3. **TDOA Incident Bearing Angle ($\theta$):**
+# The acoustic path difference $\Delta r = r_1 - r_2$ inverts to incident angle relative to broadside ($0^\circ$):
+# $$\theta = \arcsin\left(\text{clip}\left(\frac{r_1 - r_2}{d},\, -1.0,\, 1.0\right)\right)$$
+# 4. **Reconstructed Planar Coordinates $(x, y)$:**
+# Following the geometry of **Notebook 03**, array midpoint is $(0, 0)$ with Mic 1 at $(-d/2, 0)$ and Mic 2 at $(+d/2, 0)$:
+# $$r = \frac{r_1 + r_2}{2}, \quad x = r \cdot \sin(\theta), \quad y = r \cdot \cos(\theta)$$
+# * $\theta = 0^\circ \implies$ Broadside center ($x = 0$)
+# * $\theta > 0^\circ \implies$ Right sector ($x > 0$, closer to Mic 2)
+# * $\theta < 0^\circ \implies$ Left sector ($x < 0$, closer to Mic 1)
+
+# %% [markdown] Cell 2
+## 1. Array Geometry & Star Ground Wiring
+# Ensure your hardware is connected according to the **Star Ground** topology:
+# * **Mic 1 (Left / A0):** Positioned at $(-2.5\,\text{cm}, 0)$ on your baseline.
+# * **Mic 2 (Right / A1):** Positioned at $(+2.5\,\text{cm}, 0)$ on your baseline ($d = 5.0\,\text{cm}$).
+# * **Actuator (AR2 / Digital 2):** Connects through $1\,\text{k}\Omega$ resistor to 2N2222A transistor base.
+# * **Power Separation:** Microphones powered from PYNQ $3.3\,\text{V}$ / Clean GND. Buzzer powered from external $5\,\text{V}$ / Noisy GND.
+
+# %% [code] Cell 3
+# %% [code] Cell 1: Environment Setup & Hardware Initialization
+import json
+import time
+from pathlib import Path
+import numpy as np
+import scipy.signal as signal
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from pynq_localizer import MicrophoneArrayOverlay, KinematicAnalytics
+
+# 1. Initialize Overlay (500 kSPS per channel, M=1 bypass)
+ol = MicrophoneArrayOverlay(version="v1.5.2-rc3")
+dma = ol.axi_dma_0
+
+if not dma.recvchannel.running:
+    dma.mmio.write(0x30, 0x04)
+    time.sleep(0.005)
+    dma.recvchannel.start()
+
+# 2. Physical & Array Constants
+d_baseline_m = 0.050   # 5.0 cm microphone spacing
+temperature_c = 20.0
+c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
+f0 = 2609.73
+lambda_cm = (c_sound / f0) * 100.0  # 13.15 cm
+d_cm = d_baseline_m * 100.0
+
+print("=" * 80)
+print("✅ 2D ACOUSTIC LOCALIZER INITIALIZED")
+print("=" * 80)
+print(f"• Sampling Rate      : {ol.fs_per_ch:.0f} SPS (0.00 µs skew)")
+print(f"• Speed of Sound     : {c_sound:.2f} m/s (at {temperature_c}°C)")
+print(f"• Array Baseline (d) : {d_cm:.1f} cm (Mic 1 at -2.5cm, Mic 2 at +2.5cm)")
+print(f"• Carrier Wavelength : {lambda_cm:.2f} cm (Cycle Slip Period)")
+print("=" * 80)
+
+# %% [markdown] Cell 4
+## 2. Symmetrical Dual-Channel Standoff Calibration ($10.0\,\text{cm}$)
+# Position the buzzer so it is **$10.0\,\text{cm}$ from Mic 1 AND $10.0\,\text{cm}$ from Mic 2** (forming an isosceles triangle).
+# This measures $t_{\text{offset}, 1}$ and $t_{\text{offset}, 2}$ independently, zeroing inter-channel skew and broadside bias.
+
+# %% [code] Cell 5
+# %% [code] Cell 2: Symmetrical Dual-Channel Standoff Calibration
+r_ref_cm = 10.0
+t_air_ref_ms = (r_ref_cm / 100.0) / c_sound * 1000.0  # ~0.2914 ms
+
+print("=" * 80)
+print(f"📏 SYMMETRICAL DUAL-CHANNEL CALIBRATION (r_ref = {r_ref_cm:.1f} cm to BOTH mics)")
+print("=" * 80)
+input("👉 Place buzzer at EXACTLY 10.0 cm from Mic 1 AND 10.0 cm from Mic 2. Press [Enter]...")
+
+n_cal_shots = 10
+cal_t1 = []
+cal_t2 = []
+
+for shot in range(n_cal_shots):
+    res = ol.capture_pulsed_toa_frame(
+        pulse_width_ms=10.0,
+        packet_samples=16384,
+        f_target=f0,
+        calibrated_offset_ms=0.0,
+        temperature_c=temperature_c,
+        mic_distance_m=d_baseline_m,
+        blanking_ms=2.00,
+        min_thresh_mv=15.0,
+        timeout=1.0
+    )
+    if np.isfinite(res["t1_raw_ms"]) and np.isfinite(res["t2_raw_ms"]):
+        cal_t1.append(res["t1_raw_ms"])
+        cal_t2.append(res["t2_raw_ms"])
+    time.sleep(0.12)
+
+# Discard Shot 1 (cold start)
+stable_t1 = cal_t1[1:]
+stable_t2 = cal_t2[1:]
+
+t1_median_ms = float(np.median(stable_t1))
+t2_median_ms = float(np.median(stable_t2))
+
+t_offset1_ms = t1_median_ms - t_air_ref_ms
+t_offset2_ms = t2_median_ms - t_air_ref_ms
+skew_us = (t_offset1_ms - t_offset2_ms) * 1000.0
+
+print("\n" + "=" * 80)
+print("🏆 CALIBRATION SUMMARY:")
+print("=" * 80)
+print(f"• Mic 1 Calibrated t_offset : {t_offset1_ms:.4f} ms (σ = ±{np.std(stable_t1)*1000:.1f} µs)")
+print(f"• Mic 2 Calibrated t_offset : {t_offset2_ms:.4f} ms (σ = ±{np.std(stable_t2)*1000:.1f} µs)")
+print(f"• Inter-Channel Skew (Δt)   : {skew_us:+.1f} µs ({skew_us * 1e-6 * c_sound * 1000.0:+.2f} mm)")
+print("=" * 80)
+print("✅ Broadside origin (x = 0.0 cm) is now zeroed!")
+
+# %% [markdown] Cell 6
+## 3. Coherence-Locked Wavefront Detector Function
+# We define the 2-cycle coherent detector that requires 2 consecutive periods of the $2610\,\text{Hz}$ tone to trigger, eliminating isolated electrical transients.
+
+# %% [code] Cell 7
+# %% [code] Cell 3: Coherence-Locked Detection Function
+def find_wavefront_coherent(v_bp, env, fs=500000.0, blank_ms=2.00, min_thresh_mv=15.0):
+    blank_idx = int((blank_ms / 1000.0) * fs)
+    peak_val = float(np.max(env[blank_idx:]))
+    thresh = max(min_thresh_mv, 0.20 * peak_val)
+    
+    zc = np.where((v_bp[:-1] <= 0) & (v_bp[1:] > 0))[0]
+    for i in range(len(zc) - 2):
+        z0, z1, z2 = zc[i], zc[i + 1], zc[i + 2]
+        if z0 < blank_idx:
+            continue
+            
+        p0 = z1 - z0
+        p1 = z2 - z1
+        amp0 = np.max(v_bp[z0:z1]) - np.min(v_bp[z0:z1])
+        amp1 = np.max(v_bp[z1:z2]) - np.min(v_bp[z1:z2])
+        
+        if (150 <= p0 <= 230) and (150 <= p1 <= 230) and (amp0 >= thresh) and (amp1 >= 0.8 * thresh):
+            frac = -v_bp[z0] / (v_bp[z0 + 1] - v_bp[z0]) if abs(v_bp[z0 + 1] - v_bp[z0]) > 1e-6 else 0.0
+            return (float(z0) + frac) / fs * 1000.0
+    return np.nan
+
+print("✅ Coherence-locked detection function ready.")
+
+# %% [markdown] Cell 8
+## 4. Single-Shot 2D Spatial Sounder
+# Move the buzzer to any position in front of the array and execute a single acoustic ping to calculate and display $r_1, r_2, \Delta r, x, y, r, \theta$, and waveform arrival lines.
+
+# %% [code] Cell 9
+# %% [code] Cell 4: Single-Shot 2D Spatial Sounder
+input("👉 Place buzzer at an arbitrary desk position and press [Enter]...")
+
+res = ol.capture_pulsed_toa_frame(
+    pulse_width_ms=10.0,
+    packet_samples=16384,
+    f_target=f0,
+    calibrated_offset_ms=0.0,
+    temperature_c=temperature_c,
+    mic_distance_m=d_baseline_m,
+    blanking_ms=2.00,
+    min_thresh_mv=15.0,
+    timeout=1.0
+)
+
+t1_raw = find_wavefront_coherent(res["v1_bp"], res["env1"])
+t2_raw = find_wavefront_coherent(res["v2_bp"], res["env2"])
+
+if np.isfinite(t1_raw) and np.isfinite(t2_raw):
+    t1_s = max(0.0, t1_raw - t_offset1_ms) / 1000.0
+    t2_s = max(0.0, t2_raw - t_offset2_ms) / 1000.0
+    
+    r1 = c_sound * t1_s * 100.0
+    r2 = c_sound * t2_s * 100.0
+    dr = r1 - r2
+    
+    if abs(dr) > d_cm:
+        dr = dr - np.sign(dr) * lambda_cm
+        
+    sin_th = np.clip(dr / d_cm, -1.0, 1.0)
+    theta_deg = float(np.degrees(np.arcsin(sin_th)))
+    range_cm = r1
+    
+    rad = np.radians(theta_deg)
+    x_cm = range_cm * np.sin(rad)
+    y_cm = range_cm * np.cos(rad)
+    
+    print("=" * 78)
+    print("🎯 2D LOCALIZATION RESULT:")
+    print("=" * 78)
+    print(f"• Mic 1 Distance (r1)  : {r1:5.1f} cm (Flight: {t1_s*1000:.3f} ms)")
+    print(f"• Mic 2 Distance (r2)  : {r2:5.1f} cm (Flight: {t2_s*1000:.3f} ms)")
+    print(f"• Path Delta (Δr)      : {dr:+5.1f} cm")
+    print(f"• Range from Center    : {range_cm:5.1f} cm")
+    print(f"• Bearing Angle (θ)    : {theta_deg:+5.1f}° ({'RIGHT' if theta_deg>2 else ('LEFT' if theta_deg<-2 else 'CENTER')})")
+    print(f"• Cartesian Position   : (x = {x_cm:+5.1f} cm, y = {y_cm:4.1f} cm)")
+    print("=" * 78)
+else:
+    print("⚠️ Weak acoustic signal detected. Check buzzer position.")
+
+# %% [markdown] Cell 10
+## 5. Live 2D Real-Time Spatial Radar Dashboard
+# Launch the **Live 2D Radar Canvas**. Click **`Start Radar`**, hold the buzzer in your hand, and move it freely around your desk.
+# * The wide **$120\,\text{cm}$ box** and **concentric range rings ($25, 50, 75, 100\,\text{cm}$)** frame the workspace cleanly.
+# * The **bearing ray** points at your angle in real time, and the **buzzer marker** follows your hand distance.
+
+# %% [code] Cell 11
+# %% [code] Cell 5: Live 2D Acoustic Radar Dashboard
+import threading
+from collections import deque
+import ipywidgets as widgets
+
+start_btn = widgets.Button(description="Start Radar", button_style="success", icon="play", layout=widgets.Layout(width="130px"))
+stop_btn = widgets.Button(description="Stop", button_style="danger", icon="stop", layout=widgets.Layout(width="100px"))
+hud_label = widgets.HTML(
+    "<span style='color:#00FFCC; font-family:monospace; font-size:14px; font-weight:bold;'>"
+    "Range: --- cm | Angle (θ): ---° | Position: (x = --- cm, y = --- cm) | Status: IDLE"
+    "</span>"
+)
+
+fig_radar = go.FigureWidget()
+
+# Baseline (y = 0)
+fig_radar.add_scatter(
+    x=[-d_cm / 2.0, d_cm / 2.0], y=[0.0, 0.0],
+    mode="lines+markers+text",
+    marker=dict(size=14, color=["#00FFCC", "#FF007F"]),
+    line=dict(color="white", width=4),
+    text=["Mic 1", "Mic 2"],
+    textposition="bottom center",
+    name="Mic Array"
+)
+
+# Bearing Vector (Trace 1)
+fig_radar.add_scatter(
+    x=[0.0, 0.0], y=[0.0, 50.0],
+    mode="lines",
+    line=dict(color="#00E5FF", width=2.5, dash="dash"),
+    name="Bearing Vector"
+)
+
+# Live Source Marker (Trace 2)
+fig_radar.add_scatter(
+    x=[0.0], y=[50.0],
+    mode="markers+text",
+    marker=dict(size=16, color="#FFA500", symbol="diamond", line=dict(color="white", width=2)),
+    text=["Buzzer"],
+    textposition="top center",
+    name="Live Source"
+)
+
+# Distance Rings (25, 50, 75, 100 cm)
+arc_angles = np.radians(np.linspace(-65, 65, 65))
+for r_ring in [25.0, 50.0, 75.0, 100.0]:
+    fig_radar.add_scatter(
+        x=r_ring * np.sin(arc_angles),
+        y=r_ring * np.cos(arc_angles),
+        mode="lines",
+        line=dict(color="rgba(255, 255, 255, 0.18)", width=1.2, dash="dot"),
+        showlegend=False,
+        hoverinfo="skip"
+    )
+    fig_radar.add_annotation(
+        x=0, y=r_ring,
+        text=f"{int(r_ring)} cm",
+        showarrow=False,
+        font=dict(size=10, color="#888888"),
+        yshift=7
+    )
+
+# Guide Rays
+for deg in [-45, -30, -15, 0, 15, 30, 45]:
+    rad = np.radians(deg)
+    col = "#76FF03" if deg == 0 else "gray"
+    fig_radar.add_scatter(
+        x=[0.0, 115.0 * np.sin(rad)], y=[0.0, 115.0 * np.cos(rad)],
+        mode="lines",
+        line=dict(color=col, width=1, dash="dot"),
+        showlegend=False,
+        hoverinfo="skip"
+    )
+
+fig_radar.update_layout(
+    template="plotly_dark",
+    height=720, width=850,
+    title="<b>Live 2D Acoustic Radar & Source Tracking (120 cm Scope)</b>",
+    xaxis=dict(title="Lateral Position X (cm) [◄ Left | Right ►]", range=[-65, 65], zeroline=True),
+    yaxis=dict(title="Forward Distance Y (cm)", range=[-5, 120], zeroline=True),
+    margin=dict(l=40, r=40, t=50, b=40),
+    uirevision="radar_active"
+)
+
+radar_running = False
+radar_thread = None
+hist_r = deque(maxlen=3)
+hist_th = deque(maxlen=3)
+
+def radar_worker():
+    global radar_running
+    while radar_running:
+        try:
+            if not dma.recvchannel.running or not dma.recvchannel.idle:
+                dma.mmio.write(0x30, 0x04)
+                time.sleep(0.005)
+                dma.recvchannel.start()
+                time.sleep(0.002)
+
+            res = ol.capture_pulsed_toa_frame(
+                pulse_width_ms=10.0,
+                packet_samples=16384,
+                f_target=f0,
+                calibrated_offset_ms=0.0,
+                temperature_c=temperature_c,
+                mic_distance_m=d_baseline_m,
+                blanking_ms=2.00,
+                min_thresh_mv=15.0,
+                timeout=0.8
+            )
+
+            t1_raw = find_wavefront_coherent(res["v1_bp"], res["env1"], blank_ms=2.00, min_thresh_mv=15.0)
+            t2_raw = find_wavefront_coherent(res["v2_bp"], res["env2"], blank_ms=2.00, min_thresh_mv=15.0)
+
+            if np.isfinite(t1_raw) and np.isfinite(t2_raw):
+                t1_s = max(0.0, t1_raw - t_offset1_ms) / 1000.0
+                t2_s = max(0.0, t2_raw - t_offset2_ms) / 1000.0
+
+                r1 = c_sound * t1_s * 100.0
+                r2 = c_sound * t2_s * 100.0
+                if r1 > 115.0:
+                    time.sleep(0.15)
+                    continue
+
+                dr = r1 - r2
+                if abs(dr) > d_cm:
+                    dr = dr - np.sign(dr) * lambda_cm
+
+                sin_th = np.clip(dr / d_cm, -1.0, 1.0)
+                theta_deg = float(np.degrees(np.arcsin(sin_th)))
+
+                hist_r.append(r1)
+                hist_th.append(theta_deg)
+
+                smooth_r = float(np.median(hist_r))
+                smooth_th = float(np.median(hist_th))
+
+                rad = np.radians(smooth_th)
+                x_cm = float(smooth_r * np.sin(rad))
+                y_cm = float(smooth_r * np.cos(rad))
+
+                with fig_radar.batch_update():
+                    fig_radar.data[1].x = [0.0, x_cm]
+                    fig_radar.data[1].y = [0.0, y_cm]
+                    fig_radar.data[2].x = [x_cm]
+                    fig_radar.data[2].y = [y_cm]
+
+                dir_str = "RIGHT" if smooth_th > 3.0 else ("LEFT" if smooth_th < -3.0 else "CENTER")
+                hud_label.value = (
+                    f"<span style='color:#00FFCC; font-family:monospace; font-size:14px; font-weight:bold;'>"
+                    f"Range: <b>{smooth_r:4.1f} cm</b> | Angle (θ): <b>{smooth_th:+5.1f}° ({dir_str})</b> | "
+                    f"Pos: (x = <b>{x_cm:+5.1f}</b>, y = <b>{y_cm:4.1f}</b> cm) | Status: LIVE TRACKING"
+                    f"</span>"
+                )
+            else:
+                hud_label.value = (
+                    "<span style='color:#FFA500; font-family:monospace; font-size:14px; font-weight:bold;'>"
+                    "Range: --- cm | Angle (θ): ---° | Status: WAITING FOR PULSE"
+                    "</span>"
+                )
+        except Exception:
+            pass
+        time.sleep(0.15)
+
+def on_start_clicked(_):
+    global radar_running, radar_thread
+    if not radar_running:
+        hist_r.clear()
+        hist_th.clear()
+        radar_running = True
+        radar_thread = threading.Thread(target=radar_worker, daemon=True)
+        radar_thread.start()
+        hud_label.value = "<span style='color:#00FFCC; font-family:monospace; font-size:14px;'>Radar Active... Tracking!</span>"
+
+def on_stop_clicked(_):
+    global radar_running
+    radar_running = False
+    hud_label.value = "<span style='color:#FFA500; font-family:monospace; font-size:14px;'>Radar Stopped.</span>"
+
+start_btn.on_click(on_start_clicked)
+stop_btn.on_click(on_stop_clicked)
+
+controls = widgets.HBox([start_btn, stop_btn, hud_label], layout=widgets.Layout(gap="15px", margin="0 0 10px 0"))
+display(widgets.VBox([controls, fig_radar]))
+
+# %% [markdown] Cell 12
+## 6. Hardware Release & Teardown
+# Stop the radar loop and release the FPGA DMA memory buffers.
+
+# %% [code] Cell 13
+# %% [code] Cell 6: Clean Hardware Teardown
+radar_running = False
+ol.close()
+print("🔒 FPGA hardware and DMA buffers cleanly released.")
 
 ```
