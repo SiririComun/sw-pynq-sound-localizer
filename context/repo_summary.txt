@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ bef5b8c
+• Repository State    : feat/pulse-time-of-arrival @ 23d3e6b
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         bef5b8c [origin/feat/pulse-time-of-arrival] feat(array): integrate hardware direct-energy readback and quasi-anechoic Fourier metrics in capture_pulsed_toa_frame
+* feat/pulse-time-of-arrival                         23d3e6b [origin/feat/pulse-time-of-arrival] chore(context): register test_direct_path in Cog and update repository summary
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          bef5b8c feat(array): integrate hardware direct-energy readback and quasi-anechoic Fourier metrics in capture_pulsed_toa_frame
+  remotes/origin/feat/pulse-time-of-arrival          23d3e6b chore(context): register test_direct_path in Cog and update repository summary
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* bef5b8c  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : feat(array): integrate hardware direct-energy readback and quasi-anechoic Fourier metrics in capture_pulsed_toa_frame (SiririComun)
+* 23d3e6b  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-27 : chore(context): register test_direct_path in Cog and update repository summary (SiririComun)
+* 5ed727c  - 2026-09-27 : test(direct): add unit verification for 32-bit hardware energy count to physical voltage conversion (SiririComun)
+* bef5b8c  - 2026-09-27 : feat(array): integrate hardware direct-energy readback and quasi-anechoic Fourier metrics in capture_pulsed_toa_frame (SiririComun)
 * 4206077  - 2026-09-27 : chore(context): update repository summary with DirectPulseCalibrationProtocol (SiririComun)
 * 99dfd66  - 2026-09-27 : feat(kinematics): implement DirectPulseCalibrationProtocol for zero-intercept 1/r metrology (SiririComun)
 * 04e8de8  - 2026-09-27 : feat(kinematics): implement integer-cycle coherent direct-path Fourier demodulation (SiririComun)
@@ -46,8 +48,6 @@ Multi-Branch Git Commit Graph:
 * 1c01e0f  - 2026-09-27 : chore(hw): pin hardware overlay dependency to candidate v1.5.2-rc4 (SiririComun)
 * 8fa1088  - 2026-09-26 : chore(context): sync Cog configuration and update repository summary with Notebook 06 (SiririComun)
 * 8ca6f5f  - 2026-09-26 : feat(notebooks): add Notebook 06 for 2D planar acoustic localization and live radar tracking (SiririComun)
-* 20a0ec2  - 2026-09-26 : chore(context): update repository summary with passing 2D multilateration tests (SiririComun)
-* 885362a  - 2026-09-26 : test(toa): add synthetic 2D multilateration test suite and prioritize geometric anomaly gate (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -9359,4 +9359,73 @@ class TestDirectPathMetrology:
 
                 assert err1_pct < 0.10, f"Mic 1 voltage conversion error too high: {err1_pct}%"
                 assert err2_pct < 0.10, f"Mic 2 voltage conversion error too high: {err2_pct}%"
+
+    def test_integer_cycle_orthogonality(self):
+        """
+        Verify that integrating over exact integer cycles (K = 1, 2, 3, 4) achieves
+        pure Fourier orthogonality with zero spectral leakage and exact phase recovery
+        across arbitrary carrier phase offsets, while fractional cuts suffer severe bias.
+        """
+        fs = 500_000.0
+        f0 = 2609.73
+        v_peak = 0.080  # 80 mV peak -> V_RMS = 56.5685 mV
+        v_expected_rms = v_peak / np.sqrt(2.0)
+
+        test_phases = [0.0, np.pi / 4.0, np.pi / 2.0, 3.0 * np.pi / 4.0, -np.pi / 3.0]
+        test_cycles = [1, 2, 3, 4]
+
+        # 1. Verify exact integer cycle orthogonality across all phases
+        for k_cycles in test_cycles:
+            for phi_true in test_phases:
+                samples_per_cycle = int(round(fs / f0))
+                n_samples = k_cycles * samples_per_cycle
+
+                t = np.arange(n_samples) / fs
+                tone = v_peak * np.cos(2.0 * np.pi * f0 * t + phi_true)
+
+                res = KinematicAnalytics.extract_gated_direct_fourier(
+                    signal_v=tone,
+                    fs=fs,
+                    f0=f0,
+                    n_cycles=k_cycles,
+                    start_idx=0,
+                    remove_dc=True
+                )
+
+                assert res["is_valid"] is True
+                assert res["n_samples_gated"] == n_samples
+
+                err_amp_pct = abs(res["amplitude_v"] - v_expected_rms) / v_expected_rms * 100.0
+                err_phi = abs(np.arctan2(np.sin(res["phase_rad"] - phi_true), np.cos(res["phase_rad"] - phi_true)))
+
+                # Exact integer cycles achieve < 0.30% error (bounded by 191.59 -> 192 integer rounding)
+                assert err_amp_pct < 0.30, (
+                    f"Orthogonality failed: K={k_cycles}, phi={phi_true:.2f} rad | "
+                    f"Amp Err={err_amp_pct:.3f}%"
+                )
+                assert err_phi < 0.02, (
+                    f"Phase recovery failed: K={k_cycles}, phi={phi_true:.2f} rad | "
+                    f"Phi Err={err_phi:.4f} rad"
+                )
+
+        # 2. Contrast with non-integer fractional truncation (e.g. 2.4 cycles)
+        # Demonstrates the spectral leakage bias when orthogonality is violated
+        fractional_samples = int(2.4 * (fs / f0))
+        t_frac = np.arange(fractional_samples) / fs
+        # Worst-case phase for rectangular leakage
+        tone_leaking = v_peak * np.cos(2.0 * np.pi * f0 * t_frac + np.pi / 4.0)
+
+        # Unwindowed projection over non-integer window
+        t_local = np.arange(fractional_samples) / fs
+        phasor = np.exp(-2.0j * np.pi * f0 * t_local)
+        x_leaking = (2.0 / fractional_samples) * np.dot(tone_leaking - np.mean(tone_leaking), phasor)
+        v_rms_leaking = np.abs(x_leaking) / np.sqrt(2.0)
+
+        err_leak_pct = abs(v_rms_leaking - v_expected_rms) / v_expected_rms * 100.0
+
+        print(f"\n[Orthogonality Test] K=3 integer error    : {err_amp_pct:.4f}%")
+        print(f"[Orthogonality Test] K=2.4 fractional error: {err_leak_pct:.2f}%")
+
+        # Fractional cut must exhibit substantial spectral leakage (> 2.0%) compared to integer cut
+        assert err_leak_pct > 2.0, "Expected fractional cut to exhibit significant leakage bias!"
 ```

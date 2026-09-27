@@ -88,3 +88,72 @@ class TestDirectPathMetrology:
 
                 assert err1_pct < 0.10, f"Mic 1 voltage conversion error too high: {err1_pct}%"
                 assert err2_pct < 0.10, f"Mic 2 voltage conversion error too high: {err2_pct}%"
+    
+    def test_integer_cycle_orthogonality(self):
+        """
+        Verify that integrating over exact integer cycles (K = 1, 2, 3, 4) achieves
+        pure Fourier orthogonality with zero spectral leakage and exact phase recovery
+        across arbitrary carrier phase offsets, while fractional cuts suffer severe bias.
+        """
+        fs = 500_000.0
+        f0 = 2609.73
+        v_peak = 0.080  # 80 mV peak -> V_RMS = 56.5685 mV
+        v_expected_rms = v_peak / np.sqrt(2.0)
+
+        test_phases = [0.0, np.pi / 4.0, np.pi / 2.0, 3.0 * np.pi / 4.0, -np.pi / 3.0]
+        test_cycles = [1, 2, 3, 4]
+
+        # 1. Verify exact integer cycle orthogonality across all phases
+        for k_cycles in test_cycles:
+            for phi_true in test_phases:
+                samples_per_cycle = int(round(fs / f0))
+                n_samples = k_cycles * samples_per_cycle
+
+                t = np.arange(n_samples) / fs
+                tone = v_peak * np.cos(2.0 * np.pi * f0 * t + phi_true)
+
+                res = KinematicAnalytics.extract_gated_direct_fourier(
+                    signal_v=tone,
+                    fs=fs,
+                    f0=f0,
+                    n_cycles=k_cycles,
+                    start_idx=0,
+                    remove_dc=True
+                )
+
+                assert res["is_valid"] is True
+                assert res["n_samples_gated"] == n_samples
+
+                err_amp_pct = abs(res["amplitude_v"] - v_expected_rms) / v_expected_rms * 100.0
+                err_phi = abs(np.arctan2(np.sin(res["phase_rad"] - phi_true), np.cos(res["phase_rad"] - phi_true)))
+
+                # Exact integer cycles achieve < 0.30% error (bounded by 191.59 -> 192 integer rounding)
+                assert err_amp_pct < 0.30, (
+                    f"Orthogonality failed: K={k_cycles}, phi={phi_true:.2f} rad | "
+                    f"Amp Err={err_amp_pct:.3f}%"
+                )
+                assert err_phi < 0.02, (
+                    f"Phase recovery failed: K={k_cycles}, phi={phi_true:.2f} rad | "
+                    f"Phi Err={err_phi:.4f} rad"
+                )
+
+        # 2. Contrast with non-integer fractional truncation (e.g. 2.4 cycles)
+        # Demonstrates the spectral leakage bias when orthogonality is violated
+        fractional_samples = int(2.4 * (fs / f0))
+        t_frac = np.arange(fractional_samples) / fs
+        # Worst-case phase for rectangular leakage
+        tone_leaking = v_peak * np.cos(2.0 * np.pi * f0 * t_frac + np.pi / 4.0)
+
+        # Unwindowed projection over non-integer window
+        t_local = np.arange(fractional_samples) / fs
+        phasor = np.exp(-2.0j * np.pi * f0 * t_local)
+        x_leaking = (2.0 / fractional_samples) * np.dot(tone_leaking - np.mean(tone_leaking), phasor)
+        v_rms_leaking = np.abs(x_leaking) / np.sqrt(2.0)
+
+        err_leak_pct = abs(v_rms_leaking - v_expected_rms) / v_expected_rms * 100.0
+
+        print(f"\n[Orthogonality Test] K=3 integer error    : {err_amp_pct:.4f}%")
+        print(f"[Orthogonality Test] K=2.4 fractional error: {err_leak_pct:.2f}%")
+
+        # Fractional cut must exhibit substantial spectral leakage (> 2.0%) compared to integer cut
+        assert err_leak_pct > 2.0, "Expected fractional cut to exhibit significant leakage bias!"
