@@ -15,7 +15,7 @@ def generate_synthetic_2d_stereo_frame(
     x_m: float,
     y_m: float,
     d_m: float = 0.050,
-    f0: float = 2609.73,
+    f0: float = 2660.0,
     amplitude_v: float = 0.150,
     fs: float = 50000.0,
     n_samples: int = 5000,
@@ -67,7 +67,7 @@ class TestTimeOfArrivalEngine:
     def calibrated_offset_ms(self):
         """Calibrates system onset lag (buzzer rise + filter delay) from a reference onset burst."""
         fs = 50000.0
-        f0 = 2609.73
+        f0 = 2660.0
         tau_rise = 0.001808 / np.log(2.0)
         t_axis = np.arange(5000) / fs
         v_cal = 0.150 * (1.0 - np.exp(-t_axis / tau_rise)) * np.cos(2.0 * np.pi * f0 * t_axis)
@@ -99,7 +99,7 @@ class TestTimeOfArrivalEngine:
         x_true, y_true = 0.150, 0.300
         r1_true = np.sqrt((x_true + d / 2.0) ** 2 + y_true ** 2)
         r2_true = np.sqrt((x_true - d / 2.0) ** 2 + y_true ** 2)
-        expected_theta = np.degrees(np.arctan2(x_true, y_true))  # ~+26.565°
+        expected_theta = np.degrees(np.arctan2(x_true, y_true))
 
         res = KinematicAnalytics.solve_2d_multilateration(r1_true, r2_true, d)
 
@@ -115,7 +115,7 @@ class TestTimeOfArrivalEngine:
         x_true, y_true = -0.150, 0.300
         r1_true = np.sqrt((x_true + d / 2.0) ** 2 + y_true ** 2)
         r2_true = np.sqrt((x_true - d / 2.0) ** 2 + y_true ** 2)
-        expected_theta = np.degrees(np.arctan2(x_true, y_true))  # ~-26.565°
+        expected_theta = np.degrees(np.arctan2(x_true, y_true))
 
         res = KinematicAnalytics.solve_2d_multilateration(r1_true, r2_true, d)
 
@@ -127,7 +127,6 @@ class TestTimeOfArrivalEngine:
     def test_multilateration_triangle_inequality_gate(self):
         """Verify that |r1 - r2| > d flags GEOMETRIC_OUT_OF_BOUNDS and clamps gracefully."""
         d = 0.050
-        # Physical impossibility: delta_r = 0.080 m > d (0.050 m)
         r1, r2 = 0.500, 0.420
         res = KinematicAnalytics.solve_2d_multilateration(r1, r2, d, wrap_modulo_lambda=False)
 
@@ -137,12 +136,10 @@ class TestTimeOfArrivalEngine:
 
     def test_cycle_slip_parity_reconstruction(self):
         """Verify that delta_r exceeding baseline is repaired via modulo-lambda wrapping."""
-        d = 0.050  # 5 cm baseline
+        d = 0.050
         f0 = 2660.0
         c_sound = 343.21
 
-        # Emulate a cycle slip: delta_r_raw = 0.080 m (> d = 0.050 m)
-        # Should wrap by -lambda_m: 0.080 - 0.129 = -0.049 m (<= d)
         r1, r2 = 0.500, 0.420
         res = KinematicAnalytics.solve_2d_multilateration(
             r1, r2, d, f0=f0, c_sound=c_sound, wrap_modulo_lambda=True
@@ -160,10 +157,10 @@ class TestTimeOfArrivalEngine:
     def test_2d_waveform_localization_broadside(self, calibrated_offset_ms):
         """Verify waveform end-to-end 2D solver at (x=0, y=40cm)."""
         x_t, y_t, d = 0.0, 0.400, 0.050
-        v0, v1, r1, r2, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d)
+        v0, v1, r1, r2, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d, f0=2660.0)
 
         estimator = TimeOfArrivalEstimator(
-            nominal_f0_hz=2609.73,
+            nominal_f0_hz=2660.0,
             mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
@@ -177,10 +174,10 @@ class TestTimeOfArrivalEngine:
     def test_2d_waveform_localization_right_sector(self, calibrated_offset_ms):
         """Verify waveform end-to-end 2D solver at (x=+15cm, y=30cm)."""
         x_t, y_t, d = 0.150, 0.300, 0.050
-        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d)
+        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d, f0=2660.0)
 
         estimator = TimeOfArrivalEstimator(
-            nominal_f0_hz=2609.73,
+            nominal_f0_hz=2660.0,
             mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
@@ -194,10 +191,10 @@ class TestTimeOfArrivalEngine:
     def test_2d_waveform_localization_left_sector(self, calibrated_offset_ms):
         """Verify waveform end-to-end 2D solver at (x=-15cm, y=30cm)."""
         x_t, y_t, d = -0.150, 0.300, 0.050
-        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d)
+        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d, f0=2660.0)
 
         estimator = TimeOfArrivalEstimator(
-            nominal_f0_hz=2609.73,
+            nominal_f0_hz=2660.0,
             mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
@@ -215,13 +212,13 @@ class TestTimeOfArrivalEngine:
     def test_emission_timestamp_offset(self, calibrated_offset_ms):
         """Verify non-zero pulse emission timestamp subtraction."""
         x_t, y_t, d = 0.0, 0.400, 0.050
-        t_emit = 0.050  # 50 ms emission timestamp
+        t_emit = 0.050
         v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(
-            x_m=x_t, y_m=y_t, d_m=d, t_emission_sec=t_emit
+            x_m=x_t, y_m=y_t, d_m=d, f0=2660.0, t_emission_sec=t_emit
         )
 
         estimator = TimeOfArrivalEstimator(
-            nominal_f0_hz=2609.73,
+            nominal_f0_hz=2660.0,
             mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
@@ -233,10 +230,10 @@ class TestTimeOfArrivalEngine:
     def test_noise_gate_silence_rejection(self, calibrated_offset_ms):
         """Verify weak signals below noise gate return status SILENCE and NaN coordinates."""
         v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(
-            x_m=0.0, y_m=0.50, amplitude_v=0.003
+            x_m=0.0, y_m=0.50, f0=2660.0, amplitude_v=0.003
         )
         estimator = TimeOfArrivalEstimator(
-            nominal_f0_hz=2609.73,
+            nominal_f0_hz=2660.0,
             calibrated_offset_ms=calibrated_offset_ms,
             noise_gate_v=0.020
         )
@@ -249,12 +246,14 @@ class TestTimeOfArrivalEngine:
 
     def test_profile_loading_integration(self):
         """Verify profile parameter resolution and calibrated offset alignment."""
-        profile_path = Path("profiles/active_buzzer_2610hz.json")
+        profile_path = Path("profiles/active_buzzer_profile.json")
+        if not profile_path.exists():
+            profile_path = Path("profiles/active_buzzer_2610hz.json")
         assert profile_path.exists(), "Profile file missing!"
 
         with open(profile_path, "r", encoding="utf-8") as f:
             profile_data = json.load(f)
-        expected_offset = float(profile_data.get("calibrated_toa_offset_ms", 1.8080))
+        expected_offset = float(profile_data.get("calibrated_toa_offset_m1_ms", profile_data.get("calibrated_toa_offset_ms", 1.8080)))
         expected_f0 = float(profile_data.get("f_res_hz", 2660.0))
 
         estimator = TimeOfArrivalEstimator(profile=profile_path)
