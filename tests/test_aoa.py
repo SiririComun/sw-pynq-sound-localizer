@@ -1,5 +1,6 @@
 """
 tests/test_aoa.py: Strict Unit Verification Suite for Angle of Arrival (AoA) Interferometry Engine.
+Standardized to the certified 2660.0 Hz active buzzer resonant carrier frequency.
 """
 
 import json
@@ -10,9 +11,10 @@ import pytest
 
 from pynq_localizer.kinematics import KinematicAnalytics, AngleOfArrivalEstimator
 
+
 def generate_synthetic_aoa_stereo_frame(
     theta_deg: float,
-    f0: float = 2609.73,
+    f0: float = 2660.0,
     mic_distance_m: float = 0.05,
     amplitude_v: float = 0.100,
     fs: float = 50000.0,
@@ -46,12 +48,13 @@ def generate_synthetic_aoa_stereo_frame(
 
     return v_a0, v_a1
 
+
 class TestAngleOfArrivalEngine:
 
     def test_broadside_zero_angle_recovery(self):
         """Verify that an incident plane wave at 0 deg produces exactly 0 deg with Delta phi = 0."""
-        v0, v1 = generate_synthetic_aoa_stereo_frame(theta_deg=0.0)
-        aoa = AngleOfArrivalEstimator(mic_distance_m=0.05, target_freq_hz=2609.73)
+        v0, v1 = generate_synthetic_aoa_stereo_frame(theta_deg=0.0, f0=2660.0)
+        aoa = AngleOfArrivalEstimator(mic_distance_m=0.05, target_freq_hz=2660.0)
         res = aoa.estimate_angle(v0, v1, fs=50000.0)
 
         assert abs(res["theta_deg"] - 0.0) < 1e-3, f"Broadside failed: {res['theta_deg']}"
@@ -61,11 +64,11 @@ class TestAngleOfArrivalEngine:
     def test_angular_sweep_grid_accuracy(self):
         """
         Verify angular recovery across an incident grid from -60 deg to +60 deg
-        across multiple carrier frequencies (1000 Hz, 2000 Hz, 2609.73 Hz).
+        across multiple carrier frequencies (1000 Hz, 2000 Hz, 2660.0 Hz).
         With Hann-windowed coherent projection, error must remain < 0.02 deg!
         """
         test_angles = [-60.0, -45.0, -30.0, -15.0, 0.0, 15.0, 30.0, 45.0, 60.0]
-        test_frequencies = [1000.0, 2000.0, 2609.73]
+        test_frequencies = [1000.0, 2000.0, 2660.0]
         d_mic = 0.05
 
         for f0 in test_frequencies:
@@ -78,7 +81,6 @@ class TestAngleOfArrivalEngine:
                 theta_est = res["theta_deg"]
                 err = abs(theta_est - theta_true)
 
-                # High-precision threshold: < 0.02 deg
                 assert err < 0.02, (
                     f"AoA grid error too high: True={theta_true}°, "
                     f"Est={theta_est:.4f}°, Err={err:.4f}° (f0={f0}Hz)"
@@ -89,9 +91,9 @@ class TestAngleOfArrivalEngine:
         """Verify angle recovery remains accurate under additive Gaussian noise down to 20 dB SNR."""
         theta_true = 25.0
         v0, v1 = generate_synthetic_aoa_stereo_frame(
-            theta_deg=theta_true, f0=2609.73, snr_db=20.0
+            theta_deg=theta_true, f0=2660.0, snr_db=20.0
         )
-        aoa = AngleOfArrivalEstimator(mic_distance_m=0.05, target_freq_hz=2609.73)
+        aoa = AngleOfArrivalEstimator(mic_distance_m=0.05, target_freq_hz=2660.0)
         res = aoa.estimate_angle(v0, v1, fs=50000.0)
 
         err = abs(res["theta_deg"] - theta_true)
@@ -100,9 +102,9 @@ class TestAngleOfArrivalEngine:
 
     def test_squelch_silence_gating(self):
         """Verify that amplitudes below the noise gate return status SILENCE and NaN angle."""
-        aoa = AngleOfArrivalEstimator(mic_distance_m=0.05, target_freq_hz=2609.73, noise_gate_v=0.020)
+        aoa = AngleOfArrivalEstimator(mic_distance_m=0.05, target_freq_hz=2660.0, noise_gate_v=0.020)
         # Signal below noise gate (5 mV)
-        v0, v1 = generate_synthetic_aoa_stereo_frame(theta_deg=30.0, amplitude_v=0.005)
+        v0, v1 = generate_synthetic_aoa_stereo_frame(theta_deg=30.0, f0=2660.0, amplitude_v=0.005)
         res = aoa.estimate_angle(v0, v1, fs=50000.0)
 
         assert np.isnan(res["theta_deg"])
@@ -118,7 +120,10 @@ class TestAngleOfArrivalEngine:
 
     def test_profile_loading_integration(self):
         """Verify that AngleOfArrivalEstimator correctly loads f0 from the certified buzzer profile."""
-        profile_path = Path("profiles/active_buzzer_2610hz.json")
+        profile_path = Path("profiles/active_buzzer_profile.json")
+        if not profile_path.exists():
+            profile_path = Path("profiles/active_buzzer_2610hz.json")
+
         assert profile_path.exists(), "Profile file missing!"
 
         with open(profile_path, "r", encoding="utf-8") as f:
