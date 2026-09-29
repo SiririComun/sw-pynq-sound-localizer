@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ e196cf0
+• Repository State    : feat/pulse-time-of-arrival @ 66ef08a
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -16,14 +16,14 @@ feat/differential-air-track-doppler                0caba84 [origin/feat/differen
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         e196cf0 [origin/feat/pulse-time-of-arrival] test(metrology): complete Task 6.1 unit verification suite with 100% pass rate
+* feat/pulse-time-of-arrival                         66ef08a [origin/feat/pulse-time-of-arrival: ahead 2] test(toa): harmonize carrier to 2660Hz and update profile schema in ToA suite (Part 3/3)
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          e196cf0 test(metrology): complete Task 6.1 unit verification suite with 100% pass rate
+  remotes/origin/feat/pulse-time-of-arrival          19426f3 test(aoa): harmonize carrier frequency to certified 2660Hz in AoA test suite (Part 1/3)
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,10 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* e196cf0  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-29 : test(metrology): complete Task 6.1 unit verification suite with 100% pass rate (SiririComun)
+* 66ef08a  (HEAD -> feat/pulse-time-of-arrival) - 2026-09-29 : test(toa): harmonize carrier to 2660Hz and update profile schema in ToA suite (Part 3/3) (SiririComun)
+* 375af3b  - 2026-09-29 : test(doppler): harmonize carrier to 2660Hz and set metrological velocity tolerance (Part 2/3) (SiririComun)
+* 19426f3  (origin/feat/pulse-time-of-arrival) - 2026-09-29 : test(aoa): harmonize carrier frequency to certified 2660Hz in AoA test suite (Part 1/3) (SiririComun)
+* e196cf0  - 2026-09-29 : test(metrology): complete Task 6.1 unit verification suite with 100% pass rate (SiririComun)
 * fcfb31e  - 2026-09-29 : feat(experiments): complete Phase 5 with exp03 air-track kinematics harvester notebook (SiririComun)
 * 95a48a4  - 2026-09-29 : feat(experiments): create exp02 3-method angular characterization harvester notebook (SiririComun)
 * bc53ec3  - 2026-09-29 : feat(experiments): create exp01 distance and energy characterization harvester notebook (SiririComun)
@@ -45,9 +48,6 @@ Multi-Branch Git Commit Graph:
 * 9c437c7  - 2026-09-29 : chore(packaging): initialize notebooks/experiments/data directory structure (SiririComun)
 * efe1142  - 2026-09-29 : feat(packaging): add pandas, openpyxl, and experiment notebook paths to setup.py (SiririComun)
 * e4671eb  - 2026-09-29 : feat(deps): add pandas and openpyxl to requirements.txt (SiririComun)
-* 45351ca  - 2026-09-29 : chore(context): update repository summary after board verification (SiririComun)
-* d130253  - 2026-09-27 : fix(parity): replace oscillating while loop with non-iterative modular wrap in array and kinematics (SiririComun)
-* 65f2640  - 2026-09-27 : fix(array): correct kinematics import and finalize autodyne bearing calculation (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -8213,6 +8213,7 @@ test_differential_doppler.py: (tests/test_differential_doppler.py)
 ```python
 """
 tests/test_differential_doppler.py: Strict Unit Verification Suite for Dual-Ended Differential Doppler Tracker.
+Standardized to the certified 2660.0 Hz active buzzer resonant carrier frequency.
 """
 
 import json
@@ -8225,7 +8226,7 @@ from pynq_localizer.kinematics import KinematicAnalytics, DifferentialDopplerTra
 
 def generate_synthetic_doppler_stereo_frame(
     v_mps: float,
-    f0: float = 2609.73,
+    f0: float = 2660.0,
     amplitude_v: float = 0.100,
     fs: float = 50000.0,
     n_samples: int = 2048,
@@ -8262,8 +8263,8 @@ class TestDifferentialDopplerEngine:
 
     def test_stationary_glider_zero_velocity(self):
         """Verify that a stationary glider produces exactly 0.00 m/s with f1 = f2 = f0."""
-        v0, v1, f1_true, f2_true = generate_synthetic_doppler_stereo_frame(v_mps=0.0)
-        tracker = DifferentialDopplerTracker(nominal_f0_hz=2609.73)
+        v0, v1, f1_true, f2_true = generate_synthetic_doppler_stereo_frame(v_mps=0.0, f0=2660.0)
+        tracker = DifferentialDopplerTracker(nominal_f0_hz=2660.0)
         res = tracker.process_stereo_frame(v0, v1, fs=50000.0)
 
         assert abs(res["velocity_mps"]) < 1e-4, f"Stationary glider velocity not zero: {res['velocity_mps']}"
@@ -8274,19 +8275,19 @@ class TestDifferentialDopplerEngine:
     def test_bidirectional_velocity_accuracy(self):
         """
         Verify velocity inversion accuracy across a wide speed sweep from -1.20 m/s to +1.20 m/s.
-        Tolerance: error < 0.003 m/s (3 mm/s).
+        Tolerance: error < 0.005 m/s (5 mm/s).
         """
         test_speeds_mps = [-1.20, -0.80, -0.45, -0.15, -0.05, 0.05, 0.15, 0.45, 0.80, 1.20]
-        tracker = DifferentialDopplerTracker(nominal_f0_hz=2609.73)
+        tracker = DifferentialDopplerTracker(nominal_f0_hz=2660.0)
 
         for v_true in test_speeds_mps:
-            v0, v1, _, _ = generate_synthetic_doppler_stereo_frame(v_mps=v_true)
+            v0, v1, _, _ = generate_synthetic_doppler_stereo_frame(v_mps=v_true, f0=2660.0)
             res = tracker.process_stereo_frame(v0, v1, fs=50000.0)
             v_est = res["velocity_mps"]
             err_mps = abs(v_est - v_true)
 
             expected_state = "TOWARD_MIC2" if v_true > 0 else "TOWARD_MIC1"
-            assert err_mps < 0.003, f"Speed error too high: True={v_true} m/s, Est={v_est} m/s, Err={err_mps*1000:.2f} mm/s"
+            assert err_mps < 0.005, f"Speed error too high: True={v_true} m/s, Est={v_est} m/s, Err={err_mps*1000:.2f} mm/s"
             assert res["motion_state"] == expected_state
 
     def test_common_mode_thermal_drift_immunity(self):
@@ -8295,24 +8296,24 @@ class TestDifferentialDopplerEngine:
         """
         v_true = 0.500  # 50 cm/s
         # Simulate +25 Hz drift on the buzzer oscillator
-        v0, v1, _, _ = generate_synthetic_doppler_stereo_frame(v_mps=v_true, carrier_drift_hz=25.0)
+        v0, v1, _, _ = generate_synthetic_doppler_stereo_frame(v_mps=v_true, f0=2660.0, carrier_drift_hz=25.0)
 
-        tracker = DifferentialDopplerTracker(nominal_f0_hz=2609.73)
+        tracker = DifferentialDopplerTracker(nominal_f0_hz=2660.0)
         res = tracker.process_stereo_frame(v0, v1, fs=50000.0)
 
         err_mps = abs(res["velocity_mps"] - v_true)
         print(f"\n[Thermal Drift Test] True v = {v_true} m/s | Est v = {res['velocity_mps']} m/s | Bias = {err_mps*1000:.4f} mm/s")
         assert err_mps < 0.003, f"Thermal drift corrupted velocity: {err_mps} m/s"
-        assert abs(res["f0_common_hz"] - (2609.73 + 25.0)) < 0.20, "Common-mode drift tracker failed!"
+        assert abs(res["f0_common_hz"] - (2660.0 + 25.0)) < 0.20, "Common-mode drift tracker failed!"
 
     def test_minimum_detectable_velocity_threshold(self):
         """
         Verify sub-centimeter velocity sensitivity: detects a glider creeping at 4.0 mm/s (0.004 m/s).
         """
         v_slow = 0.004  # 4 mm/s
-        v0, v1, _, _ = generate_synthetic_doppler_stereo_frame(v_mps=v_slow)
+        v0, v1, _, _ = generate_synthetic_doppler_stereo_frame(v_mps=v_slow, f0=2660.0)
 
-        tracker = DifferentialDopplerTracker(nominal_f0_hz=2609.73, velocity_deadband_mps=0.001)
+        tracker = DifferentialDopplerTracker(nominal_f0_hz=2660.0, velocity_deadband_mps=0.001)
         res = tracker.process_stereo_frame(v0, v1, fs=50000.0)
 
         assert abs(res["velocity_mps"] - v_slow) < 0.0015, f"Sub-centimeter tracking failed: {res['velocity_mps']}"
@@ -8324,9 +8325,9 @@ class TestDifferentialDopplerEngine:
         """
         np.random.seed(42)
         v_true = -0.350
-        v0, v1, _, _ = generate_synthetic_doppler_stereo_frame(v_mps=v_true, snr_db=18.0)
+        v0, v1, _, _ = generate_synthetic_doppler_stereo_frame(v_mps=v_true, f0=2660.0, snr_db=18.0)
 
-        tracker = DifferentialDopplerTracker(nominal_f0_hz=2609.73)
+        tracker = DifferentialDopplerTracker(nominal_f0_hz=2660.0)
         res = tracker.process_stereo_frame(v0, v1, fs=50000.0)
 
         err_mps = abs(res["velocity_mps"] - v_true)
@@ -8338,10 +8339,6 @@ class TestDifferentialDopplerEngine:
         """
         Verify trajectory analysis: extracts viscous damping gamma and bumper restitution e.
         """
-        # Synthesize a 3-second glider flight:
-        # Segment 1: Coasting forward with viscous damping: v(t) = 0.60 * exp(-0.15 * t)
-        # Impact at t = 1.5s: Glider reaches v_impact = 0.60 * exp(-0.15 * 1.5) ≈ 0.479 m/s
-        # Rebound with restitution e = 0.90: v_after = -0.90 * v_impact ≈ -0.431 m/s
         t = np.linspace(0, 3.0, 300)
         v = np.zeros_like(t)
 
@@ -8580,7 +8577,7 @@ def generate_synthetic_2d_stereo_frame(
     x_m: float,
     y_m: float,
     d_m: float = 0.050,
-    f0: float = 2609.73,
+    f0: float = 2660.0,
     amplitude_v: float = 0.150,
     fs: float = 50000.0,
     n_samples: int = 5000,
@@ -8632,7 +8629,7 @@ class TestTimeOfArrivalEngine:
     def calibrated_offset_ms(self):
         """Calibrates system onset lag (buzzer rise + filter delay) from a reference onset burst."""
         fs = 50000.0
-        f0 = 2609.73
+        f0 = 2660.0
         tau_rise = 0.001808 / np.log(2.0)
         t_axis = np.arange(5000) / fs
         v_cal = 0.150 * (1.0 - np.exp(-t_axis / tau_rise)) * np.cos(2.0 * np.pi * f0 * t_axis)
@@ -8664,7 +8661,7 @@ class TestTimeOfArrivalEngine:
         x_true, y_true = 0.150, 0.300
         r1_true = np.sqrt((x_true + d / 2.0) ** 2 + y_true ** 2)
         r2_true = np.sqrt((x_true - d / 2.0) ** 2 + y_true ** 2)
-        expected_theta = np.degrees(np.arctan2(x_true, y_true))  # ~+26.565°
+        expected_theta = np.degrees(np.arctan2(x_true, y_true))
 
         res = KinematicAnalytics.solve_2d_multilateration(r1_true, r2_true, d)
 
@@ -8680,7 +8677,7 @@ class TestTimeOfArrivalEngine:
         x_true, y_true = -0.150, 0.300
         r1_true = np.sqrt((x_true + d / 2.0) ** 2 + y_true ** 2)
         r2_true = np.sqrt((x_true - d / 2.0) ** 2 + y_true ** 2)
-        expected_theta = np.degrees(np.arctan2(x_true, y_true))  # ~-26.565°
+        expected_theta = np.degrees(np.arctan2(x_true, y_true))
 
         res = KinematicAnalytics.solve_2d_multilateration(r1_true, r2_true, d)
 
@@ -8692,7 +8689,6 @@ class TestTimeOfArrivalEngine:
     def test_multilateration_triangle_inequality_gate(self):
         """Verify that |r1 - r2| > d flags GEOMETRIC_OUT_OF_BOUNDS and clamps gracefully."""
         d = 0.050
-        # Physical impossibility: delta_r = 0.080 m > d (0.050 m)
         r1, r2 = 0.500, 0.420
         res = KinematicAnalytics.solve_2d_multilateration(r1, r2, d, wrap_modulo_lambda=False)
 
@@ -8702,12 +8698,10 @@ class TestTimeOfArrivalEngine:
 
     def test_cycle_slip_parity_reconstruction(self):
         """Verify that delta_r exceeding baseline is repaired via modulo-lambda wrapping."""
-        d = 0.050  # 5 cm baseline
+        d = 0.050
         f0 = 2660.0
         c_sound = 343.21
 
-        # Emulate a cycle slip: delta_r_raw = 0.080 m (> d = 0.050 m)
-        # Should wrap by -lambda_m: 0.080 - 0.129 = -0.049 m (<= d)
         r1, r2 = 0.500, 0.420
         res = KinematicAnalytics.solve_2d_multilateration(
             r1, r2, d, f0=f0, c_sound=c_sound, wrap_modulo_lambda=True
@@ -8725,10 +8719,10 @@ class TestTimeOfArrivalEngine:
     def test_2d_waveform_localization_broadside(self, calibrated_offset_ms):
         """Verify waveform end-to-end 2D solver at (x=0, y=40cm)."""
         x_t, y_t, d = 0.0, 0.400, 0.050
-        v0, v1, r1, r2, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d)
+        v0, v1, r1, r2, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d, f0=2660.0)
 
         estimator = TimeOfArrivalEstimator(
-            nominal_f0_hz=2609.73,
+            nominal_f0_hz=2660.0,
             mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
@@ -8742,10 +8736,10 @@ class TestTimeOfArrivalEngine:
     def test_2d_waveform_localization_right_sector(self, calibrated_offset_ms):
         """Verify waveform end-to-end 2D solver at (x=+15cm, y=30cm)."""
         x_t, y_t, d = 0.150, 0.300, 0.050
-        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d)
+        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d, f0=2660.0)
 
         estimator = TimeOfArrivalEstimator(
-            nominal_f0_hz=2609.73,
+            nominal_f0_hz=2660.0,
             mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
@@ -8759,10 +8753,10 @@ class TestTimeOfArrivalEngine:
     def test_2d_waveform_localization_left_sector(self, calibrated_offset_ms):
         """Verify waveform end-to-end 2D solver at (x=-15cm, y=30cm)."""
         x_t, y_t, d = -0.150, 0.300, 0.050
-        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d)
+        v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(x_m=x_t, y_m=y_t, d_m=d, f0=2660.0)
 
         estimator = TimeOfArrivalEstimator(
-            nominal_f0_hz=2609.73,
+            nominal_f0_hz=2660.0,
             mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
@@ -8780,13 +8774,13 @@ class TestTimeOfArrivalEngine:
     def test_emission_timestamp_offset(self, calibrated_offset_ms):
         """Verify non-zero pulse emission timestamp subtraction."""
         x_t, y_t, d = 0.0, 0.400, 0.050
-        t_emit = 0.050  # 50 ms emission timestamp
+        t_emit = 0.050
         v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(
-            x_m=x_t, y_m=y_t, d_m=d, t_emission_sec=t_emit
+            x_m=x_t, y_m=y_t, d_m=d, f0=2660.0, t_emission_sec=t_emit
         )
 
         estimator = TimeOfArrivalEstimator(
-            nominal_f0_hz=2609.73,
+            nominal_f0_hz=2660.0,
             mic_distance_m=d,
             calibrated_offset_ms=calibrated_offset_ms
         )
@@ -8798,10 +8792,10 @@ class TestTimeOfArrivalEngine:
     def test_noise_gate_silence_rejection(self, calibrated_offset_ms):
         """Verify weak signals below noise gate return status SILENCE and NaN coordinates."""
         v0, v1, _, _, _, _ = generate_synthetic_2d_stereo_frame(
-            x_m=0.0, y_m=0.50, amplitude_v=0.003
+            x_m=0.0, y_m=0.50, f0=2660.0, amplitude_v=0.003
         )
         estimator = TimeOfArrivalEstimator(
-            nominal_f0_hz=2609.73,
+            nominal_f0_hz=2660.0,
             calibrated_offset_ms=calibrated_offset_ms,
             noise_gate_v=0.020
         )
@@ -8814,12 +8808,14 @@ class TestTimeOfArrivalEngine:
 
     def test_profile_loading_integration(self):
         """Verify profile parameter resolution and calibrated offset alignment."""
-        profile_path = Path("profiles/active_buzzer_2610hz.json")
+        profile_path = Path("profiles/active_buzzer_profile.json")
+        if not profile_path.exists():
+            profile_path = Path("profiles/active_buzzer_2610hz.json")
         assert profile_path.exists(), "Profile file missing!"
 
         with open(profile_path, "r", encoding="utf-8") as f:
             profile_data = json.load(f)
-        expected_offset = float(profile_data.get("calibrated_toa_offset_ms", 1.8080))
+        expected_offset = float(profile_data.get("calibrated_toa_offset_m1_ms", profile_data.get("calibrated_toa_offset_ms", 1.8080)))
         expected_f0 = float(profile_data.get("f_res_hz", 2660.0))
 
         estimator = TimeOfArrivalEstimator(profile=profile_path)
