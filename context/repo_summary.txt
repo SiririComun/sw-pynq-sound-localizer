@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ ea16000
+• Repository State    : feat/pulse-time-of-arrival @ b948d09
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -16,14 +16,14 @@ feat/differential-air-track-doppler                0caba84 [origin/feat/differen
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         ea16000 [origin/feat/pulse-time-of-arrival] feat(profiles): upgrade active buzzer profile to dual-channel schema with certified 2660Hz carrier
+* feat/pulse-time-of-arrival                         b948d09 [origin/feat/pulse-time-of-arrival] perf(dashboard): complete Phase 4 configurable 14 FPS render throttling and dual-channel routing
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          ea16000 feat(profiles): upgrade active buzzer profile to dual-channel schema with certified 2660Hz carrier
+  remotes/origin/feat/pulse-time-of-arrival          b948d09 perf(dashboard): complete Phase 4 configurable 14 FPS render throttling and dual-channel routing
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* ea16000  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-29 : feat(profiles): upgrade active buzzer profile to dual-channel schema with certified 2660Hz carrier (SiririComun)
+* b948d09  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-29 : perf(dashboard): complete Phase 4 configurable 14 FPS render throttling and dual-channel routing (SiririComun)
+* ea16000  - 2026-09-29 : feat(profiles): upgrade active buzzer profile to dual-channel schema with certified 2660Hz carrier (SiririComun)
 * 11a05d1  - 2026-09-29 : feat(array): complete Phase 3 dual ToA offsets, dual energy ranging, and single-mic Doppler exposure (SiririComun)
 * 023f96f  - 2026-09-29 : feat(kinematics): complete Phase 2 metrology engine, dual profiles, and clean ToA estimator (SiririComun)
 * 9c437c7  - 2026-09-29 : chore(packaging): initialize notebooks/experiments/data directory structure (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * 544803c  - 2026-09-27 : docs(notebook): add real-time distance and intensity live dashboard to Notebook 02 (SiririComun)
 * d40de4b  - 2026-09-27 : fix(kinematics): implement exact near-field multilateration and synchronize test suite with 2660Hz profile (SiririComun)
 * ab1f3fc  - 2026-09-27 : feat(array): implement modulo-lambda cycle-slip parity corrector and direct-energy distance inversion in capture_pulsed_toa_frame (SiririComun)
-* 5c1e4ee  - 2026-09-27 : chore(context): update repository summary with calibrated 2660Hz buzzer profile (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -5735,15 +5735,16 @@ notebooks.py: (pynq_localizer/notebooks.py)
 
 ```python
 """
-pynq_localizer.notebooks: Automated Installer for Interactive Jupyter Lab Notebooks.
-Deploys only official pynq_sound_localizer notebooks into the Jupyter workspace.
+pynq_localizer.notebooks: Automated Installer for Interactive Jupyter Labs & Experiment Harvesters.
+Deploys official pynq_sound_localizer demo notebooks (01-06) and dedicated experiment harvesters
+(experiments/exp01-exp03) with protected data output storage into the Jupyter workspace.
 """
 
 import os
 import shutil
 from pathlib import Path
 
-# Strict whitelist of notebooks belonging ONLY to pynq_sound_localizer
+# Whitelist of official top-level interactive lab notebooks
 LOCALIZER_NOTEBOOKS = [
     "01_realtime_kinematics_telemetry.ipynb",
     "02_acoustic_calibration_lab.ipynb",
@@ -5753,17 +5754,26 @@ LOCALIZER_NOTEBOOKS = [
     "06_planar_tdoa_sound_localizer.ipynb",
 ]
 
+# Whitelist of dedicated statistical experiment harvester notebooks
+EXPERIMENT_NOTEBOOKS = [
+    "exp01_distance_energy_characterization.ipynb",
+    "exp02_angle_3method_characterization.ipynb",
+    "exp03_air_track_kinematics_harvesting.ipynb",
+]
+
 def install_localizer_notebooks(target_dir: str = None):
     """
-    Copies official pynq_sound_localizer example notebooks into the Jupyter root folder
-    under /home/xilinx/jupyter_notebooks/pynq_sound_localizer/.
-    Automatically purges any collided/foreign notebooks from other packages.
+    Copies official demo notebooks and dedicated experiment harvesters into
+    the Jupyter root folder under /home/xilinx/jupyter_notebooks/pynq_sound_localizer/.
+    Preserves and protects user-generated data files in experiments/data/.
     """
     package_dir = Path(__file__).resolve().parent.parent
     src_notebooks = package_dir / "notebooks"
 
     if not src_notebooks.exists():
         src_notebooks = Path(__file__).resolve().parent / "notebooks_data"
+
+    src_experiments = src_notebooks / "experiments"
 
     if target_dir is None:
         pynq_jupyter_root = Path("/home/xilinx/jupyter_notebooks")
@@ -5772,11 +5782,16 @@ def install_localizer_notebooks(target_dir: str = None):
         else:
             dest_dir = Path.cwd() / "pynq_sound_localizer_notebooks"
     else:
-        dest_dir = Path(target_dir)
+        dest_dir = Path(target_dir).resolve()
+
+    dest_experiments = dest_dir / "experiments"
+    dest_data = dest_experiments / "data"
 
     dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_experiments.mkdir(parents=True, exist_ok=True)
+    dest_data.mkdir(parents=True, exist_ok=True)
 
-    # 1. Purge any foreign/stale notebooks from other packages in this folder
+    # 1. Purge foreign/stale notebooks from root folder (leaves subfolders intact)
     for existing_file in dest_dir.glob("*.ipynb"):
         if existing_file.name not in LOCALIZER_NOTEBOOKS:
             try:
@@ -5784,19 +5799,50 @@ def install_localizer_notebooks(target_dir: str = None):
             except Exception:
                 pass
 
-    # 2. Copy ONLY official localizer notebooks
-    deployed_files = []
+    # 2. Purge stale notebooks from experiments folder (leaves data/ directory intact)
+    for existing_file in dest_experiments.glob("*.ipynb"):
+        if existing_file.name not in EXPERIMENT_NOTEBOOKS:
+            try:
+                existing_file.unlink()
+            except Exception:
+                pass
+
+    # 3. Deploy top-level interactive lab notebooks
+    deployed_labs = []
     for nb_name in LOCALIZER_NOTEBOOKS:
         src_file = src_notebooks / nb_name
         if src_file.exists():
             dest_file = dest_dir / nb_name
             shutil.copy2(src_file, dest_file)
-            deployed_files.append(nb_name)
+            deployed_labs.append(nb_name)
 
-    print(f"[NotebookInstaller] Successfully deployed {len(deployed_files)} localizer notebooks to:")
-    print(f"                   {dest_dir.resolve()}")
-    for f in deployed_files:
-        print(f"  • {f}")
+    # 4. Deploy dedicated experiment harvester notebooks
+    deployed_experiments = []
+    if src_experiments.exists():
+        for nb_name in EXPERIMENT_NOTEBOOKS:
+            src_file = src_experiments / nb_name
+            if src_file.exists():
+                dest_file = dest_experiments / nb_name
+                shutil.copy2(src_file, dest_file)
+                deployed_experiments.append(nb_name)
+
+    print("=" * 80)
+    print(f"🚀 [NotebookInstaller] Notebooks deployed to: {dest_dir}")
+    print("=" * 80)
+    print(f"📖 Interactive Labs ({len(deployed_labs)} deployed):")
+    for f in deployed_labs:
+        print(f"   • {f}")
+
+    print(f"\n🔬 Dedicated Experiment Harvesters ({len(deployed_experiments)} deployed):")
+    if deployed_experiments:
+        for f in deployed_experiments:
+            print(f"   • experiments/{f}")
+    else:
+        print("   (Harvester notebooks will appear once created in Phase 5)")
+
+    print(f"\n📁 Persistent Data Output Directory: {dest_data}")
+    print("   (All .xlsx and .csv exports will be saved here)")
+    print("=" * 80)
 
 # Backward-compatibility alias
 copy_notebooks = install_localizer_notebooks
