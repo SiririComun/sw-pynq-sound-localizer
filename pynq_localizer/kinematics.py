@@ -981,7 +981,8 @@ class KinematicAnalytics:
         corr = np.correlate(v_fpga_ac, v_tr_ac, mode="full")
         lags = np.arange(-len(v_tr_resampled) + 1, len(v_fpga))
         best_lag = lags[np.argmax(corr)]
-        time_offset_sec = float(best_lag * dt_fpga)
+        # Invert lag sign so positive offset shifts delayed camera timeline back to FPGA t0
+        time_offset_sec = -float(best_lag * dt_fpga)
 
         v_tr_aligned = np.interp(t_fpga + time_offset_sec, t_tr, v_tr, left=np.nan, right=np.nan)
 
