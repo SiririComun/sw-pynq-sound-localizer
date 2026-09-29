@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ bc53ec3
+• Repository State    : feat/pulse-time-of-arrival @ 95a48a4
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -16,14 +16,14 @@ feat/differential-air-track-doppler                0caba84 [origin/feat/differen
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         bc53ec3 [origin/feat/pulse-time-of-arrival] feat(experiments): create exp01 distance and energy characterization harvester notebook
+* feat/pulse-time-of-arrival                         95a48a4 [origin/feat/pulse-time-of-arrival] feat(experiments): create exp02 3-method angular characterization harvester notebook
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          bc53ec3 feat(experiments): create exp01 distance and energy characterization harvester notebook
+  remotes/origin/feat/pulse-time-of-arrival          95a48a4 feat(experiments): create exp02 3-method angular characterization harvester notebook
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* bc53ec3  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-29 : feat(experiments): create exp01 distance and energy characterization harvester notebook (SiririComun)
+* 95a48a4  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-29 : feat(experiments): create exp02 3-method angular characterization harvester notebook (SiririComun)
+* bc53ec3  - 2026-09-29 : feat(experiments): create exp01 distance and energy characterization harvester notebook (SiririComun)
 * 0db24d8  - 2026-09-29 : feat(notebooks): upgrade installer engine with dedicated experiments subfolder and data preservation (SiririComun)
 * b948d09  - 2026-09-29 : perf(dashboard): complete Phase 4 configurable 14 FPS render throttling and dual-channel routing (SiririComun)
 * ea16000  - 2026-09-29 : feat(profiles): upgrade active buzzer profile to dual-channel schema with certified 2660Hz carrier (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * 65f2640  - 2026-09-27 : fix(array): correct kinematics import and finalize autodyne bearing calculation (SiririComun)
 * 04cbd9a  - 2026-09-27 : fix(array): align pulsed toa bearing with parity-repaired autodyne phase and enable offline plotly widgets in Notebook 03 (SiririComun)
 * 8f0d30a  - 2026-09-27 : docs(notebook): overhaul Notebooks 02 and 03 with calibrated 2660Hz carrier and live widgets (SiririComun)
-* 544803c  - 2026-09-27 : docs(notebook): add real-time distance and intensity live dashboard to Notebook 02 (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -11048,6 +11048,345 @@ print("=" * 85)
 # %% [markdown] Cell 13
 ## 6. Clean Hardware Teardown
 # Release FPGA DMA channels and hardware memory buffers.
+
+# %% [code] Cell 14
+ol.close()
+print("🔒 FPGA hardware resources cleanly released.")
+
+```
+
+exp03_air_track_kinematics_harvesting.ipynb: (notebooks/experiments/exp03_air_track_kinematics_harvesting.ipynb)
+
+```python
+# %% [markdown] Cell 1
+# 🚄 Experiment 03: Air Track Kinematics & Multi-Modal Doppler Benchmark
+# **Project:** `pynq-sound-localizer` (`v1.3.1`)
+# **Target:** Production Velocity/Acceleration Harvester & Optical Cross-Validation
+# **Outputs:** `data/flight_kinematics_characterization.xlsx` & `data/flight_kinematics_characterization.csv`
+# ---
+### 🏛️ Physical Operating Principles & Multi-Modal Showdown
+# This experiment cross-validates 1D air-track kinematics across **three independent physical paradigms**:
+# 1. **FPGA Differential Acoustic Doppler:**
+# * Opposing microphones at $x = 0$ (Mic 1 / Left) and $x = L = 1.0\,\text{m}$ (Mic 2 / Right).
+# * Drift-Canceled Differential Velocity: $v_{\text{diff}}(t) = c(T) \cdot \frac{f_2(t) - f_1(t)}{f_1(t) + f_2(t)}$
+# * Single-Mic Doppler: $v_{\text{mic1}}(t) = -c \cdot \frac{f_1(t) - f_0}{f_0}$, $\quad v_{\text{mic2}}(t) = +c \cdot \frac{f_2(t) - f_0}{f_0}$
+# 2. **Optical Video Analysis (Tracker Ground Truth):**
+# * High-speed / standard smartphone camera video analyzed via Cabrillo **Tracker**.
+# * Automatically aligned via cross-correlation to eliminate temporal manual sync lag ($\Delta t_{\text{sync}}$).
+# 3. **Newtonian Mechanics (Analytical Simulation):**
+# * **Falling Weight (Modified Atwood):** $a_{\text{theo}} = \frac{m_{\text{hanging}}}{M_{\text{glider}} + m_{\text{hanging}}} g$
+# * **Elastic Band Propulsion:** $v_0 = \Delta x \sqrt{\frac{k_{\text{spring}}}{M_{\text{glider}}}}$
+# * **Aerodynamic Air-Track Drag:** $v(t) = v_{\max} e^{-\gamma t}$
+
+# %% [code] Cell 2
+# Cell 1: Environment Setup & Hardware Initialization
+import time
+import json
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+from pynq_localizer import (
+    MicrophoneArrayOverlay,
+    KinematicAnalytics,
+    AcousticProfile
+)
+
+# 1. Initialize Hardware Overlay (50 kSPS per channel streaming mode)
+ol = MicrophoneArrayOverlay(version="v1.5.2-rc4")
+
+# 2. Ambient Physical Parameters & Track Geometry
+temperature_c = 20.0  # Update with laboratory thermometer
+c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
+track_length_m = 1.0  # 1.0 m standard air track
+
+profile_path = Path("../../profiles/active_buzzer_profile.json").resolve()
+if not profile_path.exists():
+    profile_path = Path("profiles/active_buzzer_profile.json").resolve()
+
+if profile_path.exists():
+    profile = AcousticProfile.from_json(profile_path)
+    f0 = float(profile.frequencies[0])
+    print(f"✅ Loaded Profile: '{profile.name}' (f0 = {f0:.1f} Hz)")
+else:
+    f0 = KinematicAnalytics.DEFAULT_F0_HZ
+    print(f"ℹ️ Using default carrier: f0 = {f0:.1f} Hz")
+
+print("=" * 80)
+print("✅ AIR TRACK KINEMATICS HARVESTER READY")
+print("=" * 80)
+print(f"• Sampling Rate      : {ol.fs_per_ch:.0f} SPS (0.00 µs inter-channel skew)")
+print(f"• Track Length (L)   : {track_length_m:.2f} m (Mic 1 at x=0, Mic 2 at x=L)")
+print(f"• Speed of Sound     : c(T) = {c_sound:.2f} m/s (at {temperature_c}°C)")
+print(f"• Doppler Sensitivity: {2.0 * f0 / c_sound:.2f} Hz per (m/s)")
+print("=" * 80)
+
+# %% [markdown] Cell 3
+## 1. Pre-Flight Pneumatic Noise Floor Check
+# Turn on the **pneumatic air blower** of the air track.
+# This check records 1.0 second of ambient aerodynamic hiss and verifies that the buzzer's acoustic carrier exceeds the noise floor by at least **$+15\,\text{dB}$**.
+
+# %% [code] Cell 4
+# Cell 2: Air-Blower Noise & SNR Verification
+input("👉 Turn ON the air blower (leave buzzer stationary on glider). Press [Enter] to check noise floor...")
+
+t_noise, v_noise1, v_noise2 = ol.record_continuous(duration_sec=1.0, chunk_size=2048)
+
+# Compute in-band noise floor around carrier (f0 ± 120 Hz)
+fs = ol.fs_per_ch
+nyq = fs / 2.0
+b, a = signal.butter(2, [max(20.0, f0 - 120.0) / nyq, min(nyq - 20.0, f0 + 120.0) / nyq], btype="bandpass")
+v1_inband_noise = signal.filtfilt(b, a, v_noise1 - np.mean(v_noise1))
+v2_inband_noise = signal.filtfilt(b, a, v_noise2 - np.mean(v_noise2))
+
+noise1_rms_mv = float(np.sqrt(np.mean(v1_inband_noise ** 2)) * 1000.0)
+noise2_rms_mv = float(np.sqrt(np.mean(v2_inband_noise ** 2)) * 1000.0)
+
+print("=" * 75)
+print("💨 PNEUMATIC BLOWER NOISE FLOOR REPORT:")
+print("=" * 75)
+print(f"• Mic 1 In-Band Noise Floor : {noise1_rms_mv:.2f} mV RMS")
+print(f"• Mic 2 In-Band Noise Floor : {noise2_rms_mv:.2f} mV RMS")
+if max(noise1_rms_mv, noise2_rms_mv) < 15.0:
+    print("✅ Noise level is LOW. Excellent acoustic SNR expected (>20 dB).")
+else:
+    print("⚠️ Noticeable blower acoustic rumble. Ensure software bandpass is locked.")
+print("=" * 75)
+
+# %% [markdown] Cell 5
+## 2. Multi-Second Glider Flight Recording
+# 1. Position the glider at the left bumper ($x = 0$, near Mic 1).
+# 2. Start your smartphone video recording for **Tracker**.
+# 3. Press **`[Enter]`** and **immediately launch the glider** (release falling weight or trigger elastic recoil).
+# 4. The system streams continuous dual-channel data directly to DDR memory, extracting 100 Hz velocity trajectories.
+
+# %% [code] Cell 6
+# Cell 3: Glider Launch & Doppler Telemetry Capture
+flight_duration_sec = 4.0
+
+print("=" * 80)
+print(f"🚀 LAUNCHING CONTINUOUS FLIGHT RECORDER ({flight_duration_sec:.1f}s at 100 Hz trajectory rate)")
+print("   1. Position glider at LEFT bumper (x = 0).")
+print("   2. Start camera video recording for Tracker.")
+print("   3. Press [Enter] and RELEASE / LAUNCH glider toward right bumper.")
+print("=" * 80)
+input("👉 Ready? Press [Enter] to LAUNCH...")
+
+flight = ol.record_differential_flight(
+    duration_sec=flight_duration_sec,
+    track_length_m=track_length_m,
+    f0_nominal=f0,
+    temperature_c=temperature_c,
+    window_ms=40.0,
+    hop_ms=10.0
+)
+
+t_sec = flight["times_sec"]
+v_diff = flight["velocity_mps"]
+v_diff_cmps = flight["velocity_cmps"]
+v_m1 = flight["v_mic1_mps"]
+v_m2 = flight["v_mic2_mps"]
+v_mean_single = flight["v_mean_single_mps"]
+accel = flight["acceleration_mps2"]
+pos = flight["position_m"]
+f1 = flight["f_mic1_hz"]
+f2 = flight["f_mic2_hz"]
+f0_drift = flight["f0_common_hz"]
+amp1 = flight["amp_mic1_mv"]
+amp2 = flight["amp_mic2_mv"]
+summary = flight["kinematics_summary"]
+
+print("\n" + "=" * 80)
+print(f"✅ FLIGHT CAPTURED: {len(t_sec)} time steps ({t_sec[0]:.2f}s to {t_sec[-1]:.2f}s)")
+print(f"• Max Forward Velocity (+v) : {np.max(v_diff_cmps):+5.1f} cm/s ({np.max(v_diff):+.3f} m/s)")
+print(f"• Max Reverse Velocity (-v) : {np.min(v_diff_cmps):+5.1f} cm/s ({np.min(v_diff):+.3f} m/s)")
+print(f"• Viscous Damping Rate γ    : {summary.get('viscous_drag_gamma', 0.0):.4f} s⁻¹")
+print(f"• Bumper Restitution e      : {summary.get('mean_coefficient_of_restitution', np.nan):.3f}")
+print("=" * 80)
+
+# %% [markdown] Cell 7
+## 3. Drift Cancellation Proof: Single-Mic vs. Differential Doppler
+# Plots the visual proof of your differential Doppler architecture:
+# * **$v_{\text{mic1}}(t)$:** Red-shifted when moving right, but suffers baseline shift as buzzer oscillator heats up.
+# * **$v_{\text{mic2}}(t)$:** Blue-shifted when moving right, suffers opposite drift.
+# * **$v_{\text{diff}}(t)$:** Subtracts both channels, canceling oscillator drift identically to zero.
+
+# %% [code] Cell 8
+# Cell 4: Drift Cancellation & Kinematics Multi-Panel Plot
+fig_flight = make_subplots(
+    rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.08,
+    subplot_titles=(
+        "<b>1. Dual Observed Frequencies (f1 Left vs f2 Right) & Common-Mode Drift f0(t) [Hz]</b>",
+        "<b>2. Drift Cancellation Proof: Single-Mic Velocities (Drifting) vs Differential v_diff (Stable) [cm/s]</b>",
+        "<b>3. Reconstructed 1D Glider Position Along Track x(t) [m]</b>"
+    )
+)
+
+# Row 1: Frequency Curves
+fig_flight.add_scatter(x=t_sec, y=f1, mode="lines", line=dict(color="#00FFCC", width=1.8), name="Mic 1 (Left)", row=1, col=1)
+fig_flight.add_scatter(x=t_sec, y=f2, mode="lines", line=dict(color="#FF007F", width=1.8), name="Mic 2 (Right)", row=1, col=1)
+fig_flight.add_scatter(x=t_sec, y=f0_drift, mode="lines", line=dict(color="#FFA500", width=1.5, dash="dash"), name="Drifting Carrier f0(t)", row=1, col=1)
+
+# Row 2: Drift Cancellation Proof
+fig_flight.add_scatter(x=t_sec, y=v_m1 * 100.0, mode="lines", line=dict(color="rgba(0, 255, 204, 0.4)", width=1.2, dash="dot"), name="Single Mic 1 (Left)", row=2, col=1)
+fig_flight.add_scatter(x=t_sec, y=v_m2 * 100.0, mode="lines", line=dict(color="rgba(255, 0, 127, 0.4)", width=1.2, dash="dot"), name="Single Mic 2 (Right)", row=2, col=1)
+fig_flight.add_scatter(x=t_sec, y=v_diff_cmps, mode="lines+markers", marker=dict(size=3), line=dict(color="#FFD600", width=2.5), name="Differential v_diff (Drift Canceled)", row=2, col=1)
+fig_flight.add_hline(y=0.0, line=dict(color="gray", dash="dash"), row=2, col=1)
+
+# Row 3: Position Trajectory
+fig_flight.add_scatter(x=t_sec, y=pos, mode="lines", line=dict(color="#76FF03", width=2.2), name="Position x(t)", row=3, col=1)
+fig_flight.add_hline(y=0.0, line=dict(color="white", dash="dot"), annotation_text="Mic 1 (0 m)", row=3, col=1)
+fig_flight.add_hline(y=track_length_m, line=dict(color="white", dash="dot"), annotation_text=f"Mic 2 ({track_length_m} m)", row=3, col=1)
+
+fig_flight.update_layout(template="plotly_dark", height=750, title="<b>Glider Kinematics: Differential Doppler & Oscillator Drift Cancellation</b>")
+fig_flight.update_yaxes(title="Frequency [Hz]", row=1, col=1)
+fig_flight.update_yaxes(title="Velocity [cm/s]", row=2, col=1)
+fig_flight.update_yaxes(title="Position [m]", range=[-0.05, track_length_m + 0.05], row=3, col=1)
+fig_flight.update_xaxes(title="Time [Seconds]", row=3, col=1)
+fig_flight.show()
+
+# %% [markdown] Cell 9
+## 4. Multi-Modal Cross-Validation: Doppler vs. Tracker vs. Newtonian Theory
+# 1. **Tracker Video Ingestion:** If you exported video tracking data from Tracker, place the `.csv` or `.txt` file into `data/tracker_glider.csv`.
+# 2. **Newtonian Analytical Simulation:** Computes theoretical acceleration and velocity ($F=ma$ with Atwood falling mass or elastic band recoil).
+# 3. **Cross-Correlation Synchronization:** Automatically shifts Tracker's timeline to align with the FPGA recording and computes $\text{MAE}$, $\text{RMSE}$, and Pearson $R^2$.
+
+# %% [code] Cell 10
+# Cell 5: Optical Ground Truth Alignment & Theoretical Model Simulation
+# 1. Select Theoretical Mechanical Model
+propulsion_mode = "atwood"  # Choose: 'atwood' (falling mass) or 'elastic' (spring launch)
+
+m_glider = 0.250     # Glider mass in kg (e.g. 250 g)
+m_hanging = 0.020    # Hanging mass in kg (e.g. 20 g)
+fall_height = 0.40   # Drop distance of falling weight in meters
+gamma_fit = summary.get("viscous_drag_gamma", 0.05)
+
+if propulsion_mode == "atwood":
+    v_theo, a_theo = KinematicAnalytics.simulate_atwood_glider(
+        t_axis=t_sec, m_glider_kg=m_glider, m_hanging_kg=m_hanging,
+        fall_height_m=fall_height, gamma_damping=gamma_fit
+    )
+else:
+    v_theo, a_theo = KinematicAnalytics.simulate_elastic_glider(
+        t_axis=t_sec, m_glider_kg=m_glider, k_spring_npm=45.0,
+        delta_x_m=0.08, gamma_damping=gamma_fit
+    )
+
+# 2. Ingest Tracker Optical Data (if available)
+tracker_file = Path("data/tracker_glider.csv")
+v_tracker = np.full_like(v_diff, np.nan)
+optical_stats = {}
+
+if tracker_file.exists():
+    res_tr = KinematicAnalytics.align_tracker_ground_truth(
+        tracker_csv_path=tracker_file, t_fpga=t_sec, v_fpga=v_diff
+    )
+    v_tracker = res_tr["v_tracker_aligned_mps"]
+    optical_stats = res_tr
+    print("=" * 75)
+    print("📹 TRACKER OPTICAL CROSS-VALIDATION RESULTS:")
+    print("=" * 75)
+    print(f"• Cross-Correlation Lag Sync : {res_tr['time_offset_sec']:+.4f} s")
+    print(f"• Mean Absolute Error (MAE)  : {res_tr['mae_mps']*100:.2f} cm/s")
+    print(f"• Root Mean Square Error     : {res_tr['rmse_mps']*100:.2f} cm/s")
+    print(f"• Correlation Coefficient R² : {res_tr['correlation_r2']:.4f}")
+    print("=" * 75)
+else:
+    print("ℹ️ No Tracker export file found at 'data/tracker_glider.csv'.")
+    print("   (Analyze your camera video in Tracker and export CSV to overlay optical curves!)")
+
+# 3. 3-Way Comparative Velocity Plot
+fig_comp = go.Figure()
+fig_comp.add_scatter(x=t_sec, y=v_diff * 100.0, mode="lines", line=dict(color="#FFD600", width=2.5), name="FPGA Doppler Velocity")
+fig_comp.add_scatter(x=t_sec, y=v_theo * 100.0, mode="lines", line=dict(color="#00E5FF", dash="dash", width=2.0), name=f"Newtonian Theory ({propulsion_mode.title()})")
+
+if tracker_file.exists():
+    fig_comp.add_scatter(x=t_sec, y=v_tracker * 100.0, mode="markers", marker=dict(size=6, color="#FF007F", symbol="circle-open"), name="Tracker Video Optical Truth")
+
+fig_comp.update_layout(
+    template="plotly_dark", height=450,
+    title="<b>Multi-Modal Velocity Showdown: FPGA Doppler vs. Newtonian Theory vs. Optical Tracker</b>",
+    xaxis=dict(title="Time [Seconds]"),
+    yaxis=dict(title="Velocity [cm/s]")
+)
+fig_comp.show()
+
+# %% [markdown] Cell 11
+## 5. Multi-Tab Excel Export
+# Exports the entire flight dataset into **`data/flight_kinematics_characterization.xlsx`** containing:
+# * **Tab 1 (`Synchronized_TimeSeries`):** 100 Hz timeline with Doppler, Tracker, and Theoretical velocities, accelerations, and positions.
+# * **Tab 2 (`Drift_Cancellation_Proof`):** Single-mic velocities vs. differential velocity showing oscillator drift cancellation.
+# * **Tab 3 (`Kinematic_Coefficients`):** Aerodynamic drag $\gamma$, restitution $e$, Atwood acceleration, and optical correlation $R^2$.
+
+# %% [code] Cell 12
+# Cell 6: Multi-Tab Excel Exporter
+data_dir = Path("data")
+data_dir.mkdir(parents=True, exist_ok=True)
+excel_path = data_dir / "flight_kinematics_characterization.xlsx"
+csv_path = data_dir / "flight_kinematics_characterization.csv"
+
+df_ts = pd.DataFrame({
+    "time_sec": t_sec,
+    "f_mic1_hz": f1,
+    "f_mic2_hz": f2,
+    "f0_common_hz": f0_drift,
+    "amp_mic1_mv": amp1,
+    "amp_mic2_mv": amp2,
+    "v_doppler_diff_mps": v_diff,
+    "v_doppler_diff_cmps": v_diff_cmps,
+    "v_mic1_cmps": v_m1 * 100.0,
+    "v_mic2_cmps": v_m2 * 100.0,
+    "v_mean_single_cmps": v_mean_single * 100.0,
+    "v_tracker_cmps": v_tracker * 100.0,
+    "v_theoretical_cmps": v_theo * 100.0,
+    "a_doppler_mps2": accel,
+    "a_theoretical_mps2": a_theo,
+    "pos_doppler_m": pos
+})
+
+df_drift = pd.DataFrame({
+    "time_sec": t_sec,
+    "v_mic1_cmps": v_m1 * 100.0,
+    "v_mic2_cmps": v_m2 * 100.0,
+    "v_diff_cmps": v_diff_cmps,
+    "drift_error_bias_cmps": (v_mean_single * 100.0) - v_diff_cmps,
+    "f0_oscillator_drift_hz": f0_drift - f0
+})
+
+df_coeffs = pd.DataFrame([{
+    "carrier_nominal_f0_hz": f0,
+    "track_length_m": track_length_m,
+    "temperature_c": temperature_c,
+    "speed_of_sound_mps": c_sound,
+    "propulsion_mode": propulsion_mode,
+    "viscous_drag_gamma": summary.get("viscous_drag_gamma", 0.0),
+    "coefficient_of_restitution": summary.get("mean_coefficient_of_restitution", np.nan),
+    "max_forward_speed_cmps": np.max(v_diff_cmps),
+    "max_reverse_speed_cmps": np.min(v_diff_cmps),
+    "tracker_optical_mae_cmps": optical_stats.get("mae_mps", np.nan) * 100.0,
+    "tracker_optical_rmse_cmps": optical_stats.get("rmse_mps", np.nan) * 100.0,
+    "tracker_optical_r2": optical_stats.get("correlation_r2", np.nan)
+}])
+
+with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+    df_ts.to_excel(writer, sheet_name="Synchronized_TimeSeries", index=False)
+    df_drift.to_excel(writer, sheet_name="Drift_Cancellation_Proof", index=False)
+    df_coeffs.to_excel(writer, sheet_name="Kinematic_Coefficients", index=False)
+
+df_ts.to_csv(csv_path, index=False)
+
+print("=" * 85)
+print("🎉 FLIGHT KINEMATICS DATA EXPORT COMPLETE!")
+print("=" * 85)
+print(f"• Multi-Tab Excel Workbook : {excel_path.resolve()}")
+print(f"• Synchronized CSV Backup  : {csv_path.resolve()}")
+print("=" * 85)
+
+# %% [markdown] Cell 13
+## 6. Clean Hardware Teardown
+# Release FPGA DMA channels and memory buffers.
 
 # %% [code] Cell 14
 ol.close()
