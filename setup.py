@@ -28,9 +28,17 @@ setup(
         "scipy>=1.7.0",
         "plotly>=5.10.0,<6.0.0",
         "ipywidgets>=8.0.0",
+        "pandas>=1.3.0",
+        "openpyxl>=3.0.0",
     ],
     package_data={
-        "pynq_localizer": ["../notebooks/*.ipynb", "../hardware.json", "../profiles/*.json"],
+        "pynq_localizer": [
+            "../notebooks/*.ipynb",
+            "../notebooks/experiments/*.ipynb",
+            "../notebooks/experiments/data/.gitkeep",
+            "../hardware.json",
+            "../profiles/*.json",
+        ],
     },
     include_package_data=True,
     entry_points={

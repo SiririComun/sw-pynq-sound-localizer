@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 45351ca
+• Repository State    : feat/pulse-time-of-arrival @ e4671eb
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -16,7 +16,7 @@ feat/differential-air-track-doppler                0caba84 [origin/feat/differen
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         45351ca [origin/feat/pulse-time-of-arrival] chore(context): update repository summary after board verification
+* feat/pulse-time-of-arrival                         e4671eb [origin/feat/pulse-time-of-arrival: ahead 1] feat(deps): add pandas and openpyxl to requirements.txt
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
@@ -33,7 +33,8 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 45351ca  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-29 : chore(context): update repository summary after board verification (SiririComun)
+* e4671eb  (HEAD -> feat/pulse-time-of-arrival) - 2026-09-29 : feat(deps): add pandas and openpyxl to requirements.txt (SiririComun)
+* 45351ca  (origin/feat/pulse-time-of-arrival) - 2026-09-29 : chore(context): update repository summary after board verification (SiririComun)
 * d130253  - 2026-09-27 : fix(parity): replace oscillating while loop with non-iterative modular wrap in array and kinematics (SiririComun)
 * 65f2640  - 2026-09-27 : fix(array): correct kinematics import and finalize autodyne bearing calculation (SiririComun)
 * 04cbd9a  - 2026-09-27 : fix(array): align pulsed toa bearing with parity-repaired autodyne phase and enable offline plotly widgets in Notebook 03 (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * a83a0b6  - 2026-09-27 : chore(context): update repository summary with overhauled Notebook 03 (SiririComun)
 * 44056f4  - 2026-09-27 : docs(notebook): overhaul Notebook 03 with pulsed direct-gate phase interferometry (SiririComun)
 * 2750362  - 2026-09-27 : chore(context): update repository summary with overhauled Notebook 02 (SiririComun)
-* 1bb0d0f  - 2026-09-27 : docs(notebook): overhaul Notebook 02 with quasi-anechoic direct-pulse calibration and zero-intercept solver (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -5801,9 +5801,17 @@ setup(
         "scipy>=1.7.0",
         "plotly>=5.10.0,<6.0.0",
         "ipywidgets>=8.0.0",
+        "pandas>=1.3.0",
+        "openpyxl>=3.0.0",
     ],
     package_data={
-        "pynq_localizer": ["../notebooks/*.ipynb", "../hardware.json", "../profiles/*.json"],
+        "pynq_localizer": [
+            "../notebooks/*.ipynb",
+            "../notebooks/experiments/*.ipynb",
+            "../notebooks/experiments/data/.gitkeep",
+            "../hardware.json",
+            "../profiles/*.json",
+        ],
     },
     include_package_data=True,
     entry_points={
