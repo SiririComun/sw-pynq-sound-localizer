@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 66ef08a
+• Repository State    : feat/pulse-time-of-arrival @ 255297b
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         66ef08a [origin/feat/pulse-time-of-arrival: ahead 2] test(toa): harmonize carrier to 2660Hz and update profile schema in ToA suite (Part 3/3)
+* feat/pulse-time-of-arrival                         255297b [origin/feat/pulse-time-of-arrival] chore(context): update repository context with 100% green test suite
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          19426f3 test(aoa): harmonize carrier frequency to certified 2660Hz in AoA test suite (Part 1/3)
+  remotes/origin/feat/pulse-time-of-arrival          255297b chore(context): update repository context with 100% green test suite
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,9 +33,10 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 66ef08a  (HEAD -> feat/pulse-time-of-arrival) - 2026-09-29 : test(toa): harmonize carrier to 2660Hz and update profile schema in ToA suite (Part 3/3) (SiririComun)
+* 255297b  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-09-29 : chore(context): update repository context with 100% green test suite (SiririComun)
+* 66ef08a  - 2026-09-29 : test(toa): harmonize carrier to 2660Hz and update profile schema in ToA suite (Part 3/3) (SiririComun)
 * 375af3b  - 2026-09-29 : test(doppler): harmonize carrier to 2660Hz and set metrological velocity tolerance (Part 2/3) (SiririComun)
-* 19426f3  (origin/feat/pulse-time-of-arrival) - 2026-09-29 : test(aoa): harmonize carrier frequency to certified 2660Hz in AoA test suite (Part 1/3) (SiririComun)
+* 19426f3  - 2026-09-29 : test(aoa): harmonize carrier frequency to certified 2660Hz in AoA test suite (Part 1/3) (SiririComun)
 * e196cf0  - 2026-09-29 : test(metrology): complete Task 6.1 unit verification suite with 100% pass rate (SiririComun)
 * fcfb31e  - 2026-09-29 : feat(experiments): complete Phase 5 with exp03 air-track kinematics harvester notebook (SiririComun)
 * 95a48a4  - 2026-09-29 : feat(experiments): create exp02 3-method angular characterization harvester notebook (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * 023f96f  - 2026-09-29 : feat(kinematics): complete Phase 2 metrology engine, dual profiles, and clean ToA estimator (SiririComun)
 * 9c437c7  - 2026-09-29 : chore(packaging): initialize notebooks/experiments/data directory structure (SiririComun)
 * efe1142  - 2026-09-29 : feat(packaging): add pandas, openpyxl, and experiment notebook paths to setup.py (SiririComun)
-* e4671eb  - 2026-09-29 : feat(deps): add pandas and openpyxl to requirements.txt (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -10249,7 +10249,7 @@ exp01_distance_energy_characterization.ipynb: (notebooks/experiments/exp01_dista
 # 🔬 Experiment 01: Dual-Microphone Distance & Energy Characterization
 # **Project:** `pynq-sound-localizer` (`v1.3.1`)
 # **Target:** Production Data Harvester & Metrological Characterization
-# **Outputs:** `data/distance_characterization_raw.xlsx` & `profiles/active_buzzer_profile.json`
+# **Outputs:** `data/distance_characterization_raw_mic{1,2}.xlsx` & `profiles/active_buzzer_profile.json`
 # ---
 ### 🏛️ Physical Principles & Experimental Objectives
 # 1. **Spherical Pressure vs. Intensity Spreading:**
@@ -10257,17 +10257,18 @@ exp01_distance_energy_characterization.ipynb: (notebooks/experiments/exp01_dista
 # * Acoustic energy density (intensity) decays as $E(r) = k_E \cdot (1/r^2)$.
 # * Both models are evaluated for **both Mic 1 and Mic 2 independently** to characterize individual analog sensitivities ($k_{A1}, k_{A2}, k_{E1}, k_{E2}$).
 # 2. **Quasi-Anechoic Time-Gating ($c_{\text{room}} \to 0$):**
-# * Direct Fourier integration over the initial $K=3$ cycles ($\approx 1.13\,\text{ms}$ at $2660\,\text{Hz}$) freezes energy before room reflections arrive, enforcing pure zero-intercept physics.
+# * Direct Fourier integration over the initial $K = 3$ cycles ($\approx 1.13\,\text{ms}$ at $2660\,\text{Hz}$) freezes energy before room reflections arrive, enforcing pure zero-intercept physics.
 # 3. **Metrological Ground-Truth Benchmark:**
 # * Compares **Distance via ToA** ($r_{\text{ToA}} = c \cdot t_{\text{flight}}$) and **Distance via Energy** ($r_{\text{Energy}} = \sqrt{k_E / E}$) against ground-truth tape distance ($r_{\text{tape}}$).
 # * Computes sample jitter ($\sigma$), standard error ($\text{SEM} = \sigma / \sqrt{N}$), Mean Absolute Error ($\text{MAE}$), Root Mean Square Error ($\text{RMSE}$), and SNR.
 
 # %% [code] Cell 2
-# Cell 1: Environment Setup & Hardware Initialization
+# Cell 1: Environment Setup, Hardware Initialization & Channel Selector
 import time
 import json
 from pathlib import Path
 import numpy as np
+import scipy.signal as signal
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -10280,6 +10281,15 @@ from pynq_localizer import (
     DistanceEstimator
 )
 
+# =========================================================================
+# 🎛️ CONFIGURATION: SELECT ACTIVE MICROPHONE CHANNEL (1 or 2)
+# =========================================================================
+ACTIVE_CHANNEL = 1  # ◄── Set to 1 for Mic 1 (A0), or 2 for Mic 2 (A1)
+
+CH_LABEL = f"Mic {ACTIVE_CHANNEL} (A{ACTIVE_CHANNEL - 1})"
+CH_COLOR = "#00FFCC" if ACTIVE_CHANNEL == 1 else "#FF007F"
+# =========================================================================
+
 # 1. Initialize Hardware Overlay (M=1 Bypass Mode, 500 kSPS undecimated stream)
 ol = MicrophoneArrayOverlay(version="v1.5.2-rc4")
 dma = ol.axi_dma_0
@@ -10288,31 +10298,57 @@ if not dma.recvchannel.running:
     time.sleep(0.005)
     dma.recvchannel.start()
 
-# 2. Ambient Physical Parameters
-temperature_c = 20.0  # Measure with room thermometer and update if needed
+# 2. Ambient Physical Parameters (Pulsed Mode runs at strict 500 kSPS)
+temperature_c = 20.0
 c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
 f0 = KinematicAnalytics.DEFAULT_F0_HZ  # 2660.0 Hz
-mic_distance_m = 0.05  # 5.0 cm baseline
+fs = 500_000.0                         # ◄── Explicitly 500 kSPS (M=1 Bypass)
+ol.fs_per_ch = fs
+
+# Proper 500 kSPS bandpass filter around carrier (f0 ± 350 Hz)
+nyq = fs / 2.0
+b_bp, a_bp = signal.butter(2, [max(20.0, f0 - 350.0) / nyq, min(nyq - 20.0, f0 + 350.0) / nyq], btype="bandpass")
+
+def extract_single_channel_wavefront(v_raw, fs=500000.0, blank_ms=1.0, min_thresh_mv=15.0):
+    """Robust sub-sample wavefront detector for an individual microphone channel."""
+    v_bp = signal.filtfilt(b_bp, a_bp, v_raw - np.mean(v_raw)) * 1000.0  # in mV
+    env = np.abs(KinematicAnalytics.hilbert_transform(v_bp))
+    blank_idx = int((blank_ms / 1000.0) * fs)
+    if len(env) <= blank_idx:
+        return np.nan, 0, v_bp, env
+    peak_val = np.max(env[blank_idx:])
+    thresh = max(min_thresh_mv, 0.20 * peak_val)
+    zc = np.where((v_bp[:-1] <= 0) & (v_bp[1:] > 0))[0]
+    for i in range(len(zc) - 1):
+        z0, z1 = zc[i], zc[i + 1]
+        if z0 < blank_idx:
+            continue
+        p = z1 - z0
+        amp = np.max(v_bp[z0:z1]) - np.min(v_bp[z0:z1])
+        if (150 <= p <= 230) and (amp >= thresh):
+            frac = -v_bp[z0] / (v_bp[z0 + 1] - v_bp[z0]) if abs(v_bp[z0 + 1] - v_bp[z0]) > 1e-6 else 0.0
+            t_arr_ms = (float(z0) + frac) / fs * 1000.0
+            return t_arr_ms, int(z0), v_bp, env
+    return np.nan, 0, v_bp, env
 
 print("=" * 80)
-print("✅ HARDWARE & METROLOGY HARVESTER INITIALIZED")
+print(f"✅ INDEPENDENT METROLOGY HARVESTER INITIALIZED FOR: {CH_LABEL}")
 print("=" * 80)
-print(f"• Sampling Rate      : {ol.fs_per_ch:.0f} SPS (M=1 Bypass, 0.00 µs skew)")
-print(f"• Nominal Carrier f0 : {f0:.1f} Hz")
+print(f"• Sampling Rate      : {fs:.0f} SPS (M=1 Bypass Mode)")
+print(f"• Carrier Frequency  : f0 = {f0:.1f} Hz")
 print(f"• Speed of Sound c(T): {c_sound:.2f} m/s (at {temperature_c}°C)")
-print(f"• Array Baseline d   : {mic_distance_m*100:.1f} cm")
 print("=" * 80)
 
 # %% [markdown] Cell 3
 ## 1. Pre-Flight Gain & Anti-Clipping Verification
 # ⚠️ **CRITICAL METROLOGY CHECK:**
-# Place the buzzer at your closest planned distance ($r = 10.0\,\text{cm}$).
-# Fire a test pulse and verify that the peak-to-peak voltage stays within **$1.8\,\text{V} - 2.4\,\text{V}_{\text{pp}}$** (centered at $1.65\,\text{V}$ DC bias).
+# Place the buzzer at your closest planned distance ($r = 10.0\,\text{cm}$) facing the active microphone.
+# Fire a test pulse and verify that the peak-to-peak voltage stays within **$1.6\,\text{V} - 2.4\,\text{V}_{\text{pp}}$** (centered at $1.65\,\text{V}$ DC bias).
 # **If the waveform exhibits flat horizontal tops or bottoms, turn the gain trimmer screw counter-clockwise until clipping vanishes.**
 
 # %% [code] Cell 4
-# Cell 2: Anti-Clipping Gain Check & Pre-Trigger Noise Floor
-input("👉 Place buzzer at 10.0 cm from Mic 1 and press [Enter] to check gain...")
+# Cell 2: Pre-Flight Gain & Anti-Clipping Check
+input(f"👉 Place buzzer at 10.0 cm facing {CH_LABEL} along ruler and press [Enter]...")
 
 test_ping = ol.capture_pulsed_toa_frame(
     pulse_width_ms=10.0,
@@ -10323,36 +10359,44 @@ test_ping = ol.capture_pulsed_toa_frame(
     timeout=1.0
 )
 
-v0, v1 = test_ping["v_a0"], test_ping["v_a1"]
-v0_pp = float(np.max(v0) - np.min(v0))
-v1_pp = float(np.max(v1) - np.min(v1))
+v_raw = test_ping["v_a0"] if ACTIVE_CHANNEL == 1 else test_ping["v_a1"]
+v_min, v_max = float(np.min(v_raw)), float(np.max(v_raw))
+v_pp = v_max - v_min
+is_clipping = (v_max >= 3.28) or (v_min <= 0.02)
 
-clip0 = (np.max(v0) >= 3.28) or (np.min(v0) <= 0.02)
-clip1 = (np.max(v1) >= 3.28) or (np.min(v1) <= 0.02)
+noise_samples = min(500, len(v_raw) // 8)
+noise_v = float(np.std(v_raw[:noise_samples]))
+noise_mv = noise_v * 1000.0
+
+peak_amp_v = v_pp / 2.0
+snr_db = 20.0 * np.log10(max(peak_amp_v, 1e-6) / max(noise_v, 1e-6))
+
+clip_str = "🚨 CLIPPING (TURN GAIN CCW)" if is_clipping else "✅ NO (SAFE)"
+gain_str = "✅ OPTIMAL RANGE (1.6V - 2.4V)" if (1.6 <= v_pp <= 2.4 and not is_clipping) else ("⚠️ LOW SIGNAL (<1.6V)" if v_pp < 1.6 else "⚠️ NEAR SATURATION")
 
 print("=" * 75)
-print("📊 PRE-FLIGHT GAIN & DYNAMIC RANGE REPORT:")
+print(f"📊 PRE-FLIGHT GAIN & DYNAMIC RANGE REPORT FOR {CH_LABEL}:")
 print("=" * 75)
-print(f"• Mic 1 (A0) Peak-to-Peak : {v0_pp:.2f} V  | Rail Clipping: {'🚨 YES (TURN GAIN DOWN!)' if clip0 else '✅ NO (SAFE)'}")
-print(f"• Mic 2 (A1) Peak-to-Peak : {v1_pp:.2f} V  | Rail Clipping: {'🚨 YES (TURN GAIN DOWN!)' if clip1 else '✅ NO (SAFE)'}")
-print(f"• Mic 1 Pre-Trigger Noise : {test_ping['noise_mic1_mv']:.2f} mV RMS (SNR = {test_ping['snr_mic1_db']:.1f} dB)")
-print(f"• Mic 2 Pre-Trigger Noise : {test_ping['noise_mic2_mv']:.2f} mV RMS (SNR = {test_ping['snr_mic2_db']:.1f} dB)")
+print(f"• Peak-to-Peak Voltage : {v_pp:.2f} V ({v_min:.2f}V to {v_max:.2f}V)")
+print(f"• Dynamic Rail Clipping: {clip_str}")
+print(f"• Gain Tuning Status   : {gain_str}")
+print(f"• Pre-Trigger Noise    : {noise_mv:.2f} mV RMS (SNR = {snr_db:.1f} dB)")
 print("=" * 75)
 
 # %% [markdown] Cell 5
-## 2. Symmetrical 10.0 cm Standoff Reference Calibration
-# Place the buzzer at **exactly $10.0\,\text{cm}$ from Mic 1 AND $10.0\,\text{cm}$ from Mic 2** (isosceles triangle at broadside $\theta = 0^\circ$).
-# The system fires $N=10$ pulses, subtracts theoretical air flight ($t_{\text{air}} = 0.10\,\text{m} / c$), and extracts **independent turn-on delays ($t_{\text{off},1}, t_{\text{off},2}$)** and electrical skew ($\Delta t_{\text{skew}}$).
+## 2. Independent 10.0 cm Standoff Reference Calibration
+# Place the buzzer at **exactly $10.0\,\text{cm}$ collinear to the active microphone** along your ruler.
+# The system fires $N = 10$ pulses, subtracts theoretical air flight ($t_{\text{air}} = 0.10\,\text{m} / c$), and extracts the **empirical turn-on delay ($t_{\text{off}}$)** for this channel.
 
 # %% [code] Cell 6
-# Cell 3: 10-Pulse Dual Standoff Calibration
+# Cell 3: 10-Pulse Independent Standoff Calibration (10.0 cm)
 r_ref_cm = 10.0
 t_air_ref_ms = (r_ref_cm / 100.0) / c_sound * 1000.0  # ~0.2914 ms
 
-input(f"👉 Position buzzer at EXACTLY {r_ref_cm:.1f} cm from BOTH mics (broadside 0°). Press [Enter]...")
+input(f"👉 Ensure buzzer is at EXACTLY {r_ref_cm:.1f} cm collinear to {CH_LABEL}. Press [Enter]...")
 
 n_cal_pulses = 10
-cal_t1, cal_t2 = [], []
+cal_arrivals = []
 
 for p in range(n_cal_pulses):
     res = ol.capture_pulsed_toa_frame(
@@ -10363,40 +10407,53 @@ for p in range(n_cal_pulses):
         temperature_c=temperature_c,
         timeout=1.0
     )
-    if np.isfinite(res["t1_raw_ms"]) and np.isfinite(res["t2_raw_ms"]):
-        cal_t1.append(res["t1_raw_ms"])
-        cal_t2.append(res["t2_raw_ms"])
+    v_raw = res["v_a0"] if ACTIVE_CHANNEL == 1 else res["v_a1"]
+    t_arr_ms, idx_wf, v_bp, env = extract_single_channel_wavefront(v_raw, fs=fs, blank_ms=1.0)
+    
+    # Fallback to driver's pre-computed arrival if needed
+    if not np.isfinite(t_arr_ms):
+        t_arr_ms = res["t1_raw_ms"] if ACTIVE_CHANNEL == 1 else res["t2_raw_ms"]
+        
+    if np.isfinite(t_arr_ms):
+        cal_arrivals.append(t_arr_ms)
+        print(f"  Pulse #{p+1:02d}: t_arrival = {t_arr_ms:.3f} ms | Peak Env = {np.max(env):.1f} mV")
+    else:
+        print(f"  Pulse #{p+1:02d}: ⚠️ No arrival detected (Peak Env = {np.max(env):.1f} mV)")
+        
     time.sleep(0.12)
 
-# Discard cold start (Pulse #1)
-stable_t1 = cal_t1[1:]
-stable_t2 = cal_t2[1:]
+# Discard Pulse #1 (cold-start transient)
+stable_arrivals = cal_arrivals[1:] if len(cal_arrivals) > 1 else cal_arrivals
 
-t1_median_ms = float(np.median(stable_t1))
-t2_median_ms = float(np.median(stable_t2))
+if len(stable_arrivals) > 0:
+    t_arr_median = float(np.median(stable_arrivals))
+    cal_off_ms = float(t_arr_median - t_air_ref_ms)
+    jitter_us = float(np.std(stable_arrivals)) * 1000.0 if len(stable_arrivals) > 1 else 0.0
 
-cal_off1_ms = float(t1_median_ms - t_air_ref_ms)
-cal_off2_ms = float(t2_median_ms - t_air_ref_ms)
-skew_us = float((cal_off1_ms - cal_off2_ms) * 1000.0)
-
-print("=" * 80)
-print("🏆 CALIBRATED DUAL STANDOFF OFFSETS (Pulses #2 to #10):")
-print("=" * 80)
-print(f"• Mic 1 Calibrated t_off1 : {cal_off1_ms:.4f} ms (σ = ±{np.std(stable_t1)*1000:.1f} µs)")
-print(f"• Mic 2 Calibrated t_off2 : {cal_off2_ms:.4f} ms (σ = ±{np.std(stable_t2)*1000:.1f} µs)")
-print(f"• Inter-Channel Skew      : {skew_us:+.2f} µs ({skew_us * 1e-6 * c_sound * 1000.0:+.2f} mm)")
-print("=" * 80)
+    print("\n" + "=" * 80)
+    print(f"🏆 CALIBRATED STANDOFF OFFSET FOR {CH_LABEL} (Pulses #2 to #{len(cal_arrivals)}):")
+    print("=" * 80)
+    print(f"• Raw Arrivals Recorded   : {[f'{t:.3f}ms' for t in stable_arrivals]}")
+    print(f"• Median Raw Arrival Time : {t_arr_median:.4f} ms")
+    print(f"• Theoretical Air Flight  : {t_air_ref_ms:.4f} ms (at {r_ref_cm:.1f} cm)")
+    print(f"• EMPIRICAL t_offset      : {cal_off_ms:.4f} ms")
+    print(f"• Arrival Jitter (σ)      : ±{jitter_us:.1f} µs (±{jitter_us * 1e-6 * c_sound * 1000.0:.2f} mm)")
+    print("=" * 80)
+else:
+    print("🚨 ERROR: No valid arrivals detected. Check buzzer power and line of sight.")
 
 # %% [markdown] Cell 7
 ## 3. Guided Distance Characterization Sweep ($15\,\text{cm} - 100\,\text{cm}$)
 # For each station along your measuring tape:
 # 1. Move the buzzer to the marked distance and press **`[Enter]`**.
-# 2. The system fires $N=20$ pulses, logs raw waveforms, extracts direct $A_1, A_2$ and $E_1, E_2$, computes flight times using independent offsets ($t_{\text{off},1}, t_{\text{off},2}$), and calculates SNR.
+# 2. The system fires $N = 20$ pulses, logs raw waveforms, extracts direct $A$ and $E$, computes flight times using the channel's calibrated offset ($t_{\text{off}}$), and calculates SNR.
 
 # %% [code] Cell 8
 # Cell 4: Production Multi-Shot Distance Harvester Loop
 stations_cm = [15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 60.0, 80.0, 100.0]
 n_shots_per_station = 20
+gate_cycles = 3
+n_gate_target = int(gate_cycles * round(fs / f0))
 
 raw_records = []
 station_summaries = []
@@ -10407,165 +10464,179 @@ protocol = DirectPulseCalibrationProtocol(
     temperature_c=temperature_c,
     system_metadata={
         "emitter_device": "Active_Buzzer_2660Hz",
-        "calibrated_toa_offset_m1_ms": cal_off1_ms,
-        "calibrated_toa_offset_m2_ms": cal_off2_ms,
-        "inter_channel_skew_us": skew_us
+        f"calibrated_toa_offset_m{ACTIVE_CHANNEL}_ms": cal_off_ms,
+        "active_channel": ACTIVE_CHANNEL
     }
 )
 
 print("=" * 85)
-print(f"🚀 LAUNCHING DISTANCE HARVESTER ({len(stations_cm)} stations × {n_shots_per_station} shots = {len(stations_cm)*n_shots_per_station} pings)")
+print(f"🚀 LAUNCHING DISTANCE HARVESTER FOR {CH_LABEL}")
+print(f"   ({len(stations_cm)} stations × {n_shots_per_station} shots = {len(stations_cm)*n_shots_per_station} pings)")
 print("=" * 85)
 
 for s_idx, r_cm in enumerate(stations_cm):
     r_m = r_cm / 100.0
-    input(f"\n📍 [{s_idx+1}/{len(stations_cm)}] Place buzzer at EXACTLY {r_cm:5.1f} cm along tape and press [Enter]...")
+    input(f"\n📍 [{s_idx+1}/{len(stations_cm)}] Place buzzer at EXACTLY {r_cm:5.1f} cm from {CH_LABEL} and press [Enter]...")
     
-    shot_a1, shot_a2 = [], []
-    shot_e1, shot_e2 = [], []
-    shot_r_toa1, shot_r_toa2 = [], []
-    shot_snr1, shot_snr2 = [], []
+    shot_amp_mv = []
+    shot_energy = []
+    shot_r_toa = []
+    shot_snr = []
     
     for p in range(n_shots_per_station):
         res = ol.capture_pulsed_toa_frame(
             pulse_width_ms=10.0,
             packet_samples=16384,
             f_target=f0,
-            calibrated_offset_m1_ms=cal_off1_ms,
-            calibrated_offset_m2_ms=cal_off2_ms,
+            calibrated_offset_ms=cal_off_ms,
             temperature_c=temperature_c,
-            gate_cycles=3,
+            gate_cycles=gate_cycles,
             timeout=1.0
         )
         
-        a1_mv = res["amp_direct_a0_v"] * 1000.0
-        a2_mv = res["amp_direct_a1_v"] * 1000.0
-        e1 = res["energy_direct_a0"]
-        e2 = res["energy_direct_a1"]
+        v_raw = res["v_a0"] if ACTIVE_CHANNEL == 1 else res["v_a1"]
+        t_arr_ms, idx_wf, _, _ = extract_single_channel_wavefront(v_raw, fs=fs, blank_ms=1.0)
         
-        shot_a1.append(a1_mv)
-        shot_a2.append(a2_mv)
-        shot_e1.append(e1)
-        shot_e2.append(e2)
-        shot_r_toa1.append(res["r1_cm"])
-        shot_r_toa2.append(res["r2_cm"])
-        shot_snr1.append(res["snr_mic1_db"])
-        shot_snr2.append(res["snr_mic2_db"])
+        if np.isfinite(t_arr_ms):
+            t_flight_ms = max(0.0, t_arr_ms - cal_off_ms)
+            r_toa_cm = c_sound * (t_flight_ms / 1000.0) * 100.0
+            
+            gated = KinematicAnalytics.extract_gated_direct_fourier(
+                signal_v=v_raw, fs=fs, f0=f0, n_cycles=gate_cycles, start_idx=idx_wf
+            )
+            amp_mv = gated["amplitude_v"] * 1000.0
+            energy_val = gated["energy_v2"]
+            
+            noise_v = float(np.std(v_raw[:min(500, len(v_raw)//8)]))
+            snr_val = float(20.0 * np.log10(max(gated["amplitude_v"], 1e-6) / max(noise_v, 1e-6)))
+            
+            tail_s = idx_wf + n_gate_target
+            tail_e = min(len(v_raw), tail_s + int(0.0015 * fs))
+            e_tail = float(np.sum((v_raw[tail_s:tail_e] - np.mean(v_raw[tail_s:tail_e])) ** 2)) if tail_s < len(v_raw) else 1e-6
+            smr_val = float(10.0 * np.log10(max(energy_val, 1e-9) / max(e_tail, 1e-9)))
+        else:
+            t_flight_ms = np.nan
+            r_toa_cm = np.nan
+            amp_mv = 0.0
+            energy_val = 0.0
+            noise_v = 0.0
+            snr_val = 0.0
+            smr_val = 0.0
+
+        shot_amp_mv.append(amp_mv)
+        shot_energy.append(energy_val)
+        shot_r_toa.append(r_toa_cm)
+        shot_snr.append(snr_val)
         
-        # Record individual raw ping
         raw_records.append({
             "station_id": s_idx + 1,
             "r_tape_cm": r_cm,
+            "channel": ACTIVE_CHANNEL,
             "pulse_num": p + 1,
-            # Mic 1 Metrics
-            "m1_t_raw_ms": res["t1_raw_ms"],
-            "m1_r_toa_cm": res["r1_cm"],
-            "m1_amp_direct_mv": a1_mv,
-            "m1_energy_direct": e1,
-            "m1_noise_mv": res["noise_mic1_mv"],
-            "m1_snr_db": res["snr_mic1_db"],
-            "m1_smr_db": res["smr_a0_db"],
-            # Mic 2 Metrics
-            "m2_t_raw_ms": res["t2_raw_ms"],
-            "m2_r_toa_cm": res["r2_cm"],
-            "m2_amp_direct_mv": a2_mv,
-            "m2_energy_direct": e2,
-            "m2_noise_mv": res["noise_mic2_mv"],
-            "m2_snr_db": res["snr_mic2_db"],
-            "m2_smr_db": res["smr_a1_db"]
+            "t_raw_ms": t_arr_ms,
+            "t_flight_ms": t_flight_ms,
+            "r_toa_cm": r_toa_cm,
+            "amp_direct_mv": amp_mv,
+            "energy_direct": energy_val,
+            "noise_mv": noise_v * 1000.0,
+            "snr_db": snr_val,
+            "smr_db": smr_val
         })
         time.sleep(0.12)
         
-    # Register in calibration protocol
-    protocol.add_dual_measurement(
+    protocol.add_measurement(
         distance_m=r_m,
-        amplitude_m1_v=np.array(shot_a1) / 1000.0,
-        amplitude_m2_v=np.array(shot_a2) / 1000.0,
-        energy_m1=shot_e1,
-        energy_m2=shot_e2
+        amplitude_v=np.array(shot_amp_mv) / 1000.0,
+        energy_direct=shot_energy,
+        channel=ACTIVE_CHANNEL
     )
     
-    # Compute station metrological statistics
-    st_toa1 = KinematicAnalytics.compute_metrology_statistics(shot_r_toa1, ground_truth=r_cm)
-    st_toa2 = KinematicAnalytics.compute_metrology_statistics(shot_r_toa2, ground_truth=r_cm)
+    st_toa = KinematicAnalytics.compute_metrology_statistics(shot_r_toa, ground_truth=r_cm)
     
     station_summaries.append({
         "station_id": s_idx + 1,
         "r_tape_cm": r_cm,
-        "m1_r_mean_cm": st_toa1["mean"],
-        "m1_r_std_mm": st_toa1["std"] * 10.0,
-        "m1_r_sem_mm": st_toa1["sem"] * 10.0,
-        "m1_r_mae_mm": st_toa1["mae"] * 10.0,
-        "m1_a_mean_mv": float(np.mean(shot_a1)),
-        "m1_e_mean": float(np.mean(shot_e1)),
-        "m2_r_mean_cm": st_toa2["mean"],
-        "m2_r_std_mm": st_toa2["std"] * 10.0,
-        "m2_r_sem_mm": st_toa2["sem"] * 10.0,
-        "m2_r_mae_mm": st_toa2["mae"] * 10.0,
-        "m2_a_mean_mv": float(np.mean(shot_a2)),
-        "m2_e_mean": float(np.mean(shot_e2)),
+        "channel": ACTIVE_CHANNEL,
+        "r_toa_mean_cm": st_toa["mean"],
+        "r_toa_std_mm": st_toa["std"] * 10.0,
+        "r_toa_sem_mm": st_toa["sem"] * 10.0,
+        "r_toa_mae_mm": st_toa["mae"] * 10.0,
+        "amp_mean_mv": float(np.mean(shot_amp_mv)),
+        "amp_std_mv": float(np.std(shot_amp_mv)),
+        "energy_mean": float(np.mean(shot_energy)),
+        "snr_mean_db": float(np.mean(shot_snr))
     })
     
-    print(f"   ✅ Station {r_cm:5.1f} cm: A1={np.mean(shot_a1):5.1f}mV | r1={st_toa1['mean']:5.1f}cm (σ=±{st_toa1['std']*10:.2f}mm, MAE={st_toa1['mae']*10:.2f}mm)")
+    print(f"   ✅ Station {r_cm:5.1f} cm: A = {np.mean(shot_amp_mv):5.1f} mV | r_ToA = {st_toa['mean']:5.1f} cm (σ = ±{st_toa['std']*10:.2f} mm, MAE = {st_toa['mae']*10:.2f} mm)")
 
 print("\n" + "=" * 85)
-print("📊 ALL STATIONS HARVESTED — SOLVING DUAL-CHANNEL WLS MODELS...")
+print(f"📊 ALL STATIONS HARVESTED FOR {CH_LABEL} — SOLVING WLS MODELS...")
 print("=" * 85)
 
 # %% [markdown] Cell 9
 ## 4. Zero-Intercept WLS Fits: $A \propto 1/r$ and $E \propto 1/r^2$
-# Solves the analytical zero-intercept regressions for **both Mic 1 and Mic 2** simultaneously:
+# Solves the analytical zero-intercept regressions for the active microphone:
 # $$k_A = \frac{\sum w_i (1/r_i) A_i}{\sum w_i (1/r_i^2)}, \qquad k_E = \frac{\sum w_i (1/r_i^2) E_i}{\sum w_i (1/r_i^4)}$$
 
 # %% [code] Cell 10
-# Cell 5: Dual Regression Solver & Goodness-of-Fit
-fits = protocol.fit()
-res1 = fits["mic1"][f0]
-res2 = fits["mic2"][f0]
+# Cell 5: Single-Channel Regression Solver & Goodness-of-Fit Plot
+fits = protocol.fit_channel(channel=ACTIVE_CHANNEL)
+res = fits[f0]
 
 print("=" * 85)
-print("🏆 DUAL-CHANNEL REGRESSION RESULTS:")
+print(f"🏆 REGRESSION RESULTS FOR {CH_LABEL}:")
 print("=" * 85)
-print(f"• MIC 1 (A0):")
-print(f"  - Amplitude law (1/r)  : k_A1 = {res1['k']:.4f} ± {res1['delta_k']:.4f} V·m  (R² = {res1['r_squared']:.4f})")
-print(f"  - Energy law (1/r²)    : k_E1 = {res1['k_energy']:.6f} counts²·m² (R² = {res1['r_squared_energy']:.4f})")
-print(f"  - Room Reverberation c : {res1['c_room_unconstrained_v']*1000:+.2f} mV (Vanished via time-gating)")
-print(f"• MIC 2 (A1):")
-print(f"  - Amplitude law (1/r)  : k_A2 = {res2['k']:.4f} ± {res2['delta_k']:.4f} V·m  (R² = {res2['r_squared']:.4f})")
-print(f"  - Energy law (1/r²)    : k_E2 = {res2['k_energy']:.6f} counts²·m² (R² = {res2['r_squared_energy']:.4f})")
-print(f"  - Room Reverberation c : {res2['c_room_unconstrained_v']*1000:+.2f} mV")
+print(f"• Amplitude Law (A = k_A / r)  : k_A = {res['k']:.4f} ± {res['delta_k']:.4f} V·m  (R² = {res['r_squared']:.4f})")
+print(f"• Energy Law    (E = k_E / r²) : k_E = {res['k_energy']:.6f} counts²·m² (R² = {res['r_squared_energy']:.4f})")
+print(f"• Room Reverberation c_room    : {res['c_room_unconstrained_v']*1000:+.2f} mV (Vanished via time-gating)")
+print(f"• Quality Gate Passed (R²>=0.98): {'✅ YES' if res['passed_gate'] else '❌ NO'}")
 print("=" * 85)
 
-# Diagnostic Regression Plots
 df_sum = pd.DataFrame(station_summaries)
 r_axis_m = df_sum["r_tape_cm"].to_numpy() / 100.0
 
 fig_reg = make_subplots(
     rows=1, cols=2,
     subplot_titles=(
-        f"<b>1. Amplitude Decay A vs 1/r (R²_m1={res1['r_squared']:.4f}, R²_m2={res2['r_squared']:.4f})</b>",
-        f"<b>2. Energy Decay E vs 1/r² (R²_m1={res1['r_squared_energy']:.4f}, R²_m2={res2['r_squared_energy']:.4f})</b>"
+        f"<b>1. {CH_LABEL} Amplitude Decay A vs 1/r (R² = {res['r_squared']:.4f})</b>",
+        f"<b>2. {CH_LABEL} Energy Decay E vs 1/r² (R² = {res['r_squared_energy']:.4f})</b>"
     ),
     horizontal_spacing=0.10
 )
 
 # Panel 1: Amplitude vs 1/r
 inv_r = 1.0 / r_axis_m
-fig_reg.add_scatter(x=inv_r, y=df_sum["m1_a_mean_mv"], mode="markers", marker=dict(size=8, color="#00FFCC"), name="Mic 1 Amp", row=1, col=1)
-fig_reg.add_scatter(x=inv_r, y=df_sum["m2_a_mean_mv"], mode="markers", marker=dict(size=8, color="#FF007F"), name="Mic 2 Amp", row=1, col=1)
-x_dense = np.linspace(0, max(inv_r)*1.05, 100)
-fig_reg.add_scatter(x=x_dense, y=res1["k"] * x_dense * 1000.0, mode="lines", line=dict(color="#00FFCC", dash="dash"), name=f"Fit M1 (kA={res1['k']:.4f})", row=1, col=1)
-fig_reg.add_scatter(x=x_dense, y=res2["k"] * x_dense * 1000.0, mode="lines", line=dict(color="#FF007F", dash="dash"), name=f"Fit M2 (kA={res2['k']:.4f})", row=1, col=1)
+fig_reg.add_scatter(
+    x=inv_r, y=df_sum["amp_mean_mv"],
+    error_y=dict(type="data", array=df_sum["amp_std_mv"], visible=True),
+    mode="markers", marker=dict(size=8, color=CH_COLOR),
+    name=f"{CH_LABEL} A_RMS", row=1, col=1
+)
+x_dense = np.linspace(0, max(inv_r) * 1.05, 100)
+fig_reg.add_scatter(
+    x=x_dense, y=res["k"] * x_dense * 1000.0,
+    mode="lines", line=dict(color=CH_COLOR, dash="dash", width=2),
+    name=f"Fit (k_A = {res['k']:.4f} V·m)", row=1, col=1
+)
 
 # Panel 2: Energy vs 1/r²
 inv_r2 = 1.0 / (r_axis_m ** 2)
-fig_reg.add_scatter(x=inv_r2, y=df_sum["m1_e_mean"], mode="markers", marker=dict(size=8, color="#00FFCC"), name="Mic 1 Energy", row=1, col=2)
-fig_reg.add_scatter(x=inv_r2, y=df_sum["m2_e_mean"], mode="markers", marker=dict(size=8, color="#FF007F"), name="Mic 2 Energy", row=1, col=2)
-x2_dense = np.linspace(0, max(inv_r2)*1.05, 100)
-fig_reg.add_scatter(x=x2_dense, y=res1["k_energy"] * x2_dense, mode="lines", line=dict(color="#00FFCC", dash="dash"), name=f"Fit M1 (kE={res1['k_energy']:.1f})", row=1, col=2)
-fig_reg.add_scatter(x=x2_dense, y=res2["k_energy"] * x2_dense, mode="lines", line=dict(color="#FF007F", dash="dash"), name=f"Fit M2 (kE={res2['k_energy']:.1f})", row=1, col=2)
+fig_reg.add_scatter(
+    x=inv_r2, y=df_sum["energy_mean"],
+    mode="markers", marker=dict(size=8, color=CH_COLOR),
+    name=f"{CH_LABEL} Energy", row=1, col=2
+)
+x2_dense = np.linspace(0, max(inv_r2) * 1.05, 100)
+fig_reg.add_scatter(
+    x=x2_dense, y=res["k_energy"] * x2_dense,
+    mode="lines", line=dict(color=CH_COLOR, dash="dash", width=2),
+    name=f"Fit (k_E = {res['k_energy']:.6f})", row=1, col=2
+)
 
-fig_reg.update_layout(template="plotly_dark", height=450, title="<b>Quasi-Anechoic Direct-Pulse Regression Benchmark</b>")
+fig_reg.update_layout(
+    template="plotly_dark", height=450,
+    title=f"<b>Quasi-Anechoic Direct-Pulse Regression: {CH_LABEL}</b>"
+)
 fig_reg.update_xaxes(title="1 / Distance [m⁻¹]", row=1, col=1)
 fig_reg.update_yaxes(title="Amplitude A_RMS [mV]", row=1, col=1)
 fig_reg.update_xaxes(title="1 / Distance² [m⁻²]", row=1, col=2)
@@ -10573,73 +10644,200 @@ fig_reg.update_yaxes(title="Energy E [counts²]", row=1, col=2)
 fig_reg.show()
 
 # %% [markdown] Cell 11
-## 5. Multi-Tab Excel Export & Buzzer Profile Update
-# Exports the complete experimental run into **`data/distance_characterization_raw.xlsx`** containing:
-# * **Tab 1 (`Raw_Pings`):** All individual shots with timestamps, amplitudes, energies, ToA distances, and SNR.
-# * **Tab 2 (`Station_Summary`):** Statistical parameters per station ($\mu, \sigma, \text{SEM}, \text{MAE}$ in mm).
-# * **Tab 3 (`Fitted_Models`):** Dual $k_A, k_E$ constants, $R^2$ scores, and independent standoff offsets.
-# * Updates the unified profile JSON artifact at **`profiles/active_buzzer_profile.json`**.
+## 4.1 Physical Amplitude & Energy vs. Distance Decay Curves
+# Plots physical direct-path amplitude $A(r)$ and direct-path energy $E(r)$ directly against metric tape distance in **$\text{cm}$**, displaying the smooth continuous model fits ($A = k_A / r$ and $E = k_E / r^2$) alongside measured data points with error bars ($\pm \sigma$).
 
 # %% [code] Cell 12
-# Cell 6: Multi-Tab Excel Exporter & Profile Serializer
+# %% [code] Extra Cell: Physical Amplitude & Energy vs. Distance Decay Curves
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+r_meas_cm = df_sum["r_tape_cm"].to_numpy()
+amp_meas_mv = df_sum["amp_mean_mv"].to_numpy()
+amp_err_mv = df_sum["amp_std_mv"].to_numpy()
+energy_meas = df_sum["energy_mean"].to_numpy()
+
+# Continuous distance axis for smooth model curves (12 cm to 105 cm)
+r_dense_cm = np.linspace(12.0, 105.0, 300)
+r_dense_m = r_dense_cm / 100.0
+
+# 1. Theoretical Inverse Distance Decay: A(r) = k_A / r
+amp_model_mv = (res["k"] / r_dense_m) * 1000.0
+
+# 2. Theoretical Inverse Square Energy Decay: E(r) = k_E / r²
+energy_model = res["k_energy"] / (r_dense_m ** 2)
+
+# Create 2-column comparison subplot
+fig_decay = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=(
+        f"<b>1. {CH_LABEL} Amplitude Decay A(r) ∝ 1/r (R² = {res['r_squared']:.4f})</b>",
+        f"<b>2. {CH_LABEL} Energy Decay E(r) ∝ 1/r² (R² = {res['r_squared_energy']:.4f})</b>"
+    ),
+    horizontal_spacing=0.10
+)
+
+# -------------------------------------------------------------------------
+# Subplot 1: Amplitude Decay vs. Distance [cm]
+# -------------------------------------------------------------------------
+fig_decay.add_scatter(
+    x=r_meas_cm, y=amp_meas_mv,
+    error_y=dict(type="data", array=amp_err_mv, visible=True),
+    mode="markers",
+    marker=dict(size=9, color=CH_COLOR, symbol="circle"),
+    name=f"{CH_LABEL} Measured A_RMS",
+    row=1, col=1
+)
+fig_decay.add_scatter(
+    x=r_dense_cm, y=amp_model_mv,
+    mode="lines",
+    line=dict(color=CH_COLOR, width=2.2, dash="dash"),
+    name=f"Theory: A = {res['k']:.4f}/r",
+    row=1, col=1
+)
+
+# -------------------------------------------------------------------------
+# Subplot 2: Energy Decay vs. Distance [cm]
+# -------------------------------------------------------------------------
+fig_decay.add_scatter(
+    x=r_meas_cm, y=energy_meas,
+    mode="markers",
+    marker=dict(size=9, color="#FFA500", symbol="diamond"),
+    name=f"{CH_LABEL} Measured Energy",
+    row=1, col=2
+)
+fig_decay.add_scatter(
+    x=r_dense_cm, y=energy_model,
+    mode="lines",
+    line=dict(color="#FFA500", width=2.2, dash="dash"),
+    name=f"Theory: E = {res['k_energy']:.4f}/r²",
+    row=1, col=2
+)
+
+fig_decay.update_layout(
+    template="plotly_dark",
+    height=480,
+    title=f"<b>Quasi-Anechoic Spatial Propagation: {CH_LABEL}</b><br><sup>Direct-Path Fourier Amplitude and Energy vs. Metric Distance</sup>",
+    margin=dict(l=60, r=30, t=75, b=45)
+)
+
+fig_decay.update_xaxes(title="Physical Distance r [cm]", range=[10, 105], row=1, col=1)
+fig_decay.update_yaxes(title="Direct Amplitude A_RMS [mV]", range=[0, max(amp_meas_mv) * 1.12], row=1, col=1)
+
+fig_decay.update_xaxes(title="Physical Distance r [cm]", range=[10, 105], row=1, col=2)
+fig_decay.update_yaxes(title="Direct Energy E [counts²]", range=[0, max(energy_meas) * 1.10], row=1, col=2)
+
+fig_decay.show()
+
+# %% [markdown] Cell 13
+## 5. Multi-Tab Excel Export & Dedicated / Unified Profile Serializer
+# Exports the complete dataset for this microphone into `data/distance_characterization_raw_mic{ACTIVE_CHANNEL}.xlsx` containing:
+# * **Tab 1 (`Raw_Pings`):** All individual shots with timestamps, amplitudes, energies, ToA distances, and SNR.
+# * **Tab 2 (`Station_Summary`):** Statistical parameters per station ($\mu, \sigma, \text{SEM}, \text{MAE}$ in mm).
+# * **Tab 3 (`Fitted_Model`):** Fitted $k_A, k_E$ constants, $R^2$ scores, and the empirical standoff offset.
+# Also saves:
+# 1. A dedicated standalone JSON profile for this microphone (`profiles/active_buzzer_mic{ACTIVE_CHANNEL}.json`).
+# 2. Selectively updates the unified dual-channel profile (`profiles/active_buzzer_profile.json`), preserving the other microphone's calibration data.
+
+# %% [code] Cell 14
+# Cell 6: Multi-Tab Excel Exporter & Dedicated + Unified Profile Serializer
 data_dir = Path("data")
 data_dir.mkdir(parents=True, exist_ok=True)
-excel_path = data_dir / "distance_characterization_raw.xlsx"
-csv_path = data_dir / "distance_characterization_raw.csv"
+profiles_dir = Path("profiles")
+profiles_dir.mkdir(parents=True, exist_ok=True)
+
+excel_path = data_dir / f"distance_characterization_raw_mic{ACTIVE_CHANNEL}.xlsx"
+csv_path = data_dir / f"distance_characterization_raw_mic{ACTIVE_CHANNEL}.csv"
 
 df_raw = pd.DataFrame(raw_records)
 df_summary = pd.DataFrame(station_summaries)
 
 df_models = pd.DataFrame([{
+    "channel": ACTIVE_CHANNEL,
     "carrier_freq_hz": f0,
     "temperature_c": temperature_c,
     "speed_of_sound_mps": c_sound,
-    "calibrated_offset_m1_ms": cal_off1_ms,
-    "calibrated_offset_m2_ms": cal_off2_ms,
-    "inter_channel_skew_us": skew_us,
-    "k_amp_m1_Vm": res1["k"],
-    "k_amp_m2_Vm": res2["k"],
-    "r2_amp_m1": res1["r_squared"],
-    "r2_amp_m2": res2["r_squared"],
-    "k_energy_m1": res1["k_energy"],
-    "k_energy_m2": res2["k_energy"],
-    "r2_energy_m1": res1["r_squared_energy"],
-    "r2_energy_m2": res2["r_squared_energy"]
+    "calibrated_offset_ms": cal_off_ms,
+    "k_amp_Vm": res["k"],
+    "delta_k_amp_Vm": res["delta_k"],
+    "r2_amp": res["r_squared"],
+    "k_energy": res["k_energy"],
+    "delta_k_energy": res["delta_k_energy"],
+    "r2_energy": res["r_squared_energy"],
+    "c_room_unconstrained_mv": res["c_room_unconstrained_v"] * 1000.0
 }])
 
-# Write Excel Workbook with multiple sheets
+# 1. Write dedicated Excel workbook for this channel
 with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
     df_raw.to_excel(writer, sheet_name="Raw_Pings", index=False)
     df_summary.to_excel(writer, sheet_name="Station_Summary", index=False)
-    df_models.to_excel(writer, sheet_name="Fitted_Models", index=False)
+    df_models.to_excel(writer, sheet_name="Fitted_Model", index=False)
 
-# Save raw CSV fallback
+# 2. Write CSV backup
 df_raw.to_csv(csv_path, index=False)
 
-# Save updated JSON profile
-profile_out = Path("../../profiles/active_buzzer_profile.json").resolve()
-if not profile_out.parent.exists():
-    profile_out = Path("profiles/active_buzzer_profile.json").resolve()
+# 3. SAVE DEDICATED STANDALONE PROFILE FOR THIS SPECIFIC MICROPHONE
+dedicated_profile_path = profiles_dir / f"active_buzzer_mic{ACTIVE_CHANNEL}.json"
+dedicated_data = {
+    "name": f"Active_Buzzer_Mic{ACTIVE_CHANNEL}",
+    "channel": ACTIVE_CHANNEL,
+    "f_res_hz": f0,
+    "frequencies_hz": [f0],
+    "k_values": [float(res["k"])],
+    "k_energy": [float(res["k_energy"])],
+    "k_uncertainty": [float(res["delta_k"])],
+    "calibrated_toa_offset_ms": cal_off_ms,
+    "r_squared": [float(res["r_squared"])],
+    "r_squared_energy": [float(res["r_squared_energy"])],
+    "temperature_c": temperature_c,
+    "speed_of_sound_mps": c_sound
+}
+with open(dedicated_profile_path, "w", encoding="utf-8") as f:
+    json.dump(dedicated_data, f, indent=2)
 
-saved_profile_path = protocol.save_profile_json(
-    filepath=profile_out,
-    name="Active_Buzzer_2660Hz",
-    description="Dual-microphone quasi-anechoic profile calibrated via Experiment 01"
-)
+# 4. UPDATE / MERGE INTO UNIFIED DUAL-CHANNEL PROFILE
+unified_profile_path = profiles_dir / "active_buzzer_profile.json"
+unified_data = {}
+if unified_profile_path.exists():
+    try:
+        with open(unified_profile_path, "r", encoding="utf-8") as f:
+            unified_data = json.load(f)
+    except Exception:
+        unified_data = {}
+
+unified_data["f_res_hz"] = f0
+unified_data["frequencies_hz"] = [f0]
+unified_data["name"] = "Active_Buzzer_2660Hz_DualChannel"
+
+if ACTIVE_CHANNEL == 1:
+    unified_data["calibrated_toa_offset_m1_ms"] = cal_off_ms
+    unified_data["k_values"] = [float(res["k"])]
+    unified_data["k_energy_m1"] = [float(res["k_energy"])]
+    unified_data["k_uncertainty"] = [float(res["delta_k"])]
+else:
+    unified_data["calibrated_toa_offset_m2_ms"] = cal_off_ms
+    unified_data["k_values_m2"] = [float(res["k"])]
+    unified_data["k_energy_m2"] = [float(res["k_energy"])]
+    unified_data["k_uncertainty_m2"] = [float(res["delta_k"])]
+
+with open(unified_profile_path, "w", encoding="utf-8") as f:
+    json.dump(unified_data, f, indent=2)
 
 print("=" * 85)
-print("🎉 DATA EXPORT COMPLETE!")
+print(f"🎉 DATA EXPORT COMPLETE FOR {CH_LABEL}!")
 print("=" * 85)
-print(f"• Multi-Tab Excel Workbook : {excel_path.resolve()}")
-print(f"• Raw Telemetry CSV Backup : {csv_path.resolve()}")
-print(f"• Updated Hardware Profile : {saved_profile_path}")
+print(f"• Dedicated Excel Workbook : {excel_path.resolve()}")
+print(f"• Dedicated Mic Profile    : {dedicated_profile_path.resolve()}")
+print(f"• Unified Dual Profile     : {unified_profile_path.resolve()}")
 print("=" * 85)
+print(f"👉 To calibrate the second mic, set ACTIVE_CHANNEL = {2 if ACTIVE_CHANNEL == 1 else 1} in Cell 1 and re-run!")
 
-# %% [markdown] Cell 13
+# %% [markdown] Cell 15
 ## 6. Clean Hardware Shutdown
 # Release FPGA DMA channels and memory buffers.
 
-# %% [code] Cell 14
+# %% [code] Cell 16
 ol.close()
 print("🔒 FPGA hardware resources cleanly released.")
 
