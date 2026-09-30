@@ -1,51 +1,40 @@
 {
-  "name": "Active_Buzzer_2660Hz",
-  "description": "Dual-microphone quasi-anechoic profile (1/r and 1/r² models)",
+  "name": "Active_Buzzer_2660Hz_DualChannel",
+  "description": "Certified dual-channel quasi-anechoic profile calibrated via Experiment 01",
   "f_res_hz": 2660.0,
-  "k_direct": 0.0196,
-  "calibrated_toa_offset_ms": 1.8080,
-  "calibrated_toa_offset_m1_ms": 1.8080,
-  "calibrated_toa_offset_m2_ms": 1.8080,
-  "inter_channel_skew_us": 0.0,
-  "max_mic_spacing_aoa_cm": 6.45,
   "frequencies_hz": [
     2660.0
   ],
+  "calibrated_toa_offset_m1_ms": 1.9057,
+  "calibrated_toa_offset_m2_ms": 1.9068,
+  "inter_channel_skew_us": -1.1,
   "k_values": [
-    0.0196
+    0.0207
   ],
   "k_values_m2": [
-    0.0196
+    0.0187
   ],
   "k_energy_m1": [
-    0.000384
+    0.402533
   ],
   "k_energy_m2": [
-    0.000384
-  ],
-  "r_squared": [
-    0.9977
+    0.332363
   ],
   "k_uncertainty": [
-    0.0004
+    0.0002
   ],
   "k_uncertainty_m2": [
-    0.0004
+    0.0001
   ],
-  "operational_bounds": {
-    "2660.0": {
-      "r_min_m": 0.10,
-      "r_max_m": 1.20,
-      "v_sat_v": 0.55,
-      "v_min_v": 0.003,
-      "c_room_v": 0.0
-    }
-  },
+  "r_squared": [
+    0.9979
+  ],
+  "r_squared_energy": [
+    0.9985
+  ],
   "system_metadata": {
     "emitter_device": "Active_Buzzer_2660Hz",
-    "actuation_pin": "AR2 (U13)",
-    "mic_gain_setting": "+35dB / anti-clipping",
-    "calibration_regime": "quasi_anechoic_direct_pulse",
-    "temperature_c": 20.0
+    "temperature_c": 20.0,
+    "calibration_regime": "quasi_anechoic_direct_pulse"
   }
 }
