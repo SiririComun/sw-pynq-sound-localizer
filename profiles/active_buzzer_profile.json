@@ -32,6 +32,15 @@
   "r_squared_energy": [
     0.9985
   ],
+  "operational_bounds": {
+    "2660.0": {
+      "r_min_m": 0.10,
+      "r_max_m": 1.20,
+      "v_sat_v": 2.50,
+      "v_min_v": 0.010,
+      "c_room_v": 0.0
+    }
+  },
   "system_metadata": {
     "emitter_device": "Active_Buzzer_2660Hz",
     "temperature_c": 20.0,
