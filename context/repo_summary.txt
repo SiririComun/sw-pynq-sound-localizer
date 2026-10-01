@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 73acb56
+• Repository State    : feat/pulse-time-of-arrival @ 02c54f9
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.0
 ==============================================================================
@@ -9,21 +9,21 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (2 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         73acb56 [origin/feat/pulse-time-of-arrival: ahead 1] fix(aoa): decouple autodyne phase from TDOA and gain-normalize energy monopulse in driver
+* feat/pulse-time-of-arrival                         02c54f9 [origin/feat/pulse-time-of-arrival] chore(context): update repository context summary with driver fixes
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          c987b09 chore(context): update repository context summary with exp01 calibration data
+  remotes/origin/feat/pulse-time-of-arrival          02c54f9 chore(context): update repository context summary with driver fixes
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,8 +33,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 73acb56  (HEAD -> feat/pulse-time-of-arrival) - 2026-10-01 : fix(aoa): decouple autodyne phase from TDOA and gain-normalize energy monopulse in driver (SiririComun)
-* c987b09  (origin/feat/pulse-time-of-arrival) - 2026-09-30 : chore(context): update repository context summary with exp01 calibration data (SiririComun)
+* 02c54f9  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-10-01 : chore(context): update repository context summary with driver fixes (SiririComun)
+* 73acb56  - 2026-10-01 : fix(aoa): decouple autodyne phase from TDOA and gain-normalize energy monopulse in driver (SiririComun)
+* c987b09  - 2026-09-30 : chore(context): update repository context summary with exp01 calibration data (SiririComun)
 * eafce31  - 2026-09-30 : feat(profiles): update active buzzer profile with certified experimental dual-channel constants (SiririComun)
 * 788a720  - 2026-09-30 : feat(experiments): update exp01 with independent single-mic workflow and physical decay plots (SiririComun)
 * 255297b  - 2026-09-29 : chore(context): update repository context with 100% green test suite (SiririComun)
@@ -47,7 +48,6 @@ Multi-Branch Git Commit Graph:
 * bc53ec3  - 2026-09-29 : feat(experiments): create exp01 distance and energy characterization harvester notebook (SiririComun)
 * 0db24d8  - 2026-09-29 : feat(notebooks): upgrade installer engine with dedicated experiments subfolder and data preservation (SiririComun)
 * b948d09  - 2026-09-29 : perf(dashboard): complete Phase 4 configurable 14 FPS render throttling and dual-channel routing (SiririComun)
-* ea16000  - 2026-09-29 : feat(profiles): upgrade active buzzer profile to dual-channel schema with certified 2660Hz carrier (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -10869,17 +10869,9 @@ exp02_angle_3method_characterization.ipynb: (notebooks/experiments/exp02_angle_3
 # ---
 ### 🏛️ Physical Operating Principles & Angular Benchmark
 # This experiment runs an interferometric benchmark across **three independent mathematical methods**:
-# 1. **TDOA Leading-Edge Threshold Delay ($\theta_{\text{TDOA}}$):**
-# $$\Delta t = t_1 - t_2, \qquad \Delta r = c(T) \cdot \Delta t, \qquad \theta_{\text{TDOA}} = \arcsin\left(\text{clip}\left(\frac{\Delta r_{\text{corr}}}{d}, -1.0, 1.0\right)\right)$$
-# 2. **Direct-Gate Autodyne Phase Interferometry ($\theta_{\text{phase}}$):**
-# $$\Delta\phi_{\text{direct}} = \frac{2\pi f_0}{c(T)} \Delta r_{\text{corr}}, \qquad \theta_{\text{phase}} = \arcsin\left(\text{clip}\left(\frac{c(T) \cdot \Delta\phi_{\text{direct}}}{2\pi f_0 d}, -1.0, 1.0\right)\right)$$
-# 3. **Normalized Differential Acoustic Energy ($\theta_{\text{energy}}$):**
-# $$\frac{E_2 - E_1}{E_1 + E_2} \approx \frac{d}{r} \sin(\theta) \implies \theta_{\text{energy}} = \arcsin\left(\text{clip}\left(\frac{r}{d} \cdot \left(\frac{E_2 - E_1}{E_1 + E_2}\right), -1.0, 1.0\right)\right)$$
-# > **Microphone Geometry:**
-# > * Center origin $(0, 0)$ is the baseline midpoint.
-# > * **Mic 1 (A0):** Left side at $x = -2.5\,\text{cm}$.
-# > * **Mic 2 (A1):** Right side at $x = +2.5\,\text{cm}$ ($d = 5.0\,\text{cm}$ baseline).
-# > * $\theta > 0^\circ \implies$ Right sector (closer to Mic 2); $\theta < 0^\circ \implies$ Left sector (closer to Mic 1).
+# 1. **TDOA Leading-Edge Threshold Delay ($\theta_{\text{TDOA}}$)**
+# 2. **Direct-Gate Autodyne Phase Interferometry ($\theta_{\text{phase}}$)**
+# 3. **Gain-Normalized Differential Acoustic Energy Monopulse ($\theta_{\text{energy}}$)**
 
 # %% [code] Cell 2
 # Cell 1: Environment Setup & Hardware Overlay Initialization
@@ -10912,24 +10904,22 @@ mic_distance_m = 0.05  # 5.0 cm baseline
 r_fixed_cm = 30.0      # Radial distance on protractor arc
 
 # Load calibrated profile parameters
-profile_path = Path("../../profiles/active_buzzer_profile.json").resolve()
-if not profile_path.exists():
-    profile_path = Path("profiles/active_buzzer_profile.json").resolve()
+profile_candidates = [
+    Path("profiles/active_buzzer_profile.json").resolve(),
+    Path("../../profiles/active_buzzer_profile.json").resolve()
+]
+profile_path = next((p for p in profile_candidates if p.exists()), None)
+if profile_path is None:
+    raise FileNotFoundError("Could not find active_buzzer_profile.json!")
 
-if profile_path.exists():
-    profile = AcousticProfile.from_json(profile_path)
-    f0 = float(profile.frequencies[0])
-    cal_off1_ms = profile.calibrated_toa_offset_m1_ms
-    cal_off2_ms = profile.calibrated_toa_offset_m2_ms
-    ka1 = float(profile.k_values[0])
-    ka2 = float(profile.k_values_m2[0])
-    print(f"✅ Loaded calibrated profile: '{profile.name}' (f0 = {f0:.1f} Hz)")
-else:
-    f0 = KinematicAnalytics.DEFAULT_F0_HZ
-    cal_off1_ms = KinematicAnalytics.DEFAULT_TOA_OFFSET_MS
-    cal_off2_ms = KinematicAnalytics.DEFAULT_TOA_OFFSET_MS
-    ka1, ka2 = 0.0196, 0.0196
-    print(f"ℹ️ Using default parameters: f0 = {f0:.1f} Hz, offset = {cal_off1_ms:.4f} ms")
+profile = AcousticProfile.from_json(profile_path)
+f0 = float(profile.frequencies[0])
+cal_off1_ms = float(profile.calibrated_toa_offset_m1_ms)
+cal_off2_ms = float(profile.calibrated_toa_offset_m2_ms)
+ka1 = float(profile.k_values[0])
+ka2 = float(profile.k_values_m2[0])
+ke1 = float(profile.k_energy_m1[0])
+ke2 = float(profile.k_energy_m2[0])
 
 d_max = (c_sound / (2.0 * f0)) * 100.0  # Spatial aliasing limit (~6.45 cm)
 
@@ -10945,10 +10935,10 @@ print("=" * 80)
 
 # %% [markdown] Cell 3
 ## 1. Cardinal Positions Sanity Check
-# Quickly test the 3 cardinal positions before running the full protractor sweep:
-# * **CENTER ($0^\circ$):** Directly in front at $r \approx 30\,\text{cm} \implies \Delta r \approx 0,\, \theta \approx 0^\circ$.
-# * **RIGHT ($+45^\circ$):** Closer to Mic 2 (A1) $\implies \Delta r > 0,\, \theta > 0$.
-# * **LEFT ($-45^\circ$):** Closer to Mic 1 (A0) $\implies \Delta r < 0,\, \theta < 0$.
+# Quickly test the 3 cardinal positions:
+# * **CENTER ($0^\circ$):** $\theta \approx 0^\circ, \Delta r \approx 0\,\text{cm}$.
+# * **RIGHT ($+45^\circ$):** Closer to Mic 2 (A1) $\implies \theta > 0^\circ$.
+# * **LEFT ($-45^\circ$):** Closer to Mic 1 (A0) $\implies \theta < 0^\circ$.
 
 # %% [code] Cell 4
 # Cell 2: 3-Position Quick Direction Check
@@ -10981,10 +10971,7 @@ for label, expected in positions:
 # %% [markdown] Cell 5
 ## 2. Guided Multi-Angle Protractor Sweep ($-60^\circ$ to $+60^\circ$)
 # Place the protractor centered at $(0, 0)$ with a radius of $r = 30.0\,\text{cm}$.
-# For each marked angle station:
-# 1. Move the buzzer to the marked angle on the arc and press **`[Enter]`**.
-# 2. The system fires $N=15$ pulses, logging **TDOA**, **direct autodyne phase**, and **normalized energy differences** simultaneously.
-# 3. It reconstructs near-field Cartesian coordinates $(x, y)$ and computes statistical jitter ($\sigma$) and errors vs. protractor ground truth.
+# For each station, fires $N=15$ pulses and evaluates all 3 methods with station-level median filtering for energy.
 
 # %% [code] Cell 6
 # Cell 3: Production 3-Method Protractor Harvester Loop
@@ -11004,7 +10991,9 @@ for s_idx, th_tgt in enumerate(stations_deg):
     
     shot_phase = []
     shot_tdoa = []
-    shot_energy = []
+    shot_energy_inst = []
+    shot_e1_norm = []
+    shot_e2_norm = []
     shot_dr = []
     shot_x = []
     shot_y = []
@@ -11028,142 +11017,141 @@ for s_idx, th_tgt in enumerate(stations_deg):
         
         shot_phase.append(th_ph)
         shot_tdoa.append(th_td)
-        shot_energy.append(th_en)
+        shot_energy_inst.append(th_en)
         shot_dr.append(res["delta_r_cm"])
         shot_x.append(res["x_cm"])
         shot_y.append(res["y_cm"])
+        
+        e1_n = res["energy_direct_a0"] / ke1 if ke1 > 0 else res["energy_direct_a0"]
+        e2_n = res["energy_direct_a1"] / ke2 if ke2 > 0 else res["energy_direct_a1"]
+        shot_e1_norm.append(e1_n)
+        shot_e2_norm.append(e2_n)
         
         raw_records.append({
             "station_id": s_idx + 1,
             "theta_protractor_deg": th_tgt,
             "r_radial_cm": r_fixed_cm,
             "pulse_num": p + 1,
-            # Angular Inversions
             "theta_phase_deg": th_ph,
             "theta_tdoa_deg": th_td,
             "theta_energy_deg": th_en,
-            # Raw Physical Observables
             "delta_r_cm": res["delta_r_cm"],
-            "delta_t_ms": res["delta_t_ms"],
-            "delta_phi_rad": res["delta_phi_rad"],
+            "delta_phi_deg": float(np.degrees(res["delta_phi_rad"])) if np.isfinite(res["delta_phi_rad"]) else np.nan,
             "amp1_direct_mv": res["amp_direct_a0_v"] * 1000.0,
             "amp2_direct_mv": res["amp_direct_a1_v"] * 1000.0,
-            "delta_amp_mv": (res["amp_direct_a1_v"] - res["amp_direct_a0_v"]) * 1000.0,
             "energy1": res["energy_direct_a0"],
             "energy2": res["energy_direct_a1"],
-            "delta_energy": res["energy_direct_a1"] - res["energy_direct_a0"],
-            "energy_ratio_db": 10.0 * np.log10(max(res["energy_direct_a1"], 1e-9) / max(res["energy_direct_a0"], 1e-9)),
-            # Reconstructed Cartesian Coordinates
-            "x_reconstructed_cm": res["x_cm"],
-            "y_reconstructed_cm": res["y_cm"],
-            "range_center_cm": res["distance_cm"],
-            # Quality
-            "smr_a0_db": res["smr_a0_db"],
+            "coherence": res.get("coherence", np.nan),
+            "x_cm": res["x_cm"],
+            "y_cm": res["y_cm"],
             "status": res["status"]
         })
         time.sleep(0.12)
         
-    # Compute statistical parameters for each method
     st_ph = KinematicAnalytics.compute_metrology_statistics(shot_phase, ground_truth=th_tgt)
     st_td = KinematicAnalytics.compute_metrology_statistics(shot_tdoa, ground_truth=th_tgt)
-    st_en = KinematicAnalytics.compute_metrology_statistics(shot_energy, ground_truth=th_tgt)
+    st_en = KinematicAnalytics.compute_metrology_statistics(shot_energy_inst, ground_truth=th_tgt)
     st_dr = KinematicAnalytics.compute_metrology_statistics(shot_dr)
+    
+    # Robust Station Median Energy Inversion
+    e1_med = float(np.median(shot_e1_norm))
+    e2_med = float(np.median(shot_e2_norm))
+    denom_med = e1_med + e2_med
+    if denom_med > 1e-9:
+        geom = (r_fixed_cm / (mic_distance_m * 100.0)) + ((mic_distance_m * 100.0) / (4.0 * r_fixed_cm))
+        sin_med = np.clip(geom * ((e2_med - e1_med) / denom_med), -1.0, 1.0)
+        th_en_median = float(np.degrees(np.arcsin(sin_med)))
+    else:
+        th_en_median = np.nan
     
     station_summaries.append({
         "station_id": s_idx + 1,
         "theta_protractor_deg": th_tgt,
-        # Phase Method Stats
-        "phase_mean_deg": st_ph["mean"],
-        "phase_std_deg": st_ph["std"],
-        "phase_sem_deg": st_ph["sem"],
-        "phase_mae_deg": st_ph["mae"],
-        # TDOA Method Stats
-        "tdoa_mean_deg": st_td["mean"],
-        "tdoa_std_deg": st_td["std"],
-        "tdoa_sem_deg": st_td["sem"],
-        "tdoa_mae_deg": st_td["mae"],
-        # Energy Method Stats
-        "energy_mean_deg": st_en["mean"],
-        "energy_std_deg": st_en["std"],
-        "energy_mae_deg": st_en["mae"],
-        # Path Delta
+        "phase_mean_deg": st_ph["mean"], "phase_std_deg": st_ph["std"], "phase_mae_deg": st_ph["mae"],
+        "tdoa_mean_deg": st_td["mean"], "tdoa_std_deg": st_td["std"], "tdoa_mae_deg": st_td["mae"],
+        "energy_mean_deg": st_en["mean"], "energy_std_deg": st_en["std"], "energy_mae_deg": st_en["mae"],
+        "energy_median_filtered_deg": th_en_median,
+        "energy_median_mae_deg": abs(th_en_median - th_tgt),
         "delta_r_mean_cm": st_dr["mean"],
-        "delta_r_std_mm": st_dr["std"] * 10.0,
-        # Coordinates
         "x_mean_cm": float(np.mean(shot_x)),
         "y_mean_cm": float(np.mean(shot_y))
     })
     
-    print(f"   ✅ Station {th_tgt:+5.1f}° | Phase: {st_ph['mean']:+5.2f}° (MAE={st_ph['mae']:4.2f}°) | TDOA: {st_td['mean']:+5.2f}° | Energy: {st_en['mean']:+5.2f}°")
+    print(f"   ✅ Station {th_tgt:+5.1f}° | Phase: {st_ph['mean']:+5.2f}° (MAE={st_ph['mae']:4.2f}°) | TDOA: {st_td['mean']:+5.2f}° (MAE={st_td['mae']:4.2f}°) | Energy Median: {th_en_median:+5.2f}° (MAE={abs(th_en_median - th_tgt):4.2f}°)")
 
 print("\n" + "=" * 85)
 print("📊 ALL ANGULAR STATIONS HARVESTED!")
 print("=" * 85)
 
 # %% [markdown] Cell 7
-## 3. 3-Method Performance Showdown & Error Corridor Plot
-# Compares the linearity and angular uncertainty corridor for **Phase vs. TDOA vs. Energy** across the entire $[-60^\circ, +60^\circ]$ sector.
+## 3. Results Analysis & 3-Method Performance Showdown
 
 # %% [code] Cell 8
-# Cell 4: 3-Method Performance Comparison Plot
+# Cell 4: 3-Method Performance Showdown & Metric Corridor Plot
 df_sum = pd.DataFrame(station_summaries)
 targets = df_sum["theta_protractor_deg"].to_numpy()
 
-print("=" * 88)
-print(f"{'Target (°)':<12} | {'Phase (°)':<14} | {'Phase MAE':<12} | {'TDOA (°)':<14} | {'Energy (°)':<14} | {'Status'}")
-print("-" * 88)
+mae_phase = float(np.mean(df_sum["phase_mae_deg"]))
+mae_tdoa = float(np.mean(df_sum["tdoa_mae_deg"]))
+mae_energy_raw = float(np.mean(df_sum["energy_mae_deg"]))
+mae_energy_med = float(np.mean(df_sum["energy_median_mae_deg"]))
+
+print("=" * 95)
+print(f"{'Target (°)':<12} | {'Phase (°)':<14} | {'TDOA (°)':<14} | {'Energy Inst (°)':<16} | {'Energy Median (°)':<18} | {'Status'}")
+print("-" * 95)
 for _, row in df_sum.iterrows():
     passed = row["phase_mae_deg"] <= 4.0
-    print(f"{row['theta_protractor_deg']:+5.1f}°{'':<6} | {row['phase_mean_deg']:+5.2f}° ±{row['phase_std_deg']:4.2f}° | {row['phase_mae_deg']:4.2f}°{'':<6} | {row['tdoa_mean_deg']:+5.2f}° ±{row['tdoa_std_deg']:4.2f}° | {row['energy_mean_deg']:+5.2f}°{'':<6} | {'✅ PASS' if passed else '⚠️ CORRIDOR'}")
-print("-" * 88)
-print(f"Overall Sector Mean Absolute Error (Phase) : {np.mean(df_sum['phase_mae_deg']):.2f}°")
-print(f"Overall Sector Mean Absolute Error (TDOA)  : {np.mean(df_sum['tdoa_mae_deg']):.2f}°")
-print(f"Overall Sector Mean Absolute Error (Energy): {np.mean(df_sum['energy_mae_deg']):.2f}°\n")
+    print(f"{row['theta_protractor_deg']:+5.1f}°{'':<6} | {row['phase_mean_deg']:+5.2f}° ±{row['phase_std_deg']:4.2f}° | {row['tdoa_mean_deg']:+5.2f}° ±{row['tdoa_std_deg']:4.2f}° | {row['energy_mean_deg']:+5.2f}°{'':<4} | {row['energy_median_filtered_deg']:+5.2f}° (Err={row['energy_median_mae_deg']:4.2f}°) | {'✅ PASS' if passed else '⚠️ CORRIDOR'}")
+print("-" * 95)
+print(f"🏆 OVERALL SECTOR MAE (Autodyne Phase)              : {mae_phase:.2f}°")
+print(f"• OVERALL SECTOR MAE (TDOA Leading-Edge)            : {mae_tdoa:.2f}°")
+print(f"• OVERALL SECTOR MAE (Energy Instantaneous Mean)    : {mae_energy_raw:.2f}°")
+print(f"• OVERALL SECTOR MAE (Energy Median-Filtered)       : {mae_energy_med:.2f}°")
+print("=" * 95)
 
 # Interactive Comparison Figure
 fig_aoa = go.Figure()
 x_ideal = np.linspace(-70, 70, 100)
+fig_aoa.add_scatter(x=x_ideal, y=x_ideal, mode="lines", line=dict(color="gray", dash="dash"), name="Ideal Ground Truth (y = x)")
 fig_aoa.add_scatter(x=x_ideal, y=x_ideal + 4.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), showlegend=False)
 fig_aoa.add_scatter(x=x_ideal, y=x_ideal - 4.0, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.12)", name="±4.0° Quality Corridor")
-fig_aoa.add_scatter(x=x_ideal, y=x_ideal, mode="lines", line=dict(color="gray", dash="dash"), name="Ideal Ground Truth (y = x)")
 
 # Method 1: Direct Phase
 fig_aoa.add_scatter(
     x=targets, y=df_sum["phase_mean_deg"],
     error_y=dict(type="data", array=df_sum["phase_std_deg"], visible=True),
-    mode="lines+markers", marker=dict(size=10, color="#00FFCC"),
-    line=dict(color="#00FFCC", width=2.5),
-    name=f"Autodyne Phase (MAE={np.mean(df_sum['phase_mae_deg']):.2f}°)"
+    mode="lines+markers", marker=dict(size=9, color="#00E5FF", symbol="square"),
+    line=dict(color="#00E5FF", width=2.5),
+    name=f"Direct Autodyne Phase (MAE = {mae_phase:.2f}°)"
 )
 
 # Method 2: TDOA
 fig_aoa.add_scatter(
     x=targets, y=df_sum["tdoa_mean_deg"],
     error_y=dict(type="data", array=df_sum["tdoa_std_deg"], visible=True),
-    mode="lines+markers", marker=dict(size=8, color="#FFA500", symbol="diamond"),
-    line=dict(color="#FFA500", width=1.8, dash="dot"),
-    name=f"TDOA Threshold (MAE={np.mean(df_sum['tdoa_mae_deg']):.2f}°)"
+    mode="lines+markers", marker=dict(size=8, color="#00FFCC", symbol="circle"),
+    line=dict(color="#00FFCC", width=1.8),
+    name=f"TDOA Leading-Edge (MAE = {mae_tdoa:.2f}°)"
 )
 
-# Method 3: Energy
+# Method 3: Energy Median-Filtered
 fig_aoa.add_scatter(
-    x=targets, y=df_sum["energy_mean_deg"],
-    mode="lines+markers", marker=dict(size=7, color="#E040FB", symbol="triangle-up"),
-    line=dict(color="#E040FB", width=1.5, dash="dash"),
-    name=f"Energy Difference (MAE={np.mean(df_sum['energy_mae_deg']):.2f}°)"
+    x=targets, y=df_sum["energy_median_filtered_deg"],
+    mode="lines+markers", marker=dict(size=9, color="#FFA500", symbol="diamond"),
+    line=dict(color="#FFA500", width=2.0, dash="dash"),
+    name=f"Energy Monopulse Median (MAE = {mae_energy_med:.2f}°)"
 )
 
 fig_aoa.update_layout(
     template="plotly_dark", height=500,
-    title="<b>Angular Metrology Benchmark: Phase vs. TDOA vs. Energy Monopulse</b>",
+    title="<b>Validated 3-Method AoA Benchmark: Phase vs. TDOA vs. Energy Monopulse</b>",
     xaxis=dict(title="Protractor Ground Truth Angle [°]", range=[-70, 70]),
-    yaxis=dict(title="Estimated Incident Bearing Angle [°]", range=[-70, 70])
+    yaxis=dict(title="Estimated Bearing Angle [°]", range=[-70, 70])
 )
 fig_aoa.show()
 
 # %% [markdown] Cell 9
 ## 4. 2D Euclidean Ray Reconstruction
-# Reconstructs the physical acoustic ray vectors in 2D Euclidean space originating from the microphone baseline midpoint $(0, 0)$ out to the source positions.
 
 # %% [code] Cell 10
 # Cell 5: 2D Acoustic Ray Visualization
@@ -11172,7 +11160,6 @@ colors = ["#FFA500", "#00E5FF", "#76FF03", "#E040FB", "#FFD600", "#FF5252", "#69
 
 fig_rays = go.Figure()
 
-# Baseline representation
 fig_rays.add_scatter(
     x=[-0.025, 0.025], y=[0, 0], mode="lines+markers",
     marker=dict(size=10, color=["#00FFCC", "#FF007F"]),
@@ -11185,14 +11172,12 @@ for idx, row in df_sum.iterrows():
     t_meas = row["phase_mean_deg"]
     col = colors[idx % len(colors)]
     
-    # Target Ray (Dotted)
     rad_t = np.radians(t_tgt)
     fig_rays.add_scatter(
         x=[0, r_m * np.sin(rad_t)], y=[0, r_m * np.cos(rad_t)],
         mode="lines", line=dict(color=col, dash="dot", width=1.5),
         showlegend=False
     )
-    # Measured Ray (Solid)
     rad_m = np.radians(t_meas)
     fig_rays.add_scatter(
         x=[0, r_m * np.sin(rad_m)], y=[0, r_m * np.cos(rad_m)],
@@ -11210,11 +11195,7 @@ fig_rays.update_layout(
 fig_rays.show()
 
 # %% [markdown] Cell 11
-## 5. Multi-Tab Excel Export
-# Exports the entire dataset into **`data/angle_characterization_raw.xlsx`** containing:
-# * **Tab 1 (`Raw_Pings`):** Every individual pulse with raw $\Delta t$, $\Delta\phi$, $\Delta A$, $\Delta E$, $\theta_{\text{TDOA}}$, $\theta_{\text{phase}}$, $\theta_{\text{energy}}$, and reconstructed $(x, y)$.
-# * **Tab 2 (`Station_Summary`):** Statistical parameters per station ($\mu, \sigma, \text{SEM}, \text{MAE}$ for all 3 methods).
-# * **Tab 3 (`Method_Benchmark`):** Overall sector MAE, RMSE, Pearson correlation, and spatial resolution metrics.
+## 5. Multi-Tab Production Excel Export
 
 # %% [code] Cell 12
 # Cell 6: Multi-Tab Excel Exporter
@@ -11226,33 +11207,30 @@ csv_path = data_dir / "angle_characterization_raw.csv"
 df_raw = pd.DataFrame(raw_records)
 df_summary = pd.DataFrame(station_summaries)
 
-# Overall comparative benchmark sheet
 df_benchmark = pd.DataFrame([{
     "carrier_freq_hz": f0,
     "mic_baseline_cm": mic_distance_m * 100.0,
     "radial_arc_cm": r_fixed_cm,
     "temperature_c": temperature_c,
     "speed_of_sound_mps": c_sound,
-    "phase_overall_mae_deg": float(np.mean(df_summary["phase_mae_deg"])),
+    "phase_overall_mae_deg": mae_phase,
     "phase_overall_rmse_deg": float(np.sqrt(np.mean(df_summary["phase_mae_deg"] ** 2))),
-    "tdoa_overall_mae_deg": float(np.mean(df_summary["tdoa_mae_deg"])),
+    "tdoa_overall_mae_deg": mae_tdoa,
     "tdoa_overall_rmse_deg": float(np.sqrt(np.mean(df_summary["tdoa_mae_deg"] ** 2))),
-    "energy_overall_mae_deg": float(np.mean(df_summary["energy_mae_deg"])),
-    "energy_overall_rmse_deg": float(np.sqrt(np.mean(df_summary["energy_mae_deg"] ** 2))),
-    "theoretical_sample_resolution_deg": float(np.degrees(np.arcsin(c_sound / ol.fs_per_ch / mic_distance_m)))
+    "energy_inst_overall_mae_deg": mae_energy_raw,
+    "energy_median_overall_mae_deg": mae_energy_med,
+    "energy_median_overall_rmse_deg": float(np.sqrt(np.mean(df_summary["energy_median_mae_deg"] ** 2)))
 }])
 
-# Write Excel Workbook
 with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
     df_raw.to_excel(writer, sheet_name="Raw_Pings", index=False)
     df_summary.to_excel(writer, sheet_name="Station_Summary", index=False)
     df_benchmark.to_excel(writer, sheet_name="Method_Benchmark", index=False)
 
-# Save raw CSV backup
 df_raw.to_csv(csv_path, index=False)
 
 print("=" * 85)
-print("🎉 ANGULAR DATA EXPORT COMPLETE!")
+print("🎉 PRODUCTION ANGULAR DATASET EXPORT COMPLETE!")
 print("=" * 85)
 print(f"• Multi-Tab Excel Workbook : {excel_path.resolve()}")
 print(f"• Raw Telemetry CSV Backup : {csv_path.resolve()}")
@@ -11260,7 +11238,6 @@ print("=" * 85)
 
 # %% [markdown] Cell 13
 ## 6. Clean Hardware Teardown
-# Release FPGA DMA channels and hardware memory buffers.
 
 # %% [code] Cell 14
 ol.close()
