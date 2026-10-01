@@ -362,14 +362,11 @@ class KinematicAnalytics:
         mic_distance_m: float = 0.05
     ) -> Dict[str, float]:
         """
-        Computes incident bearing angle using normalized differential acoustic energy:
-          r1 ≈ r + (d/2) sin(θ),   r2 ≈ r - (d/2) sin(θ)
-          (E2 - E1) / (E1 + E2) ≈ (d / r) * sin(θ)
-          sin(θ) = (r / d) * ((E2 - E1) / (E1 + E2))
-
-        Sign Convention:
-          • E2 > E1 => Closer to Mic 2 (Right / +θ)
-          • E1 > E2 => Closer to Mic 1 (Left / -θ)
+        Computes incident bearing angle using normalized differential acoustic energy
+        with exact near-field spherical geometric inversion:
+          r1² = r² + (d/2)² + r*d*sin(θ),   r2² = r² + (d/2)² - r*d*sin(θ)
+          (E2 - E1) / (E1 + E2) = (r*d*sin(θ)) / (r² + (d/2)²)
+          sin(θ) = ((E2 - E1) / (E1 + E2)) * (r/d + d/(4r))
         """
         e1 = float(max(0.0, energy_mic1))
         e2 = float(max(0.0, energy_mic2))
@@ -386,7 +383,8 @@ class KinematicAnalytics:
             }
 
         norm_diff = (e2 - e1) / denom
-        ratio_sin = (r / d) * norm_diff
+        geom_factor = (r / d) + (d / (4.0 * r))
+        ratio_sin = geom_factor * norm_diff
         sin_clamped = float(np.clip(ratio_sin, -1.0, 1.0))
 
         th_rad = float(np.arcsin(sin_clamped))

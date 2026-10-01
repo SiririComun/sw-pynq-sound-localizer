@@ -523,21 +523,17 @@ class MicrophoneArrayOverlay(Overlay):
         if np.isfinite(delta_r_corr_m):
             sin_tdoa = np.clip(delta_r_corr_m / mic_distance_m, -1.0, 1.0)
             theta_tdoa_deg = float(np.degrees(np.arcsin(sin_tdoa)))
-            dphi_direct_rad = 2.0 * np.pi * f0 * (delta_r_corr_m / c_sound)
-            theta_phase_deg = theta_tdoa_deg
         else:
             theta_tdoa_deg = np.nan
-            dphi_direct_rad = np.nan
-            theta_phase_deg = np.nan
 
-        # 10. Quasi-Anechoic Direct-Path Fourier Extraction & Dual Inversions
+        # 10. Direct-Path Wavefront Extractions & 3-Method Solvers
         if np.isfinite(t1_raw_ms) and np.isfinite(t2_raw_ms):
-            earliest_idx = max(0, min(idx1_wf, idx2_wf))
+            # Direct energy & amplitude: Each microphone integrates starting at its OWN wavefront arrival
             gated0 = KinematicAnalytics.extract_gated_direct_fourier(
-                signal_v=v_a0, fs=fs, f0=f0, n_cycles=gate_cycles, start_idx=earliest_idx
+                signal_v=v_a0, fs=fs, f0=f0, n_cycles=gate_cycles, start_idx=idx1_wf
             )
             gated1 = KinematicAnalytics.extract_gated_direct_fourier(
-                signal_v=v_a1, fs=fs, f0=f0, n_cycles=gate_cycles, start_idx=earliest_idx
+                signal_v=v_a1, fs=fs, f0=f0, n_cycles=gate_cycles, start_idx=idx2_wf
             )
 
             amp_direct_a0 = gated0["amplitude_v"]
@@ -545,13 +541,28 @@ class MicrophoneArrayOverlay(Overlay):
             e_direct_a0 = gated0["energy_v2"]
             e_direct_a1 = gated1["energy_v2"]
 
+            # Direct Phase Interferometry: Common synchronized window starting at max(idx1_wf, idx2_wf)
+            sync_start = max(idx1_wf, idx2_wf)
+            sync_end = min(len(v_a0), sync_start + n_gate_target)
+            phase_direct = KinematicAnalytics.extract_dual_coherent_phase(
+                signal_a0_v=v_a0[sync_start:sync_end],
+                signal_a1_v=v_a1[sync_start:sync_end],
+                fs=fs,
+                target_freq_hz=f0,
+                remove_dc=True
+            )
+            dphi_direct_rad = phase_direct["delta_phi_rad"]
+            sin_phase = np.clip((c_sound * dphi_direct_rad) / (2.0 * np.pi * f0 * mic_distance_m), -1.0, 1.0)
+            theta_phase_deg = float(np.degrees(np.arcsin(sin_phase)))
+            coherence_val = phase_direct["coherence"]
+
             # Signal-to-Multipath Ratio (SMR)
-            tail_s0 = earliest_idx + n_gate_target
+            tail_s0 = idx1_wf + n_gate_target
             tail_e0 = min(len(v_a0), tail_s0 + int(0.0015 * fs))
             e_tail0 = float(np.sum((v_a0[tail_s0:tail_e0] - np.mean(v_a0[tail_s0:tail_e0])) ** 2)) if tail_s0 < len(v_a0) else 1e-6
             smr_a0_db = float(10.0 * np.log10(max(e_direct_a0, 1e-9) / max(e_tail0, 1e-9)))
 
-            tail_s1 = earliest_idx + n_gate_target
+            tail_s1 = idx2_wf + n_gate_target
             tail_e1 = min(len(v_a1), tail_s1 + int(0.0015 * fs))
             e_tail1 = float(np.sum((v_a1[tail_s1:tail_e1] - np.mean(v_a1[tail_s1:tail_e1])) ** 2)) if tail_s1 < len(v_a1) else 1e-6
             smr_a1_db = float(10.0 * np.log10(max(e_direct_a1, 1e-9) / max(e_tail1, 1e-9)))
@@ -563,9 +574,12 @@ class MicrophoneArrayOverlay(Overlay):
             r_energy_m1_cm = (np.sqrt(ke1 / max(e_direct_a0, 1e-9)) * 100.0) if e_direct_a0 > 1e-6 else np.nan
             r_energy_m2_cm = (np.sqrt(ke2 / max(e_direct_a1, 1e-9)) * 100.0) if e_direct_a1 > 1e-6 else np.nan
 
-            # Normalized Energy Bearing
+            # Gain-Normalized Energy Monopulse Bearing
+            e1_norm = e_direct_a0 / ke1 if (ke1 is not None and ke1 > 0) else e_direct_a0
+            e2_norm = e_direct_a1 / ke2 if (ke2 is not None and ke2 > 0) else e_direct_a1
+
             e_bearing = KinematicAnalytics.calculate_energy_bearing(
-                energy_mic1=e_direct_a0, energy_mic2=e_direct_a1,
+                energy_mic1=e1_norm, energy_mic2=e2_norm,
                 range_m=loc2d["range_m"], mic_distance_m=mic_distance_m
             )
             theta_energy_deg = e_bearing["theta_energy_deg"]
@@ -579,7 +593,10 @@ class MicrophoneArrayOverlay(Overlay):
             smr_a0_db, smr_a1_db = 0.0, 0.0
             r_amp_m1_cm, r_amp_m2_cm = np.nan, np.nan
             r_energy_m1_cm, r_energy_m2_cm = np.nan, np.nan
+            theta_phase_deg = np.nan
+            dphi_direct_rad = np.nan
             theta_energy_deg = np.nan
+            coherence_val = 0.0
             snr1_db, snr2_db = 0.0, 0.0
 
         is_valid = np.isfinite(r1_cm) and np.isfinite(r2_cm) and (loc2d["status"] != "SILENCE")
