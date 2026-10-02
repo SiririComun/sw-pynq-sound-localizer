@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ e60d488
+• Repository State    : main @ 22da865
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.1
 ==============================================================================
@@ -9,45 +9,47 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
+Current Branch: main | Working Tree: Clean (No uncommitted changes)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         e60d488 [origin/feat/pulse-time-of-arrival: ahead 3] chore(release): bump package version to v1.3.1
+  feat/pulse-time-of-arrival                         20aef68 [origin/feat/pulse-time-of-arrival] chore(context): update repository context summary with exp03 multi-mass validation
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
-  main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
+* main                                               22da865 [origin/main] merge(release): merge feat/pulse-time-of-arrival into main for v1.3.1
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          4b465f4 chore(context): update repository context summary with exp02 and profile updates
+  remotes/origin/feat/pulse-time-of-arrival          20aef68 chore(context): update repository context summary with exp03 multi-mass validation
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
-  remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
+  remotes/origin/main                                22da865 merge(release): merge feat/pulse-time-of-arrival into main for v1.3.1
 
 Repository Tags & Release History:
+v1.3.1          Release v1.3.1: Multi-mass air-track kinematics with g=9.37 m/s² validation (4.2% error)
 v1.2.0          Release v1.2.0: Dual-regime acoustic calibration suite with reflection-tolerant spatial centroid solver
 v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric distance inversion engine, and BFP-immune demodulation
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* e60d488  (HEAD -> feat/pulse-time-of-arrival) - 2026-10-02 : chore(release): bump package version to v1.3.1 (SiririComun)
-* b19f53c  - 2026-10-02 : feat(experiments): complete exp03 multi-mass air-track validation with Newton's 2nd Law g=9.37m/s² (SiririComun)
-* bf27fa0  - 2026-10-02 : fix(driver): harden record_continuous with decimation guard and 4096-sample DMA alignment (SiririComun)
-* 4b465f4  (origin/feat/pulse-time-of-arrival) - 2026-10-01 : chore(context): update repository context summary with exp02 and profile updates (SiririComun)
-* 1778ecb  - 2026-10-01 : feat(profiles): add operational bounds and certified dual-channel constants to profile (SiririComun)
-* 658566d  - 2026-10-01 : feat(experiments): update exp02 with true autodyne phase and median-filtered energy (SiririComun)
-* 02c54f9  - 2026-10-01 : chore(context): update repository context summary with driver fixes (SiririComun)
-* 73acb56  - 2026-10-01 : fix(aoa): decouple autodyne phase from TDOA and gain-normalize energy monopulse in driver (SiririComun)
-* c987b09  - 2026-09-30 : chore(context): update repository context summary with exp01 calibration data (SiririComun)
-* eafce31  - 2026-09-30 : feat(profiles): update active buzzer profile with certified experimental dual-channel constants (SiririComun)
-* 788a720  - 2026-09-30 : feat(experiments): update exp01 with independent single-mic workflow and physical decay plots (SiririComun)
-* 255297b  - 2026-09-29 : chore(context): update repository context with 100% green test suite (SiririComun)
-* 66ef08a  - 2026-09-29 : test(toa): harmonize carrier to 2660Hz and update profile schema in ToA suite (Part 3/3) (SiririComun)
-* 375af3b  - 2026-09-29 : test(doppler): harmonize carrier to 2660Hz and set metrological velocity tolerance (Part 2/3) (SiririComun)
-* 19426f3  - 2026-09-29 : test(aoa): harmonize carrier frequency to certified 2660Hz in AoA test suite (Part 1/3) (SiririComun)
+*   22da865  (HEAD -> main, tag: v1.3.1, origin/main) - 2026-10-02 : merge(release): merge feat/pulse-time-of-arrival into main for v1.3.1 (SiririComun)
+|\  
+| * 20aef68  (origin/feat/pulse-time-of-arrival, feat/pulse-time-of-arrival) - 2026-10-02 : chore(context): update repository context summary with exp03 multi-mass validation (SiririComun)
+| * e60d488  - 2026-10-02 : chore(release): bump package version to v1.3.1 (SiririComun)
+| * b19f53c  - 2026-10-02 : feat(experiments): complete exp03 multi-mass air-track validation with Newton's 2nd Law g=9.37m/s² (SiririComun)
+| * bf27fa0  - 2026-10-02 : fix(driver): harden record_continuous with decimation guard and 4096-sample DMA alignment (SiririComun)
+| * 4b465f4  - 2026-10-01 : chore(context): update repository context summary with exp02 and profile updates (SiririComun)
+| * 1778ecb  - 2026-10-01 : feat(profiles): add operational bounds and certified dual-channel constants to profile (SiririComun)
+| * 658566d  - 2026-10-01 : feat(experiments): update exp02 with true autodyne phase and median-filtered energy (SiririComun)
+| * 02c54f9  - 2026-10-01 : chore(context): update repository context summary with driver fixes (SiririComun)
+| * 73acb56  - 2026-10-01 : fix(aoa): decouple autodyne phase from TDOA and gain-normalize energy monopulse in driver (SiririComun)
+| * c987b09  - 2026-09-30 : chore(context): update repository context summary with exp01 calibration data (SiririComun)
+| * eafce31  - 2026-09-30 : feat(profiles): update active buzzer profile with certified experimental dual-channel constants (SiririComun)
+| * 788a720  - 2026-09-30 : feat(experiments): update exp01 with independent single-mic workflow and physical decay plots (SiririComun)
+| * 255297b  - 2026-09-29 : chore(context): update repository context with 100% green test suite (SiririComun)
+| * 66ef08a  - 2026-09-29 : test(toa): harmonize carrier to 2660Hz and update profile schema in ToA suite (Part 3/3) (SiririComun)
 ```
 
 LICENSE: (LICENSE)
