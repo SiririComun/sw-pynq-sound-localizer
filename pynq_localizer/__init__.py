@@ -9,8 +9,12 @@ from pynq_localizer.kinematics import (
     DistanceEstimator,
     AcousticCalibrationProtocol,
     MultipathCalibrationProtocol,
+    DirectPulseCalibrationProtocol,
+    AngleOfArrivalEstimator,
+    DifferentialDopplerTracker,
+    TimeOfArrivalEstimator,
 )
-from pynq_localizer.notebooks import copy_notebooks
+from pynq_localizer.notebooks import install_localizer_notebooks, copy_notebooks
 
 try:
     from pynq_localizer.loader import HardwareLoader
@@ -25,7 +29,7 @@ except (ImportError, ModuleNotFoundError):
     KinematicsDashboard = None
     _HAS_PYNQ = False
 
-__version__ = "1.2.0"
+__version__ = "1.3.1"
 __all__ = [
     "HardwareLoader",
     "HardwareTrigger",
@@ -36,6 +40,11 @@ __all__ = [
     "DistanceEstimator",
     "AcousticCalibrationProtocol",
     "MultipathCalibrationProtocol",
+    "DirectPulseCalibrationProtocol",
+    "AngleOfArrivalEstimator",
+    "DifferentialDopplerTracker",
+    "TimeOfArrivalEstimator",
     "KinematicsDashboard",
+    "install_localizer_notebooks",
     "copy_notebooks",
 ]

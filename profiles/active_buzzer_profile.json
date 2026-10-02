@@ -1,0 +1,49 @@
+{
+  "name": "Active_Buzzer_2660Hz_DualChannel",
+  "description": "Certified dual-channel quasi-anechoic profile calibrated via Experiment 01",
+  "f_res_hz": 2660.0,
+  "frequencies_hz": [
+    2660.0
+  ],
+  "calibrated_toa_offset_m1_ms": 1.9057,
+  "calibrated_toa_offset_m2_ms": 1.9068,
+  "inter_channel_skew_us": -1.1,
+  "k_values": [
+    0.0207
+  ],
+  "k_values_m2": [
+    0.0187
+  ],
+  "k_energy_m1": [
+    0.402533
+  ],
+  "k_energy_m2": [
+    0.332363
+  ],
+  "k_uncertainty": [
+    0.0002
+  ],
+  "k_uncertainty_m2": [
+    0.0001
+  ],
+  "r_squared": [
+    0.9979
+  ],
+  "r_squared_energy": [
+    0.9985
+  ],
+  "operational_bounds": {
+    "2660.0": {
+      "r_min_m": 0.10,
+      "r_max_m": 1.20,
+      "v_sat_v": 2.50,
+      "v_min_v": 0.010,
+      "c_room_v": 0.0
+    }
+  },
+  "system_metadata": {
+    "emitter_device": "Active_Buzzer_2660Hz",
+    "temperature_c": 20.0,
+    "calibration_regime": "quasi_anechoic_direct_pulse"
+  }
+}

@@ -1,25 +1,51 @@
 {
-  "device": "Active_Buzzer_2N2222A_Driven",
-  "timestamp": "2026-09-24 21:14:51",
-  "fs_hz": 50000.0,
-  "n_fft": 2048,
-  "f_res_hz": 2609.73,
-  "f_res_std_hz": 261.5459,
-  "carrier_vrms_mv": 113.69,
-  "ambient_noise_floor_mv": 21.19,
-  "carrier_snr_db": 14.59,
-  "h2_ratio": 0.2392,
-  "h3_ratio": 0.0544,
-  "thd_pct": 24.53,
-  "wavelength_cm": 13.15,
-  "max_mic_spacing_aoa_cm": 6.58,
-  "recommended_tracking_band_hz": [
-    2534.7,
-    2684.7
+  "name": "Active_Buzzer_2660Hz",
+  "description": "Dual-microphone quasi-anechoic profile (1/r and 1/r² models)",
+  "f_res_hz": 2660.0,
+  "k_direct": 0.0196,
+  "calibrated_toa_offset_ms": 1.8080,
+  "calibrated_toa_offset_m1_ms": 1.8080,
+  "calibrated_toa_offset_m2_ms": 1.8080,
+  "inter_channel_skew_us": 0.0,
+  "max_mic_spacing_aoa_cm": 6.45,
+  "frequencies_hz": [
+    2660.0
   ],
-  "transient_rise_time_10_90_ms": 31.12,
-  "transient_delay_to_50pct_ms": 1.14,
-  "transient_delay_to_90pct_ms": 31.4,
-  "cycles_to_half_power": 3.0,
-  "calibrated_toa_offset_ms": 1.14
+  "k_values": [
+    0.0196
+  ],
+  "k_values_m2": [
+    0.0196
+  ],
+  "k_energy_m1": [
+    0.000384
+  ],
+  "k_energy_m2": [
+    0.000384
+  ],
+  "r_squared": [
+    0.9977
+  ],
+  "k_uncertainty": [
+    0.0004
+  ],
+  "k_uncertainty_m2": [
+    0.0004
+  ],
+  "operational_bounds": {
+    "2660.0": {
+      "r_min_m": 0.10,
+      "r_max_m": 1.20,
+      "v_sat_v": 0.55,
+      "v_min_v": 0.003,
+      "c_room_v": 0.0
+    }
+  },
+  "system_metadata": {
+    "emitter_device": "Active_Buzzer_2660Hz",
+    "actuation_pin": "AR2 (U13)",
+    "mic_gain_setting": "+35dB / anti-clipping",
+    "calibration_regime": "quasi_anechoic_direct_pulse",
+    "temperature_c": 20.0
+  }
 }
