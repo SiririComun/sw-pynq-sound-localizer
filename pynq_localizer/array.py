@@ -664,25 +664,44 @@ class MicrophoneArrayOverlay(Overlay):
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Continuously streams and records uninterrupted multi-second flight data from both microphones.
-        :param duration_sec: Total duration to record in seconds (e.g. 3.0, 5.0, 10.0).
-        :param chunk_size: Size of individual DMA streaming packets (default: 4096).
-        :return: (time_axis_sec, v_mic1_a0, v_mic2_a1) arrays.
+        Features zero-skew simultaneous sampling (A0 and A1) and hardware anti-aliasing decimation.
+
+        :param duration_sec: Total duration to record in seconds (e.g. 3.0, 5.0, 6.0).
+        :param chunk_size: Size of individual interleaved DMA streaming packets (must be an integer 
+                           multiple of 4096 to preserve 2048-point lock-step FFT alignment, default: 4096).
+        :return: (time_axis_sec, v_mic1_a0, v_mic2_a1) arrays in physical Volts.
         """
         self._init_xadc_simultaneous()
-        self.trigger.set_packet_size(chunk_size)
+
+        # 1. Hardware Decimation Guard: Enforce M=10 (50 kSPS per channel)
+        # Prevents previous M=1 bypass experiments (ToA) from leaving a stale decimation rate in hardware
+        if hasattr(self, "trigger") and self.trigger is not None:
+            self.trigger.set_decimation(10)
+            self.fs_per_ch = 50_000.0
+
+        # 2. Hardware Alignment Guard: Enforce packet size to integer multiples of 2 * N_FFT (4096)
+        # The demux splits 2:1, so 4096 interleaved samples delivers exactly 2048 samples to xfft_0
+        n_min_pkt = self.n_fft * 2  # 4096 for N=2048
+        if chunk_size < n_min_pkt or (chunk_size % n_min_pkt != 0):
+            safe_chunk = max(n_min_pkt, int(round(chunk_size / float(n_min_pkt))) * n_min_pkt)
+        else:
+            safe_chunk = int(chunk_size)
+
+        self.trigger.set_packet_size(safe_chunk)
         self.trigger.set_mode("Auto")
 
         total_samples_per_ch = int(float(duration_sec) * self.fs_per_ch)
         total_interleaved_samples = total_samples_per_ch * 2
-        num_chunks = int(np.ceil(total_interleaved_samples / chunk_size))
+        num_chunks = int(np.ceil(total_interleaved_samples / float(safe_chunk)))
 
-        raw_interleaved = np.empty(num_chunks * chunk_size, dtype=np.uint16)
-        chunk_buf = allocate(shape=(chunk_size,), dtype="u2")
-        dummy_fft_buf = allocate(shape=(chunk_size // 2,), dtype="u4")
+        raw_interleaved = np.empty(num_chunks * safe_chunk, dtype=np.uint16)
+        chunk_buf = allocate(shape=(safe_chunk,), dtype="u2")
+        dummy_fft_buf = allocate(shape=(safe_chunk // 2,), dtype="u4")
 
+        # 3. DMA S2MM Reset & Startup Flush
         self.axi_dma_0.mmio.write(0x30, 0x04)
         self.axi_dma_1.mmio.write(0x30, 0x04)
-        time.sleep(0.002)
+        time.sleep(0.005)
         self.axi_dma_0.recvchannel.start()
         self.axi_dma_1.recvchannel.start()
 
@@ -700,28 +719,40 @@ class MicrophoneArrayOverlay(Overlay):
                 t0 = time.time()
                 while not (self.axi_dma_0.recvchannel.idle and self.axi_dma_1.recvchannel.idle):
                     if time.time() - t0 > 2.0:
-                        raise TimeoutError("Continuous DMA streaming timed out. Hardware stalled.")
+                        # Clean up DMA channels before raising to prevent hardware hang
+                        self.axi_dma_0.mmio.write(0x30, 0x04)
+                        self.axi_dma_1.mmio.write(0x30, 0x04)
+                        raise TimeoutError(
+                            "Continuous DMA streaming timed out. Hardware stalled. "
+                            f"(chunk_size={safe_chunk}, n_fft={self.n_fft})"
+                        )
                     time.sleep(0.001)
 
-                raw_interleaved[write_ptr : write_ptr + chunk_size] = np.array(chunk_buf)
-                write_ptr += chunk_size
+                raw_interleaved[write_ptr : write_ptr + safe_chunk] = np.array(chunk_buf)
+                write_ptr += safe_chunk
 
             valid_samples = raw_interleaved[:total_interleaved_samples]
             raw_a0 = valid_samples[0::2]
             raw_a1 = valid_samples[1::2]
 
+            # 4. Unpack 12-bit ADC raw integer codes to calibrated physical Volts
             v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
             v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
 
-            t_axis = np.linspace(0, duration_sec, len(v_a0), endpoint=False)
+            t_axis = np.linspace(0.0, duration_sec, len(v_a0), endpoint=False)
             print(f"[FlightRecorder] Captured {len(v_a0)} stereo samples successfully with 0.00 µs skew.")
             return t_axis, v_a0, v_a1
 
         finally:
-            chunk_buf.close()
-            dummy_fft_buf.close()
-            self.trigger.set_packet_size(self.packet_size)
-
+            if chunk_buf is not None:
+                try: chunk_buf.close()
+                except Exception: pass
+            if dummy_fft_buf is not None:
+                try: dummy_fft_buf.close()
+                except Exception: pass
+            if hasattr(self, "trigger") and self.trigger is not None:
+                self.trigger.set_packet_size(self.packet_size)
+                
     def record_differential_flight(
         self,
         duration_sec: float = 4.0,
