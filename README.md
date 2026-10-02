@@ -1,28 +1,30 @@
 # Real-Time Acoustic Kinematics, Doppler Tracking & Sound Localizer on PYNQ-Z2
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Hardware Overlay](https://img.shields.io/badge/Hardware-hw--xadc--dma--overlays%20v1.5.1-orange.svg)](https://github.com/SiririComun/hw-xadc-dma-overlays)
+[![Hardware Overlay](https://img.shields.io/badge/Hardware-hw--xadc--dma--overlays%20v1.5.3-orange.svg)](https://github.com/SiririComun/hw-xadc-dma-overlays)
+[![Package Version](https://img.shields.io/badge/Version-v1.3.1-blue.svg)](https://github.com/SiririComun/sw-pynq-sound-localizer/releases/tag/v1.3.1)
 [![Board Support](https://img.shields.io/badge/Board-PYNQ--Z2-green.svg)](https://tul.com.tw/ProductsPYNQ-Z2.html)
 [![Python Version](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
 
-A high-performance FPGA-accelerated acoustic processing platform for the **PYNQ-Z2 board (`xc7z020clg400-1`)**. Provides **true simultaneous dual-ADC parallel sampling ($0.00\,\mu\text{s}$ inter-channel skew)**, **sub-Hertz fundamental pitch tracking ($20\,\text{Hz} - 20\,\text{kHz}$)**, **real-time single-channel metric distance inversion ($r = k(f_0)/A_{\text{true}}$)**, **flagship 3-row rolling telemetry curves**, and continuous multi-second flight recording for Doppler kinematics.
+An FPGA-accelerated acoustic processing platform for the **PYNQ-Z2 board (`xc7z020clg400-1`)**. Provides **true simultaneous dual-ADC parallel sampling ($0.00\,\mu\text{s}$ inter-channel skew)**, **continuous Hilbert phase demodulation**, **real-time metric distance inversion ($r = k_A / A$ and $r = \sqrt{k_E / E}$)**, **drift-free differential Doppler velocimetry**, and **direction of arrival (AoA) bearing localization**.
 
 ---
 
 ## 🏛 System Architecture
 
-The package automatically pulls its pre-compiled hardware bitstream (`v1.5.1`) and metadata from GitHub Releases into local cache and encapsulates dual DMA receivers, XADC parallel sequencers, hardware decimators, and telemetry engines into a clean Python API:
+The package automatically pulls its pre-compiled hardware bitstream (`v1.5.3`) and metadata from GitHub Releases into local cache and encapsulates dual DMA receivers, XADC parallel sequencers, hardware decimators, pulse generators, and direct-energy telemetry engines into a clean Python API:
 
 ```
  [ MAX4466 Mic 1 ] ─────────────────────────> [ PYNQ-Z2 Pin A0 (Vaux1) ]
  [ MAX4466 Mic 2 ] ─────────────────────────> [ PYNQ-Z2 Pin A1 (Vaux9) ]
+ [ 2N2222A Buzzer ] <───────────────────────── [ PYNQ-Z2 Pin AR2 (Pin U13) ]
                                                             │
                                              (XADC Dual Continuous Sequencer)
                                              (1 MSPS Interleaved Stream, 0.00 µs Skew)
                                                             ▼
                                                   [ axis_decimator IP ]
-                                                (FPGA Anti-Aliasing M=10)
-                                                            │ (50 kSPS Decimated Stream)
+                                           (Programmable M = 1, 10, 20, 50)
+                                                            │ (50 kSPS / 500 kSPS)
                               ┌─────────────────────────────┴─────────────────────────────┐
                               ▼                                                           ▼
                    [ AXI DMA 0 (Time Stream) ]                                 [ FPGA FFT Core + CORDIC ]
@@ -33,111 +35,125 @@ The package automatically pulls its pre-compiled hardware bitstream (`v1.5.1`) a
                               └─────────────────────────────┬─────────────────────────────┘
                                                             ▼
                                                [ MicrophoneArrayOverlay ]
-                                      ├── .capture_spectral_frame() (Lock-Step Dual-DMA Frame)
-                                      ├── .capture_quadruple()      (BFP-Immune (f, A, φ, t))
-                                      ├── .record_continuous()      (Multi-Second Flight Logger)
-                                      ├── .play_audio()             (Jupyter Audio Playback)
-                                      └── .kinematics_dashboard()   (3-Row Rolling Live GUI)
+                                      ├── .capture_spectral_frame()    (Lock-Step Dual-DMA Frame)
+                                      ├── .capture_pulsed_toa_frame()  (Direct-Energy & ToA Range)
+                                      ├── .record_differential_flight()(1D Air-Track Doppler Tracker)
+                                      ├── .play_audio()                (Jupyter Audio Playback)
+                                      └── .kinematics_dashboard()      (4-Tab Rolling Live GUI)
 ```
 
 ---
 
-## 🎛 Real-Time 3-Row Telemetry Dashboard
+## 🔬 Metrological Capabilities & Validated Experiments
 
-The **`KinematicsDashboard`** uses a decoupled two-thread architecture ($100\,\text{Hz}$ background DSP worker + $30\,\text{FPS}$ Plotly rendering) to display real-time physical telemetry without browser lag:
+### 1. 1D Air-Track Multi-Mass Differential Doppler Kinematics (`exp03`)
+Opposing microphones at $x = 0$ (Mic 1) and $x = L$ (Mic 2) eliminate buzzer oscillator thermal and battery drift through exact common-mode cancellation:
+$$v_{\text{diff}}(t) = c(T) \cdot \left(\frac{f_2(t) - f_1(t)}{f_1(t) + f_2(t)}\right), \qquad f_{0,\text{common}}(t) = \frac{f_1(t) + f_2(t)}{2}$$
 
-* **Row 1 (Amplitude vs. Time):** Physical in-band amplitude envelope $A_{\text{true}}(t)$ in physical **mV**, extracted via single-bin coherent Fourier projection. **100% immune to FPGA Block Floating Point (BFP) bit-shift scaling**.
-* **Row 2 (Frequency vs. Time):** Sub-Hertz fundamental pitch trajectory $f_0(t)$ ($20\,\text{Hz} - 20\,\text{kHz}$) using exact DFT sinc peak ratio interpolation ($\pm 0.01\,\text{Hz}$ precision) with moving-median reflection rejection and active noise squelch gating.
-* **Row 3 (Distance vs. Time):** Real-time inverted metric distance $r(t) = \frac{k(f_0)}{A_{\text{true}}(t)}$ in **cm** with dynamic confidence error bands ($\pm \delta r(t)$).
-* **Live Status Readouts:** Real-time frequency and distance tracking directly in the header bar (`A0: 35.2mV (1000.5Hz → 45.2cm)`).
-* **3-Tab Synchronized View:** Dedicated **Mic 1 (A0)**, **Mic 2 (A1)**, and **Dual Comparison Overlay**.
-* **Clean CSV Export:** Exports synchronized time, amplitude, pitch, distance, and uncertainty columns without `NaN` values directly to disk.
+* **Newton's Second Law Verification:** A 3-mass campaign ($25\,\text{g}, 50\,\text{g}, 100\,\text{g}$, $N=3$ trials each) across an air track confirmed $a = \frac{m}{M+m}g$, experimentally extracting **$g_{\text{exp}} = 9.37\,\text{m/s}^2$ ($4.2\%$ error** against local $g = 9.78\,\text{m/s}^2$).
+* **Elastic Bumper Turnaround Dynamics:** Harmonic shock-absorber contact analysis extracts bumper stiffness ($k_{\text{bumper}} \approx 2.2\,\text{N/m}$) and restitution ($e$).
 
----
+### 2. Quasi-Anechoic Direct-Path Calibration & Ranging (`exp01`)
+Acoustic pulse gating ($K = 3$ carrier periods $\approx 1.15\,\text{ms}$) freezes energy accumulation before room reflections arrive, reducing room reverberation to zero ($c_{\text{room}} \to 0$):
+* **Pressure Inversion:** $A(r) = k_A \cdot \frac{1}{r} \implies r(t) = \frac{k_A}{A(t)}$ ($R^2 \ge 0.997$)
+* **Intensity Inversion:** $E(r) = k_E \cdot \frac{1}{r^2} \implies r(t) = \sqrt{\frac{k_E}{E(t)}}$ ($R^2 \ge 0.998$)
 
-## 📐 Acoustic Calibration Protocol & Distance Inversion
-
-Spherical acoustic wave propagation dictates:
-
-$$V_{\text{RMS}}(r_i,\, f_j) = k(f_j) \cdot \left(\frac{1}{r_i}\right) + c_{\text{room}}(f_j)$$
-
-* **`AcousticCalibrationProtocol`:** Ingests multi-sample ($N=30$) observations across an acoustic grid (e.g., 14 distance stations $\times$ 26 carrier frequencies), applies **Dynamic Boundary Pruning** using log-log power-law penalty scoring ($\frac{d\ln V}{d\ln r} \approx -1.0$) to reject near-field saturation clipping and far-field echo floors, and solves **Weighted Least Squares (WLS)** regressions ($w_i = 1/\sigma_i^2$).
-* **`AcousticProfile`:** Portable JSON profile artifact storing continuous interpolated $k(f)$, measurement uncertainties $\delta k(f)$, certified operating bounds $[r_{\text{min}}(f),\, r_{\text{max}}(f)]$, and environmental metadata.
-* **`DistanceEstimator`:** Real-time distance solver with dynamic uncertainty propagation:
-
-$$\delta r(t) = r \cdot \sqrt{\left(\frac{\delta k}{k}\right)^2 + \left(\frac{\delta A}{A}\right)^2}$$
+### 3. 3-Method Direction of Arrival (AoA) Benchmark (`exp02`)
+Comprehensive protractor characterization ($-60^\circ \text{ to } +60^\circ$ at $r = 30.0\,\text{cm}$, baseline $d = 5.0\,\text{cm}$):
+* **Direct Autodyne Phase ($\theta_{\text{phase}}$):** Coherent single-bin Fourier projection achieves **$\text{MAE} \approx 4.02^\circ$** across the entire sector and $< 1.0^\circ$ at broadside.
+* **TDOA Leading-Edge Threshold ($\theta_{\text{TDOA}}$):** Sub-sample zero-crossing interpolation achieves **$\text{MAE} \approx 7.86^\circ$**.
+* **Gain-Normalized Energy Monopulse ($\theta_{\text{energy}}$):** Station median filtering eliminates multipath spikes, dropping error to **$\mathbf{18.46^\circ}$**.
 
 ---
 
 ## 🔌 Hardware Setup & Physical Pin Constraints
 
-Connect two analog electret microphones (such as Adafruit **MAX4466** or MAX9814) to the PYNQ-Z2 Arduino Header **`J1`**:
+Connect two analog electret microphones (MAX4466) and the active buzzer driver to the PYNQ-Z2 Arduino Headers (`J1` and Digital):
 
-| Microphone Pin | PYNQ-Z2 Connection | Header Location | Description |
+```
+ PYNQ-Z2 BOARD
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │  [Power Header]                   [Analog Header]     [Digital Header] │
+ │   • 3.3V ──────────────┐           • A0 ───────────┐   • Pin 2 (AR2) ─┐│
+ │   • GND Pin 1 (Clean) ─┼───┐       • A1 ─────────┐ │                  ││
+ │   • GND Pin 2 (Noisy) ─┼─┐ │                     │ │                  ││
+ └────────────────────────┼─┼─┼─────────────────────┼─┼──────────────────┼┘
+                          │ │ │                     │ │                  │
+ ═════════════════════════╪═╪═╪═════════════════════╪═╪══════════════════╪════
+ BRANCH 1: SENSITIVE ANALOG │                     │ │                  │
+ • Mic 1 & 2 VCC ─────────┘ │                     │ │                  │
+ • Mic 1 & 2 GND ───────────┘                     │ │                  │
+ • Mic 1 OUT (Vaux1 / E17-D18) ───────────────────┼─┘                  │
+ • Mic 2 OUT (Vaux9 / E18-E19) ───────────────────┘                    │
+ ════════════════════════════════════════════════════════════════════════╪════
+ BRANCH 2: NOISY BUZZER ACTUATOR                                       │
+ • External 5V (+) ──► Buzzer (+)                                     │
+ • Buzzer (-) ───────► Transistor Collector (Pin 3)                    │
+ • AR2 (Pin U13) ────► 1kΩ Resistor ──► Transistor Base (Pin 2) ───────┘
+ • Transistor Emitter (Pin 1) ──► External 5V GND (-) AND PYNQ GND Pin 2
+```
+
+| Signal Port | PYNQ-Z2 Connection | Pin Location | Description |
 | :--- | :--- | :--- | :--- |
 | **`VCC`** (Both Mics) | **`3.3V`** | Power Header | Clean analog supply voltage |
-| **`GND`** (Both Mics) | **`GND`** | Power Header | Common system analog ground |
-| **`OUT` (Mic 1)** | **Header `J1` Pin A0** | Pin 6 (Bottom) | Channel 1 Analog Input (`Vaux1`, pins `E17`/`D18`) |
-| **`OUT` (Mic 2)** | **Header `J1` Pin A1** | Pin 5 (2nd from Bottom) | Channel 2 Analog Input (`Vaux9`, pins `E18`/`E19`) |
+| **`GND`** (Both Mics) | **`GND Pin 1`** | Power Header | Common system analog ground |
+| **`OUT` (Mic 1)** | **Header `J1` Pin A0** | `E17` / `D18` | Channel 1 Analog Input (`Vaux1`) |
+| **`OUT` (Mic 2)** | **Header `J1` Pin A1** | `E18` / `E19` | Channel 2 Analog Input (`Vaux9`, $0.00\,\mu\text{s}$ skew) |
+| **`buzzer_pulse_out`** | **Digital Pin AR2** | `U13` (LVCMOS33) | Hardware Pulse Trigger Output to Transistor Base |
 
 ---
 
 ## 🚀 Installation & Getting Started
 
-### 1. Install from GitHub
+### 1. Install Package
 ```bash
 pip install git+https://github.com/SiririComun/sw-pynq-sound-localizer.git
 ```
 
-### 2. Copy Example Notebooks to Jupyter Workspace
+### 2. Deploy Official Notebooks to Jupyter Workspace
 ```bash
-pynq-localizer-get-notebooks
+pynq-localizer-notebooks
 ```
+
+This deploys:
+* **Interactive Labs:** `01_realtime_kinematics_telemetry.ipynb` to `06_planar_tdoa_sound_localizer.ipynb`
+* **Experimental Harvesters:** `experiments/exp01_distance_energy_characterization.ipynb` to `exp03_air_track_kinematics_harvesting.ipynb`
+* **Persistent Data Storage:** `experiments/data/` (preserves all generated `.xlsx` and `.csv` files)
 
 ---
 
 ## 💻 Python API Usage
 
-### 1. Launch the Live 3-Row Telemetry Dashboard
+### 1. 1D Air-Track Continuous Doppler Recording
 ```python
 from pynq_localizer import MicrophoneArrayOverlay
 
-# Auto-downloads and loads the pinned v1.5.1 bitstream
 ol = MicrophoneArrayOverlay()
 
-# Launch the live interactive 3-row dashboard (auto-loads calibrated profile if present)
-app = ol.kinematics_dashboard()
+# Record 6.0 seconds of dual-channel flight data along a 1.80 m track
+flight = ol.record_differential_flight(
+    duration_sec=6.0,
+    track_length_m=1.80,
+    f0_nominal=2580.0,
+    temperature_c=20.0
+)
+
+print(f"Max Forward Velocity: {flight['velocity_cmps'].max():.1f} cm/s")
+print(f"Estimated Restitution: e = {flight['kinematics_summary']['mean_coefficient_of_restitution']:.3f}")
 ```
 
-### 2. Direct Clean Telemetry Handoff in Python
+### 2. Quasi-Anechoic Direct-Pulse Ranging
 ```python
-# Extract clean non-NaN telemetry arrays directly from the dashboard
-t_sec, amp_v, freq_hz, dist_cm, disterr_cm = app.get_clean_data(channel=1, return_distance=True)
+# Fire a 10 ms pulse on AR2, capture direct wave, and invert distance
+res = ol.capture_pulsed_toa_frame(
+    pulse_width_ms=10.0,
+    f_target=2580.0,
+    temperature_c=20.0
+)
 
-print(f"Captured {len(t_sec)} clean motion points!")
-print(f"Observed Doppler span : {freq_hz.min():.1f} Hz -> {freq_hz.max():.1f} Hz")
-print(f"Distance trajectory   : {dist_cm.min():.1f} cm -> {dist_cm.max():.1f} cm (±{disterr_cm.mean():.1f} cm)")
-```
-
-### 3. Capture Single-Shot BFP-Immune Spectral Quadruple
-```python
-# Returns (f0, A_true, phase, timestamp) with zero BFP scaling error
-data = ol.capture_quadruple(source="A0", f_min=100.0, f_max=10000.0)
-q = data["quadruple"]
-
-print(f"Pitch (f0)  : {q['frequency_hz']:.2f} Hz")
-print(f"Amplitude   : {q['amplitude_v']*1000:.2f} mV RMS (Coherent In-Band)")
-print(f"Phase (φ)   : {q['phase_deg']:.1f}°")
-print(f"Timestamp   : {q['timestamp_sec']:.6f} s")
-```
-
-### 4. Continuous Multi-Second Flight Recording
-```python
-# Record 4.0 seconds of continuous 50 kSPS dual-channel flight data
-t_axis, v_mic1, v_mic2 = ol.record_continuous(duration_sec=4.0)
-
-# Listen to captured audio directly in Jupyter
-ol.play_audio(channel=1, custom_data=v_mic1)
+print(f"ToA Radial Distance : {res['distance_cm']:.1f} cm")
+print(f"Direct Energy Inversion: {res['dist_energy_m1_cm']:.1f} cm")
+print(f"Incident Bearing    : θ = {res['theta_phase_deg']:+.1f}°")
 ```
 
 ---
