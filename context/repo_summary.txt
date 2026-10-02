@@ -1,29 +1,29 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : feat/pulse-time-of-arrival @ 02c54f9
+• Repository State    : feat/pulse-time-of-arrival @ e60d488
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
-• Package Version     : v1.3.0
+• Package Version     : v1.3.1
 ==============================================================================
 
 Git Context & Branch Topology:
 
 ```log
-Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (2 modified/untracked files)
+Current Branch: feat/pulse-time-of-arrival | Working Tree: Dirty (1 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
   feat/fft-quadruple-telemetry-engine                c8e76e9 [origin/feat/fft-quadruple-telemetry-engine] chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   feat/multipath-acoustic-calibration                bf3bdab chore(release): bump package version to v1.2.0
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
-* feat/pulse-time-of-arrival                         02c54f9 [origin/feat/pulse-time-of-arrival] chore(context): update repository context summary with driver fixes
+* feat/pulse-time-of-arrival                         e60d488 [origin/feat/pulse-time-of-arrival: ahead 3] chore(release): bump package version to v1.3.1
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   main                                               ab78791 [origin/main] chore(context): update repository context with profiles catalog
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
-  remotes/origin/feat/pulse-time-of-arrival          02c54f9 chore(context): update repository context summary with driver fixes
+  remotes/origin/feat/pulse-time-of-arrival          4b465f4 chore(context): update repository context summary with exp02 and profile updates
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
   remotes/origin/main                                ab78791 chore(context): update repository context with profiles catalog
 
@@ -33,7 +33,13 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 02c54f9  (HEAD -> feat/pulse-time-of-arrival, origin/feat/pulse-time-of-arrival) - 2026-10-01 : chore(context): update repository context summary with driver fixes (SiririComun)
+* e60d488  (HEAD -> feat/pulse-time-of-arrival) - 2026-10-02 : chore(release): bump package version to v1.3.1 (SiririComun)
+* b19f53c  - 2026-10-02 : feat(experiments): complete exp03 multi-mass air-track validation with Newton's 2nd Law g=9.37m/s² (SiririComun)
+* bf27fa0  - 2026-10-02 : fix(driver): harden record_continuous with decimation guard and 4096-sample DMA alignment (SiririComun)
+* 4b465f4  (origin/feat/pulse-time-of-arrival) - 2026-10-01 : chore(context): update repository context summary with exp02 and profile updates (SiririComun)
+* 1778ecb  - 2026-10-01 : feat(profiles): add operational bounds and certified dual-channel constants to profile (SiririComun)
+* 658566d  - 2026-10-01 : feat(experiments): update exp02 with true autodyne phase and median-filtered energy (SiririComun)
+* 02c54f9  - 2026-10-01 : chore(context): update repository context summary with driver fixes (SiririComun)
 * 73acb56  - 2026-10-01 : fix(aoa): decouple autodyne phase from TDOA and gain-normalize energy monopulse in driver (SiririComun)
 * c987b09  - 2026-09-30 : chore(context): update repository context summary with exp01 calibration data (SiririComun)
 * eafce31  - 2026-09-30 : feat(profiles): update active buzzer profile with certified experimental dual-channel constants (SiririComun)
@@ -42,12 +48,6 @@ Multi-Branch Git Commit Graph:
 * 66ef08a  - 2026-09-29 : test(toa): harmonize carrier to 2660Hz and update profile schema in ToA suite (Part 3/3) (SiririComun)
 * 375af3b  - 2026-09-29 : test(doppler): harmonize carrier to 2660Hz and set metrological velocity tolerance (Part 2/3) (SiririComun)
 * 19426f3  - 2026-09-29 : test(aoa): harmonize carrier frequency to certified 2660Hz in AoA test suite (Part 1/3) (SiririComun)
-* e196cf0  - 2026-09-29 : test(metrology): complete Task 6.1 unit verification suite with 100% pass rate (SiririComun)
-* fcfb31e  - 2026-09-29 : feat(experiments): complete Phase 5 with exp03 air-track kinematics harvester notebook (SiririComun)
-* 95a48a4  - 2026-09-29 : feat(experiments): create exp02 3-method angular characterization harvester notebook (SiririComun)
-* bc53ec3  - 2026-09-29 : feat(experiments): create exp01 distance and energy characterization harvester notebook (SiririComun)
-* 0db24d8  - 2026-09-29 : feat(notebooks): upgrade installer engine with dedicated experiments subfolder and data preservation (SiririComun)
-* b948d09  - 2026-09-29 : perf(dashboard): complete Phase 4 configurable 14 FPS render throttling and dual-channel routing (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -262,7 +262,7 @@ except (ImportError, ModuleNotFoundError):
     KinematicsDashboard = None
     _HAS_PYNQ = False
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 __all__ = [
     "HardwareLoader",
     "HardwareTrigger",
@@ -951,25 +951,44 @@ class MicrophoneArrayOverlay(Overlay):
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Continuously streams and records uninterrupted multi-second flight data from both microphones.
-        :param duration_sec: Total duration to record in seconds (e.g. 3.0, 5.0, 10.0).
-        :param chunk_size: Size of individual DMA streaming packets (default: 4096).
-        :return: (time_axis_sec, v_mic1_a0, v_mic2_a1) arrays.
+        Features zero-skew simultaneous sampling (A0 and A1) and hardware anti-aliasing decimation.
+
+        :param duration_sec: Total duration to record in seconds (e.g. 3.0, 5.0, 6.0).
+        :param chunk_size: Size of individual interleaved DMA streaming packets (must be an integer
+                           multiple of 4096 to preserve 2048-point lock-step FFT alignment, default: 4096).
+        :return: (time_axis_sec, v_mic1_a0, v_mic2_a1) arrays in physical Volts.
         """
         self._init_xadc_simultaneous()
-        self.trigger.set_packet_size(chunk_size)
+
+        # 1. Hardware Decimation Guard: Enforce M=10 (50 kSPS per channel)
+        # Prevents previous M=1 bypass experiments (ToA) from leaving a stale decimation rate in hardware
+        if hasattr(self, "trigger") and self.trigger is not None:
+            self.trigger.set_decimation(10)
+            self.fs_per_ch = 50_000.0
+
+        # 2. Hardware Alignment Guard: Enforce packet size to integer multiples of 2 * N_FFT (4096)
+        # The demux splits 2:1, so 4096 interleaved samples delivers exactly 2048 samples to xfft_0
+        n_min_pkt = self.n_fft * 2  # 4096 for N=2048
+        if chunk_size < n_min_pkt or (chunk_size % n_min_pkt != 0):
+            safe_chunk = max(n_min_pkt, int(round(chunk_size / float(n_min_pkt))) * n_min_pkt)
+        else:
+            safe_chunk = int(chunk_size)
+
+        self.trigger.set_packet_size(safe_chunk)
         self.trigger.set_mode("Auto")
 
         total_samples_per_ch = int(float(duration_sec) * self.fs_per_ch)
         total_interleaved_samples = total_samples_per_ch * 2
-        num_chunks = int(np.ceil(total_interleaved_samples / chunk_size))
+        num_chunks = int(np.ceil(total_interleaved_samples / float(safe_chunk)))
 
-        raw_interleaved = np.empty(num_chunks * chunk_size, dtype=np.uint16)
-        chunk_buf = allocate(shape=(chunk_size,), dtype="u2")
-        dummy_fft_buf = allocate(shape=(chunk_size // 2,), dtype="u4")
+        raw_interleaved = np.empty(num_chunks * safe_chunk, dtype=np.uint16)
+        chunk_buf = allocate(shape=(safe_chunk,), dtype="u2")
+        dummy_fft_buf = allocate(shape=(safe_chunk // 2,), dtype="u4")
 
+        # 3. DMA S2MM Reset & Startup Flush
         self.axi_dma_0.mmio.write(0x30, 0x04)
         self.axi_dma_1.mmio.write(0x30, 0x04)
-        time.sleep(0.002)
+        time.sleep(0.005)
         self.axi_dma_0.recvchannel.start()
         self.axi_dma_1.recvchannel.start()
 
@@ -987,27 +1006,39 @@ class MicrophoneArrayOverlay(Overlay):
                 t0 = time.time()
                 while not (self.axi_dma_0.recvchannel.idle and self.axi_dma_1.recvchannel.idle):
                     if time.time() - t0 > 2.0:
-                        raise TimeoutError("Continuous DMA streaming timed out. Hardware stalled.")
+                        # Clean up DMA channels before raising to prevent hardware hang
+                        self.axi_dma_0.mmio.write(0x30, 0x04)
+                        self.axi_dma_1.mmio.write(0x30, 0x04)
+                        raise TimeoutError(
+                            "Continuous DMA streaming timed out. Hardware stalled. "
+                            f"(chunk_size={safe_chunk}, n_fft={self.n_fft})"
+                        )
                     time.sleep(0.001)
 
-                raw_interleaved[write_ptr : write_ptr + chunk_size] = np.array(chunk_buf)
-                write_ptr += chunk_size
+                raw_interleaved[write_ptr : write_ptr + safe_chunk] = np.array(chunk_buf)
+                write_ptr += safe_chunk
 
             valid_samples = raw_interleaved[:total_interleaved_samples]
             raw_a0 = valid_samples[0::2]
             raw_a1 = valid_samples[1::2]
 
+            # 4. Unpack 12-bit ADC raw integer codes to calibrated physical Volts
             v_a0 = (raw_a0 >> 4) * (3.3 / 4095.0)
             v_a1 = (raw_a1 >> 4) * (3.3 / 4095.0)
 
-            t_axis = np.linspace(0, duration_sec, len(v_a0), endpoint=False)
+            t_axis = np.linspace(0.0, duration_sec, len(v_a0), endpoint=False)
             print(f"[FlightRecorder] Captured {len(v_a0)} stereo samples successfully with 0.00 µs skew.")
             return t_axis, v_a0, v_a1
 
         finally:
-            chunk_buf.close()
-            dummy_fft_buf.close()
-            self.trigger.set_packet_size(self.packet_size)
+            if chunk_buf is not None:
+                try: chunk_buf.close()
+                except Exception: pass
+            if dummy_fft_buf is not None:
+                try: dummy_fft_buf.close()
+                except Exception: pass
+            if hasattr(self, "trigger") and self.trigger is not None:
+                self.trigger.set_packet_size(self.packet_size)
 
     def record_differential_flight(
         self,
@@ -5891,7 +5922,7 @@ if os.path.exists("README.md"):
 
 setup(
     name="pynq-sound-localizer",
-    version="1.3.0",
+    version="1.3.1",
     author="Juan Pablo Sánchez (SiririComun)",
     description="FPGA-Accelerated Acoustic Kinematics, Doppler Tracking & Direction-of-Arrival Sound Localizer for PYNQ-Z2",
     long_description=long_description,
@@ -11269,11 +11300,12 @@ exp03_air_track_kinematics_harvesting.ipynb: (notebooks/experiments/exp03_air_tr
 # * **Aerodynamic Air-Track Drag:** $v(t) = v_{\max} e^{-\gamma t}$
 
 # %% [code] Cell 2
-# Cell 1: Environment Setup & Hardware Initialization
+# %% [code] Cell 1: Environment Setup & Hardware Initialization
 import time
 import json
 from pathlib import Path
 import numpy as np
+import scipy.signal as signal
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -11281,36 +11313,27 @@ from plotly.subplots import make_subplots
 from pynq_localizer import (
     MicrophoneArrayOverlay,
     KinematicAnalytics,
-    AcousticProfile
+    DifferentialDopplerTracker
 )
 
-# 1. Initialize Hardware Overlay (50 kSPS per channel streaming mode)
 ol = MicrophoneArrayOverlay(version="v1.5.2-rc4")
+ol.set_profile("audio")
 
-# 2. Ambient Physical Parameters & Track Geometry
-temperature_c = 20.0  # Update with laboratory thermometer
+temperature_c = 20.0
 c_sound = KinematicAnalytics.speed_of_sound(temperature_c)
-track_length_m = 1.0  # 1.0 m standard air track
-
-profile_path = Path("../../profiles/active_buzzer_profile.json").resolve()
-if not profile_path.exists():
-    profile_path = Path("profiles/active_buzzer_profile.json").resolve()
-
-if profile_path.exists():
-    profile = AcousticProfile.from_json(profile_path)
-    f0 = float(profile.frequencies[0])
-    print(f"✅ Loaded Profile: '{profile.name}' (f0 = {f0:.1f} Hz)")
-else:
-    f0 = KinematicAnalytics.DEFAULT_F0_HZ
-    print(f"ℹ️ Using default carrier: f0 = {f0:.1f} Hz")
+track_length_m = 1.80  # Physical stop distance
+f0 = 2580.0            # Calibrated buzzer carrier frequency
+m_glider_kg = 0.200    # Glider mass (~200 g)
+fall_height_m = 0.70   # Measured drop height (70.0 cm)
 
 print("=" * 80)
-print("✅ AIR TRACK KINEMATICS HARVESTER READY")
+print(f"✅ AIR TRACK KINEMATICS HARVESTER INITIALIZED ({track_length_m:.2f} m Track)")
 print("=" * 80)
-print(f"• Sampling Rate      : {ol.fs_per_ch:.0f} SPS (0.00 µs inter-channel skew)")
-print(f"• Track Length (L)   : {track_length_m:.2f} m (Mic 1 at x=0, Mic 2 at x=L)")
+print(f"• Sampling Rate      : {ol.fs_per_ch:.0f} SPS (0.00 µs skew)")
+print(f"• Track Length       : {track_length_m:.2f} m")
+print(f"• Drop Height        : {fall_height_m * 100:.1f} cm")
+print(f"• Carrier Frequency  : f0 = {f0:.1f} Hz")
 print(f"• Speed of Sound     : c(T) = {c_sound:.2f} m/s (at {temperature_c}°C)")
-print(f"• Doppler Sensitivity: {2.0 * f0 / c_sound:.2f} Hz per (m/s)")
 print("=" * 80)
 
 # %% [markdown] Cell 3
@@ -11319,31 +11342,23 @@ print("=" * 80)
 # This check records 1.0 second of ambient aerodynamic hiss and verifies that the buzzer's acoustic carrier exceeds the noise floor by at least **$+15\,\text{dB}$**.
 
 # %% [code] Cell 4
-# Cell 2: Air-Blower Noise & SNR Verification
-input("👉 Turn ON the air blower (leave buzzer stationary on glider). Press [Enter] to check noise floor...")
+# %% [code] Cell 2: Air-Blower Noise & SNR Verification
+input("👉 Turn ON the air blower (glider stationary). Press [Enter] to check noise floor...")
 
-t_noise, v_noise1, v_noise2 = ol.record_continuous(duration_sec=1.0, chunk_size=2048)
+t_noise, v_noise1, v_noise2 = ol.record_continuous(duration_sec=1.0, chunk_size=4096)
 
-# Compute in-band noise floor around carrier (f0 ± 120 Hz)
 fs = ol.fs_per_ch
 nyq = fs / 2.0
 b, a = signal.butter(2, [max(20.0, f0 - 120.0) / nyq, min(nyq - 20.0, f0 + 120.0) / nyq], btype="bandpass")
-v1_inband_noise = signal.filtfilt(b, a, v_noise1 - np.mean(v_noise1))
-v2_inband_noise = signal.filtfilt(b, a, v_noise2 - np.mean(v_noise2))
+v1_noise = signal.filtfilt(b, a, v_noise1 - np.mean(v_noise1))
+v2_noise = signal.filtfilt(b, a, v_noise2 - np.mean(v_noise2))
 
-noise1_rms_mv = float(np.sqrt(np.mean(v1_inband_noise ** 2)) * 1000.0)
-noise2_rms_mv = float(np.sqrt(np.mean(v2_inband_noise ** 2)) * 1000.0)
+noise1_mv = float(np.sqrt(np.mean(v1_noise ** 2)) * 1000.0)
+noise2_mv = float(np.sqrt(np.mean(v2_noise ** 2)) * 1000.0)
 
-print("=" * 75)
-print("💨 PNEUMATIC BLOWER NOISE FLOOR REPORT:")
-print("=" * 75)
-print(f"• Mic 1 In-Band Noise Floor : {noise1_rms_mv:.2f} mV RMS")
-print(f"• Mic 2 In-Band Noise Floor : {noise2_rms_mv:.2f} mV RMS")
-if max(noise1_rms_mv, noise2_rms_mv) < 15.0:
-    print("✅ Noise level is LOW. Excellent acoustic SNR expected (>20 dB).")
-else:
-    print("⚠️ Noticeable blower acoustic rumble. Ensure software bandpass is locked.")
-print("=" * 75)
+print(f"💨 Blower Noise Floor: Mic 1 = {noise1_mv:.2f} mV RMS | Mic 2 = {noise2_mv:.2f} mV RMS")
+if max(noise1_mv, noise2_mv) < 15.0:
+    print("✅ Noise level is LOW. Ready for flight captures.")
 
 # %% [markdown] Cell 5
 ## 2. Multi-Second Glider Flight Recording
@@ -11353,48 +11368,140 @@ print("=" * 75)
 # 4. The system streams continuous dual-channel data directly to DDR memory, extracting 100 Hz velocity trajectories.
 
 # %% [code] Cell 6
-# Cell 3: Glider Launch & Doppler Telemetry Capture
-flight_duration_sec = 4.0
+# %% [code] Cell 3: Interactive Multi-Trial Harvester Loop
+MASS_HANGING_G = 50   # ◄── Configure: 25, 50, or 100
+N_TRIALS = 3
+m_hanging_kg = MASS_HANGING_G / 1000.0
+flight_duration_sec = 6.0
+invert_direction = True
+fs = 50_000.0
 
-print("=" * 80)
-print(f"🚀 LAUNCHING CONTINUOUS FLIGHT RECORDER ({flight_duration_sec:.1f}s at 100 Hz trajectory rate)")
-print("   1. Position glider at LEFT bumper (x = 0).")
-print("   2. Start camera video recording for Tracker.")
-print("   3. Press [Enter] and RELEASE / LAUNCH glider toward right bumper.")
-print("=" * 80)
-input("👉 Ready? Press [Enter] to LAUNCH...")
+nyq = fs / 2.0
+b_bp, a_bp = signal.butter(4, [max(20.0, f0 - 120.0) / nyq, min(nyq - 20.0, f0 + 120.0) / nyq], btype="bandpass")
 
-flight = ol.record_differential_flight(
-    duration_sec=flight_duration_sec,
-    track_length_m=track_length_m,
-    f0_nominal=f0,
-    temperature_c=temperature_c,
-    window_ms=40.0,
-    hop_ms=10.0
-)
+trial_records = []
+all_trajectories = {}
 
-t_sec = flight["times_sec"]
-v_diff = flight["velocity_mps"]
-v_diff_cmps = flight["velocity_cmps"]
-v_m1 = flight["v_mic1_mps"]
-v_m2 = flight["v_mic2_mps"]
-v_mean_single = flight["v_mean_single_mps"]
-accel = flight["acceleration_mps2"]
-pos = flight["position_m"]
-f1 = flight["f_mic1_hz"]
-f2 = flight["f_mic2_hz"]
-f0_drift = flight["f0_common_hz"]
-amp1 = flight["amp_mic1_mv"]
-amp2 = flight["amp_mic2_mv"]
-summary = flight["kinematics_summary"]
+print("=" * 82)
+print(f"🚀 STARTING BATCH HARVESTER FOR MASS: {MASS_HANGING_G} g ({N_TRIALS} Trials)")
+print("=" * 82)
 
-print("\n" + "=" * 80)
-print(f"✅ FLIGHT CAPTURED: {len(t_sec)} time steps ({t_sec[0]:.2f}s to {t_sec[-1]:.2f}s)")
-print(f"• Max Forward Velocity (+v) : {np.max(v_diff_cmps):+5.1f} cm/s ({np.max(v_diff):+.3f} m/s)")
-print(f"• Max Reverse Velocity (-v) : {np.min(v_diff_cmps):+5.1f} cm/s ({np.min(v_diff):+.3f} m/s)")
-print(f"• Viscous Damping Rate γ    : {summary.get('viscous_drag_gamma', 0.0):.4f} s⁻¹")
-print(f"• Bumper Restitution e      : {summary.get('mean_coefficient_of_restitution', np.nan):.3f}")
-print("=" * 80)
+for tr in range(1, N_TRIALS + 1):
+    print(f"\n📍 TRIAL [{tr}/{N_TRIALS}] — Hanging Mass: {MASS_HANGING_G} g")
+    input(f"👉 Press [Enter] and IMMEDIATELY RELEASE glider for Trial {tr}...")
+
+    ol.trigger.mmio.write(0x20, int(9.0 * 100_000_000))
+    ol.trigger.fire_pulse()
+
+    flight = ol.record_differential_flight(
+        duration_sec=flight_duration_sec,
+        track_length_m=track_length_m,
+        f0_nominal=f0,
+        temperature_c=temperature_c,
+        window_ms=40.0,
+        hop_ms=10.0,
+        chunk_size=4096
+    )
+
+    ol.trigger.mmio.write(0x20, 0)
+    ol.trigger.fire_pulse()
+
+    # Continuous Hilbert Phase Demodulation
+    v0_c = signal.filtfilt(b_bp, a_bp, flight["raw_v_a0"] - np.mean(flight["raw_v_a0"]))
+    v1_c = signal.filtfilt(b_bp, a_bp, flight["raw_v_a1"] - np.mean(flight["raw_v_a1"]))
+
+    phi0 = np.unwrap(np.angle(signal.hilbert(v0_c)))
+    phi1 = np.unwrap(np.angle(signal.hilbert(v1_c)))
+
+    dphi0 = signal.savgol_filter(phi0, window_length=1251, polyorder=3, deriv=1, delta=1.0 / fs)
+    dphi1 = signal.savgol_filter(phi1, window_length=1251, polyorder=3, deriv=1, delta=1.0 / fs)
+
+    f1_inst = dphi0 / (2.0 * np.pi)
+    f2_inst = dphi1 / (2.0 * np.pi)
+
+    denom = f1_inst + f2_inst
+    v_inst = np.where(denom > 0, c_sound * ((f2_inst - f1_inst) / denom), 0.0)
+    v_mps = -v_inst if invert_direction else v_inst
+
+    ds = int(fs / 100.0)
+    t_arr = np.arange(len(v_mps))[::ds] / fs
+    v_cmps = v_mps[::ds] * 100.0
+
+    v_clean = signal.medfilt(np.clip(v_cmps, -190.0, 210.0), kernel_size=11)
+    mask_rest = (t_arr > 2.8) & (np.abs(v_clean) < 5.0)
+    v_clean[mask_rest] = 0.0
+
+    dt_arr = t_arr[1] - t_arr[0]
+    pos_cm_arr = np.clip(np.cumsum((v_clean / 100.0) * dt_arr) * 100.0, 0.0, track_length_m * 100.0)
+
+    mask_motion = t_arr > 0.15
+    v_valid = v_clean[mask_motion]
+    max_fwd = float(np.max(v_valid))
+    idx_max = np.where(v_clean == max_fwd)[0][0]
+    t_peak = float(t_arr[idx_max])
+
+    accel_slice = (t_arr >= t_peak - 0.40) & (t_arr <= t_peak)
+    if np.sum(accel_slice) > 5:
+        p_acc = np.polyfit(t_arr[accel_slice], v_clean[accel_slice] / 100.0, 1)
+        a_measured = float(p_acc[0])
+    else:
+        a_measured = max_fwd / 100.0 / max(t_peak - 0.15, 0.1)
+
+    zero_cross = np.where((v_clean[:-1] > 0) & (v_clean[1:] <= 0) & (t_arr[:-1] > t_peak))[0]
+    if len(zero_cross) > 0:
+        idx_zc = zero_cross[0]
+        t_impact = float(t_arr[idx_zc])
+        v_impact = float(v_clean[idx_zc - 2])
+        rebound_window = v_clean[idx_zc : min(len(v_clean), idx_zc + 100)]
+        max_rev = float(np.min(rebound_window))
+        idx_rev = idx_zc + np.argmin(rebound_window)
+        tau_collision_s = float(max(0.05, (t_arr[idx_rev] - t_impact) * 2.0))
+        restitution = abs(max_rev / max(v_impact, 1e-3))
+    else:
+        t_impact = np.nan
+        max_rev = float(np.min(v_valid))
+        tau_collision_s = 0.20
+        restitution = abs(max_rev / max(max_fwd, 1e-3))
+
+    k_bumper_npm = float(m_glider_kg * ((np.pi / tau_collision_s) ** 2))
+    max_pos = float(np.max(pos_cm_arr))
+
+    trial_records.append({
+        "trial_id": tr,
+        "mass_hanging_g": MASS_HANGING_G,
+        "a_measured_mps2": a_measured,
+        "v_max_fwd_cmps": max_fwd,
+        "v_max_rev_cmps": max_rev,
+        "t_impact_s": t_impact,
+        "tau_collision_s": tau_collision_s,
+        "k_bumper_npm": k_bumper_npm,
+        "restitution_e": restitution,
+        "max_pos_cm": max_pos
+    })
+
+    all_trajectories[f"trial_{tr}"] = {
+        "t_s": t_arr,
+        "v_cmps": v_clean,
+        "pos_cm": pos_cm_arr,
+        "f1_hz": f1_inst[::ds],
+        "f2_hz": f2_inst[::ds]
+    }
+    print(f"   ✅ Shot {tr}: v_max = {max_fwd:5.1f} cm/s | a = {a_measured:.2f} m/s² | x_max = {max_pos:5.1f} cm")
+    time.sleep(0.5)
+
+df_trials = pd.DataFrame(trial_records)
+a_stat = KinematicAnalytics.compute_metrology_statistics(df_trials["a_measured_mps2"])
+v_stat = KinematicAnalytics.compute_metrology_statistics(df_trials["v_max_fwd_cmps"])
+e_stat = KinematicAnalytics.compute_metrology_statistics(df_trials["restitution_e"])
+k_stat = KinematicAnalytics.compute_metrology_statistics(df_trials["k_bumper_npm"])
+pos_stat = KinematicAnalytics.compute_metrology_statistics(df_trials["max_pos_cm"])
+
+print("\n" + "=" * 85)
+print(f"🏆 STATISTICAL SUMMARY FOR MASS: {MASS_HANGING_G} g (N = {N_TRIALS} Trials)")
+print(f"• Acceleration (a)       : {a_stat['mean']:.3f} ± {a_stat['sem']:.3f} m/s²")
+print(f"• Peak Forward Speed (v) : {v_stat['mean']:5.1f} ± {v_stat['sem']:4.1f} cm/s")
+print(f"• Max Position (x_max)   : {pos_stat['mean']:5.1f} ± {pos_stat['sem']:4.1f} cm")
+print("=" * 85)
 
 # %% [markdown] Cell 7
 ## 3. Drift Cancellation Proof: Single-Mic vs. Differential Doppler
@@ -11404,38 +11511,47 @@ print("=" * 80)
 # * **$v_{\text{diff}}(t)$:** Subtracts both channels, canceling oscillator drift identically to zero.
 
 # %% [code] Cell 8
-# Cell 4: Drift Cancellation & Kinematics Multi-Panel Plot
-fig_flight = make_subplots(
-    rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.08,
+# %% [code] Cell 4: Multi-Trial Overlay Plots & Statistical Envelopes
+min_len = min(len(all_trajectories[k]["v_cmps"]) for k in all_trajectories)
+t_common = all_trajectories["trial_1"]["t_s"][:min_len]
+
+v_matrix = np.array([all_trajectories[f"trial_{tr}"]["v_cmps"][:min_len] for tr in range(1, N_TRIALS + 1)])
+pos_matrix = np.array([all_trajectories[f"trial_{tr}"]["pos_cm"][:min_len] for tr in range(1, N_TRIALS + 1)])
+
+v_mean = np.mean(v_matrix, axis=0)
+v_std = np.std(v_matrix, axis=0)
+pos_mean = np.mean(pos_matrix, axis=0)
+pos_std = np.std(pos_matrix, axis=0)
+
+fig_multi = make_subplots(
+    rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
     subplot_titles=(
-        "<b>1. Dual Observed Frequencies (f1 Left vs f2 Right) & Common-Mode Drift f0(t) [Hz]</b>",
-        "<b>2. Drift Cancellation Proof: Single-Mic Velocities (Drifting) vs Differential v_diff (Stable) [cm/s]</b>",
-        "<b>3. Reconstructed 1D Glider Position Along Track x(t) [m]</b>"
+        f"<b>1. Multi-Trial Glider Velocity v(t) [cm/s] (Mass: {MASS_HANGING_G}g, N={N_TRIALS})</b>",
+        f"<b>2. Reconstructed 1D Glider Position x(t) [cm] (Mean ± 1σ Band)</b>"
     )
 )
 
-# Row 1: Frequency Curves
-fig_flight.add_scatter(x=t_sec, y=f1, mode="lines", line=dict(color="#00FFCC", width=1.8), name="Mic 1 (Left)", row=1, col=1)
-fig_flight.add_scatter(x=t_sec, y=f2, mode="lines", line=dict(color="#FF007F", width=1.8), name="Mic 2 (Right)", row=1, col=1)
-fig_flight.add_scatter(x=t_sec, y=f0_drift, mode="lines", line=dict(color="#FFA500", width=1.5, dash="dash"), name="Drifting Carrier f0(t)", row=1, col=1)
+trial_colors = ["#00E5FF", "#FFA500", "#E040FB", "#76FF03", "#FF5252"]
+for tr in range(1, N_TRIALS + 1):
+    c = trial_colors[(tr - 1) % len(trial_colors)]
+    fig_multi.add_scatter(x=t_common, y=v_matrix[tr - 1], mode="lines", line=dict(color=c, width=1.2, dash="dot"), name=f"Trial {tr}", row=1, col=1)
 
-# Row 2: Drift Cancellation Proof
-fig_flight.add_scatter(x=t_sec, y=v_m1 * 100.0, mode="lines", line=dict(color="rgba(0, 255, 204, 0.4)", width=1.2, dash="dot"), name="Single Mic 1 (Left)", row=2, col=1)
-fig_flight.add_scatter(x=t_sec, y=v_m2 * 100.0, mode="lines", line=dict(color="rgba(255, 0, 127, 0.4)", width=1.2, dash="dot"), name="Single Mic 2 (Right)", row=2, col=1)
-fig_flight.add_scatter(x=t_sec, y=v_diff_cmps, mode="lines+markers", marker=dict(size=3), line=dict(color="#FFD600", width=2.5), name="Differential v_diff (Drift Canceled)", row=2, col=1)
-fig_flight.add_hline(y=0.0, line=dict(color="gray", dash="dash"), row=2, col=1)
+fig_multi.add_scatter(x=t_common, y=v_mean + v_std, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), showlegend=False, row=1, col=1)
+fig_multi.add_scatter(x=t_common, y=v_mean - v_std, mode="lines", line=dict(width=0.5, color="rgba(0, 255, 204, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(0, 255, 204, 0.15)", name="Velocity ± 1σ", row=1, col=1)
+fig_multi.add_scatter(x=t_common, y=v_mean, mode="lines", line=dict(color="#00FFCC", width=2.8), name="Mean Velocity v̄(t)", row=1, col=1)
+fig_multi.add_hline(y=0.0, line=dict(color="gray", dash="dash"), row=1, col=1)
 
-# Row 3: Position Trajectory
-fig_flight.add_scatter(x=t_sec, y=pos, mode="lines", line=dict(color="#76FF03", width=2.2), name="Position x(t)", row=3, col=1)
-fig_flight.add_hline(y=0.0, line=dict(color="white", dash="dot"), annotation_text="Mic 1 (0 m)", row=3, col=1)
-fig_flight.add_hline(y=track_length_m, line=dict(color="white", dash="dot"), annotation_text=f"Mic 2 ({track_length_m} m)", row=3, col=1)
+fig_multi.add_scatter(x=t_common, y=pos_mean + pos_std, mode="lines", line=dict(width=0.5, color="rgba(118, 255, 3, 0.2)", dash="dot"), showlegend=False, row=2, col=1)
+fig_multi.add_scatter(x=t_common, y=pos_mean - pos_std, mode="lines", line=dict(width=0.5, color="rgba(118, 255, 3, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(118, 255, 3, 0.15)", name="Position ± 1σ", row=2, col=1)
+fig_multi.add_scatter(x=t_common, y=pos_mean, mode="lines", line=dict(color="#76FF03", width=2.8), name="Mean Position x̄(t)", row=2, col=1)
+fig_multi.add_hline(y=0.0, line=dict(color="white", dash="dot"), annotation_text="Launch (0 cm)", row=2, col=1)
+fig_multi.add_hline(y=track_length_m * 100.0, line=dict(color="white", dash="dot"), annotation_text=f"Bumper ({track_length_m * 100:.0f} cm)", row=2, col=1)
 
-fig_flight.update_layout(template="plotly_dark", height=750, title="<b>Glider Kinematics: Differential Doppler & Oscillator Drift Cancellation</b>")
-fig_flight.update_yaxes(title="Frequency [Hz]", row=1, col=1)
-fig_flight.update_yaxes(title="Velocity [cm/s]", row=2, col=1)
-fig_flight.update_yaxes(title="Position [m]", range=[-0.05, track_length_m + 0.05], row=3, col=1)
-fig_flight.update_xaxes(title="Time [Seconds]", row=3, col=1)
-fig_flight.show()
+fig_multi.update_layout(template="plotly_dark", height=580, margin=dict(l=60, r=30, t=55, b=35))
+fig_multi.update_yaxes(title="Velocity [cm/s]", range=[-90, max(210, v_stat['mean'] + 30)], row=1, col=1)
+fig_multi.update_yaxes(title="Position [cm]", range=[-10, (track_length_m * 100.0) + 15], row=2, col=1)
+fig_multi.update_xaxes(title="Time [Seconds]", row=2, col=1)
+fig_multi.show()
 
 # %% [markdown] Cell 9
 ## 4. Multi-Modal Cross-Validation: Doppler vs. Tracker vs. Newtonian Theory
@@ -11444,64 +11560,35 @@ fig_flight.show()
 # 3. **Cross-Correlation Synchronization:** Automatically shifts Tracker's timeline to align with the FPGA recording and computes $\text{MAE}$, $\text{RMSE}$, and Pearson $R^2$.
 
 # %% [code] Cell 10
-# Cell 5: Optical Ground Truth Alignment & Theoretical Model Simulation
-# 1. Select Theoretical Mechanical Model
-propulsion_mode = "atwood"  # Choose: 'atwood' (falling mass) or 'elastic' (spring launch)
+# %% [code] Cell 5: Theoretical Atwood & Elastic Bumper Mechanics Simulation
+propulsion_mode = "atwood"
+a_theo_val = (m_hanging_kg / (m_glider_kg + m_hanging_kg)) * 9.81
+v_max_theo = np.sqrt(2.0 * a_theo_val * fall_height_m) * 100.0
 
-m_glider = 0.250     # Glider mass in kg (e.g. 250 g)
-m_hanging = 0.020    # Hanging mass in kg (e.g. 20 g)
-fall_height = 0.40   # Drop distance of falling weight in meters
-gamma_fit = summary.get("viscous_drag_gamma", 0.05)
+launch_idx = np.where(v_mean > 15.0)[0]
+t_start = t_common[launch_idx[0]] if len(launch_idx) > 0 else 0.50
+t_shifted = np.maximum(0.0, t_common - t_start)
 
-if propulsion_mode == "atwood":
-    v_theo, a_theo = KinematicAnalytics.simulate_atwood_glider(
-        t_axis=t_sec, m_glider_kg=m_glider, m_hanging_kg=m_hanging,
-        fall_height_m=fall_height, gamma_damping=gamma_fit
-    )
-else:
-    v_theo, a_theo = KinematicAnalytics.simulate_elastic_glider(
-        t_axis=t_sec, m_glider_kg=m_glider, k_spring_npm=45.0,
-        delta_x_m=0.08, gamma_damping=gamma_fit
-    )
-
-# 2. Ingest Tracker Optical Data (if available)
-tracker_file = Path("data/tracker_glider.csv")
-v_tracker = np.full_like(v_diff, np.nan)
-optical_stats = {}
-
-if tracker_file.exists():
-    res_tr = KinematicAnalytics.align_tracker_ground_truth(
-        tracker_csv_path=tracker_file, t_fpga=t_sec, v_fpga=v_diff
-    )
-    v_tracker = res_tr["v_tracker_aligned_mps"]
-    optical_stats = res_tr
-    print("=" * 75)
-    print("📹 TRACKER OPTICAL CROSS-VALIDATION RESULTS:")
-    print("=" * 75)
-    print(f"• Cross-Correlation Lag Sync : {res_tr['time_offset_sec']:+.4f} s")
-    print(f"• Mean Absolute Error (MAE)  : {res_tr['mae_mps']*100:.2f} cm/s")
-    print(f"• Root Mean Square Error     : {res_tr['rmse_mps']*100:.2f} cm/s")
-    print(f"• Correlation Coefficient R² : {res_tr['correlation_r2']:.4f}")
-    print("=" * 75)
-else:
-    print("ℹ️ No Tracker export file found at 'data/tracker_glider.csv'.")
-    print("   (Analyze your camera video in Tracker and export CSV to overlay optical curves!)")
-
-# 3. 3-Way Comparative Velocity Plot
-fig_comp = go.Figure()
-fig_comp.add_scatter(x=t_sec, y=v_diff * 100.0, mode="lines", line=dict(color="#FFD600", width=2.5), name="FPGA Doppler Velocity")
-fig_comp.add_scatter(x=t_sec, y=v_theo * 100.0, mode="lines", line=dict(color="#00E5FF", dash="dash", width=2.0), name=f"Newtonian Theory ({propulsion_mode.title()})")
-
-if tracker_file.exists():
-    fig_comp.add_scatter(x=t_sec, y=v_tracker * 100.0, mode="markers", marker=dict(size=6, color="#FF007F", symbol="circle-open"), name="Tracker Video Optical Truth")
-
-fig_comp.update_layout(
-    template="plotly_dark", height=450,
-    title="<b>Multi-Modal Velocity Showdown: FPGA Doppler vs. Newtonian Theory vs. Optical Tracker</b>",
-    xaxis=dict(title="Time [Seconds]"),
-    yaxis=dict(title="Velocity [cm/s]")
+v_theo_raw, a_theo_raw = KinematicAnalytics.simulate_atwood_glider(
+    t_axis=t_shifted,
+    m_glider_kg=m_glider_kg,
+    m_hanging_kg=m_hanging_kg,
+    fall_height_m=fall_height_m,
+    gamma_damping=0.04
 )
-fig_comp.show()
+v_theo_sync = np.where(t_common >= t_start, v_theo_raw * 100.0, 0.0)
+
+fig_model = go.Figure()
+fig_model.add_scatter(x=t_common, y=v_mean, mode="lines", line=dict(color="#FFD600", width=2.8), name=f"Measured Mean Doppler ({MASS_HANGING_G}g)")
+fig_model.add_scatter(x=t_common, y=v_theo_sync, mode="lines", line=dict(color="#00E5FF", dash="dash", width=2.2), name=f"Atwood Theory (a = {a_theo_val:.2f} m/s²)")
+
+fig_model.update_layout(
+    template="plotly_dark", height=450,
+    title=f"<b>Theoretical Model Validation: Hanging Mass = {MASS_HANGING_G} g (h = {fall_height_m * 100:.0f} cm)</b>",
+    xaxis=dict(title="Time [Seconds]"),
+    yaxis=dict(title="Velocity [cm/s]", range=[-90, max(210, v_max_theo + 30)])
+)
+fig_model.show()
 
 # %% [markdown] Cell 11
 ## 5. Multi-Tab Excel Export
@@ -11511,74 +11598,145 @@ fig_comp.show()
 # * **Tab 3 (`Kinematic_Coefficients`):** Aerodynamic drag $\gamma$, restitution $e$, Atwood acceleration, and optical correlation $R^2$.
 
 # %% [code] Cell 12
-# Cell 6: Multi-Tab Excel Exporter
+# %% [code] Cell 6: Multi-Tab Mass-Specific Excel Exporter (Self-Aligning)
 data_dir = Path("data")
 data_dir.mkdir(parents=True, exist_ok=True)
-excel_path = data_dir / "flight_kinematics_characterization.xlsx"
-csv_path = data_dir / "flight_kinematics_characterization.csv"
 
-df_ts = pd.DataFrame({
-    "time_sec": t_sec,
-    "f_mic1_hz": f1,
-    "f_mic2_hz": f2,
-    "f0_common_hz": f0_drift,
-    "amp_mic1_mv": amp1,
-    "amp_mic2_mv": amp2,
-    "v_doppler_diff_mps": v_diff,
-    "v_doppler_diff_cmps": v_diff_cmps,
-    "v_mic1_cmps": v_m1 * 100.0,
-    "v_mic2_cmps": v_m2 * 100.0,
-    "v_mean_single_cmps": v_mean_single * 100.0,
-    "v_tracker_cmps": v_tracker * 100.0,
-    "v_theoretical_cmps": v_theo * 100.0,
-    "a_doppler_mps2": accel,
-    "a_theoretical_mps2": a_theo,
-    "pos_doppler_m": pos
-})
+excel_filename = f"flight_kinematics_mass_{MASS_HANGING_G}g.xlsx"
+csv_filename = f"flight_kinematics_mass_{MASS_HANGING_G}g.csv"
 
-df_drift = pd.DataFrame({
-    "time_sec": t_sec,
-    "v_mic1_cmps": v_m1 * 100.0,
-    "v_mic2_cmps": v_m2 * 100.0,
-    "v_diff_cmps": v_diff_cmps,
-    "drift_error_bias_cmps": (v_mean_single * 100.0) - v_diff_cmps,
-    "f0_oscillator_drift_hz": f0_drift - f0
-})
+excel_path = data_dir / excel_filename
+csv_path = data_dir / csv_filename
 
-df_coeffs = pd.DataFrame([{
-    "carrier_nominal_f0_hz": f0,
+# Tab 1: Statistical Summary (Mean ± SEM)
+df_summary = pd.DataFrame([{
+    "mass_hanging_g": MASS_HANGING_G,
+    "n_trials": N_TRIALS,
+    "m_glider_kg": m_glider_kg,
+    "fall_height_m": fall_height_m,
     "track_length_m": track_length_m,
-    "temperature_c": temperature_c,
-    "speed_of_sound_mps": c_sound,
-    "propulsion_mode": propulsion_mode,
-    "viscous_drag_gamma": summary.get("viscous_drag_gamma", 0.0),
-    "coefficient_of_restitution": summary.get("mean_coefficient_of_restitution", np.nan),
-    "max_forward_speed_cmps": np.max(v_diff_cmps),
-    "max_reverse_speed_cmps": np.min(v_diff_cmps),
-    "tracker_optical_mae_cmps": optical_stats.get("mae_mps", np.nan) * 100.0,
-    "tracker_optical_rmse_cmps": optical_stats.get("rmse_mps", np.nan) * 100.0,
-    "tracker_optical_r2": optical_stats.get("correlation_r2", np.nan)
+    "a_theo_mps2": a_theo_val,
+    "a_meas_mean_mps2": a_stat["mean"],
+    "a_meas_sem_mps2": a_stat["sem"],
+    "v_max_theo_cmps": v_max_theo,
+    "v_max_mean_cmps": v_stat["mean"],
+    "v_max_sem_cmps": v_stat["sem"],
+    "k_bumper_mean_npm": k_stat["mean"],
+    "k_bumper_sem_npm": k_stat["sem"],
+    "restitution_mean_e": e_stat["mean"],
+    "restitution_sem_e": e_stat["sem"]
 }])
 
+# Tab 2: Individual Trial Metrics
+df_trials_export = df_trials.copy()
+
+# Tab 3: Synchronized Time Series
+dict_ts = {
+    "time_sec": t_common,
+    "v_mean_cmps": v_mean,
+    "v_std_cmps": v_std,
+    "pos_mean_cm": pos_mean,
+    "pos_std_cm": pos_std,
+    "v_theo_cmps": v_theo_sync
+}
+for tr in range(1, N_TRIALS + 1):
+    dict_ts[f"v_trial_{tr}_cmps"] = v_matrix[tr - 1]
+    dict_ts[f"pos_trial_{tr}_cm"] = pos_matrix[tr - 1]
+
+df_ts = pd.DataFrame(dict_ts)
+
 with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+    df_summary.to_excel(writer, sheet_name="Statistical_Summary", index=False)
+    df_trials_export.to_excel(writer, sheet_name="Trial_Metrics", index=False)
     df_ts.to_excel(writer, sheet_name="Synchronized_TimeSeries", index=False)
-    df_drift.to_excel(writer, sheet_name="Drift_Cancellation_Proof", index=False)
-    df_coeffs.to_excel(writer, sheet_name="Kinematic_Coefficients", index=False)
 
 df_ts.to_csv(csv_path, index=False)
 
 print("=" * 85)
-print("🎉 FLIGHT KINEMATICS DATA EXPORT COMPLETE!")
-print("=" * 85)
-print(f"• Multi-Tab Excel Workbook : {excel_path.resolve()}")
-print(f"• Synchronized CSV Backup  : {csv_path.resolve()}")
+print(f"🎉 DATASET EXPORTED FOR MASS {MASS_HANGING_G} g!")
+print(f"• Excel Workbook: {excel_path.resolve()}")
 print("=" * 85)
 
-# %% [markdown] Cell 13
+# %% [code] Cell 13
+# %% [code] Cell 7: Multi-Mass Campaign Benchmark (Newton's 2nd Law - Corrected h=70cm)
+data_dir = Path("data")
+mass_files = list(data_dir.glob("flight_kinematics_mass_*g.xlsx"))
+
+if len(mass_files) >= 2:
+    campaign_records = []
+    for f in sorted(mass_files):
+        try:
+            df_s = pd.read_excel(f, sheet_name="Statistical_Summary")
+            campaign_records.append(df_s.iloc[0].to_dict())
+        except Exception:
+            pass
+
+    df_camp = pd.DataFrame(campaign_records).sort_values("mass_hanging_g")
+
+    h_drop_actual_m = 0.70  # ◄── Drop height: 70.0 cm
+    df_camp["a_kinematic_mps2"] = (df_camp["v_max_mean_cmps"] / 100.0) ** 2 / (2.0 * h_drop_actual_m)
+    df_camp["a_kinematic_sem"] = (
+        2.0 * (df_camp["v_max_mean_cmps"] / 100.0) / (2.0 * h_drop_actual_m) * (df_camp["v_max_sem_cmps"] / 100.0)
+    )
+
+    m_glider_eff_kg = 0.185
+    mass_ratio = (df_camp["mass_hanging_g"] / 1000.0) / (m_glider_eff_kg + (df_camp["mass_hanging_g"] / 1000.0))
+
+    x_data = mass_ratio.to_numpy()
+    y_data = df_camp["a_kinematic_mps2"].to_numpy()
+
+    # Physically constrained zero-intercept regression: a = g * ratio
+    g_constrained = float(np.sum(x_data * y_data) / np.sum(x_data ** 2))
+
+    fig_newton = go.Figure()
+    fig_newton.add_scatter(
+        x=x_data, y=y_data,
+        error_y=dict(type="data", array=df_camp["a_kinematic_sem"], visible=True),
+        mode="markers", marker=dict(size=12, color="#00FFCC"),
+        name="Measured Kinematic Accel (±1 SEM)"
+    )
+
+    x_line = np.linspace(0.0, max(x_data) * 1.15, 100)
+    fig_newton.add_scatter(
+        x=x_line, y=g_constrained * x_line,
+        mode="lines", line=dict(color="#FFA500", width=2.8, dash="dash"),
+        name=f"Physical Fit through (0,0): g_exp = {g_constrained:.2f} m/s²"
+    )
+    fig_newton.add_scatter(
+        x=x_line, y=9.78 * x_line,
+        mode="lines", line=dict(color="rgba(255, 255, 255, 0.4)", width=1.5, dash="dot"),
+        name="Local Gravity Reference (g = 9.78 m/s²)"
+    )
+
+    fig_newton.update_layout(
+        template="plotly_dark", height=480,
+        title=f"<b>Newton's Second Law Verification: a vs. m/(M+m) (h = {h_drop_actual_m*100:.0f} cm)</b>",
+        xaxis=dict(title="Theoretical Mass Ratio: m / (M + m)", range=[0.0, max(x_data) * 1.18]),
+        yaxis=dict(title="Kinematic Acceleration a [m/s²]", range=[0.0, max(y_data) * 1.20]),
+        margin=dict(l=60, r=30, t=55, b=35)
+    )
+    fig_newton.show()
+
+    g_local = 9.78
+    err_pct = abs(g_constrained - g_local) / g_local * 100.0
+
+    print("=" * 85)
+    print("🏆 FINAL MULTI-MASS EXPERIMENTAL CAMPAIGN RESULTS:")
+    print("=" * 85)
+    for _, row in df_camp.iterrows():
+        print(f"• Mass {row['mass_hanging_g']:3.0f} g: v_max = {row['v_max_mean_cmps']:5.1f} ± {row['v_max_sem_cmps']:3.1f} cm/s | a_kin = {row['a_kinematic_mps2']:.3f} m/s² | k_bump = {row['k_bumper_mean_npm']:4.1f} N/m")
+    print("-" * 85)
+    print(f"• Extracted Physical Gravity (Zero-Intercept) : g_exp = {g_constrained:.2f} m/s²")
+    print(f"• True Local Gravity (Colombia ~4°N)          : g_ref = {g_local:.2f} m/s²")
+    print(f"• Experimental Relative Error                 : {err_pct:.1f}%")
+    print("=" * 85)
+
+# %% [markdown] Cell 14
 ## 6. Clean Hardware Teardown
 # Release FPGA DMA channels and memory buffers.
 
-# %% [code] Cell 14
+# %% [code] Cell 15
+# %% [code] Cell 8: Clean Hardware Teardown
 ol.close()
 print("🔒 FPGA hardware resources cleanly released.")
 
