@@ -1,7 +1,7 @@
 ==============================================================================
 ⚙️  PROJECT ENVIRONMENT & TOOLCHAIN CONSTRAINTS
 ==============================================================================
-• Repository State    : main @ 4901e4c
+• Repository State    : main @ 582c017
 • Pinned HW Overlay   : SiririComun/hw-xadc-dma-overlays @ v1.5.2-rc4
 • Package Version     : v1.3.1
 ==============================================================================
@@ -9,7 +9,7 @@
 Git Context & Branch Topology:
 
 ```log
-Current Branch: main | Working Tree: Clean (No uncommitted changes)
+Current Branch: main | Working Tree: Dirty (4 modified/untracked files)
 
 Branch Tracking & Divergence Status:
 feat/differential-air-track-doppler                0caba84 [origin/feat/differential-air-track-doppler] chore(context): update repository context with modular Notebook 04
@@ -18,14 +18,14 @@ feat/differential-air-track-doppler                0caba84 [origin/feat/differen
   feat/phase-angle-of-arrival                        ab03518 [origin/feat/phase-angle-of-arrival] chore(context): update Cog configuration and context with Notebook 03
   feat/pulse-time-of-arrival                         20aef68 [origin/feat/pulse-time-of-arrival] chore(context): update repository context summary with exp03 multi-mass validation
   feat/v1.6.0-overlay-integration                    4172361 [origin/feat/v1.6.0-overlay-integration] docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
-* main                                               4901e4c [origin/main: ahead 1] docs(readme): document v1.3.1 multi-mass air-track kinematics and Newton's 2nd law verification
+* main                                               582c017 [origin/main] chore(context): update repository context summary with final documentation
   remotes/origin/feat/differential-air-track-doppler 0caba84 chore(context): update repository context with modular Notebook 04
   remotes/origin/feat/fft-quadruple-telemetry-engine c8e76e9 chore(hw): pin hardware overlay dependency to stable v1.5.1 release
   remotes/origin/feat/multipath-acoustic-calibration bf3bdab chore(release): bump package version to v1.2.0
   remotes/origin/feat/phase-angle-of-arrival         ab03518 chore(context): update Cog configuration and context with Notebook 03
   remotes/origin/feat/pulse-time-of-arrival          20aef68 chore(context): update repository context summary with exp03 multi-mass validation
   remotes/origin/feat/v1.6.0-overlay-integration     4172361 docs(benchmark): add multi-frequency amplitude decay and H(f) flatness notebook
-  remotes/origin/main                                4f684ff chore(context): update repository context summary for v1.3.1 release on main
+  remotes/origin/main                                582c017 chore(context): update repository context summary with final documentation
 
 Repository Tags & Release History:
 v1.3.1          Release v1.3.1: Multi-mass air-track kinematics with g=9.37 m/s² validation (4.2% error)
@@ -34,8 +34,9 @@ v1.1.0          Release v1.1.0: Real-time 3-row kinematics dashboard, metric dis
 v1.0.0          Release v1.0.0: FPGA-Accelerated Real-Time Acoustic Kinematics & Telemetry on PYNQ-Z2
 
 Multi-Branch Git Commit Graph:
-* 4901e4c  (HEAD -> main) - 2026-10-02 : docs(readme): document v1.3.1 multi-mass air-track kinematics and Newton's 2nd law verification (SiririComun)
-* 4f684ff  (origin/main) - 2026-10-02 : chore(context): update repository context summary for v1.3.1 release on main (SiririComun)
+* 582c017  (HEAD -> main, origin/main) - 2026-10-02 : chore(context): update repository context summary with final documentation (SiririComun)
+* 4901e4c  - 2026-10-02 : docs(readme): document v1.3.1 multi-mass air-track kinematics and Newton's 2nd law verification (SiririComun)
+* 4f684ff  - 2026-10-02 : chore(context): update repository context summary for v1.3.1 release on main (SiririComun)
 *   22da865  (tag: v1.3.1) - 2026-10-02 : merge(release): merge feat/pulse-time-of-arrival into main for v1.3.1 (SiririComun)
 |\  
 | * 20aef68  (origin/feat/pulse-time-of-arrival, feat/pulse-time-of-arrival) - 2026-10-02 : chore(context): update repository context summary with exp03 multi-mass validation (SiririComun)
@@ -49,7 +50,6 @@ Multi-Branch Git Commit Graph:
 | * 73acb56  - 2026-10-01 : fix(aoa): decouple autodyne phase from TDOA and gain-normalize energy monopulse in driver (SiririComun)
 | * c987b09  - 2026-09-30 : chore(context): update repository context summary with exp01 calibration data (SiririComun)
 | * eafce31  - 2026-09-30 : feat(profiles): update active buzzer profile with certified experimental dual-channel constants (SiririComun)
-| * 788a720  - 2026-09-30 : feat(experiments): update exp01 with independent single-mic workflow and physical decay plots (SiririComun)
 ```
 
 LICENSE: (LICENSE)
@@ -5824,6 +5824,7 @@ EXPERIMENT_NOTEBOOKS = [
     "exp01_distance_energy_characterization.ipynb",
     "exp02_angle_3method_characterization.ipynb",
     "exp03_air_track_kinematics_harvesting.ipynb",
+    "exp04_harmonic_oscillation_doppler.ipynb",
 ]
 
 def install_localizer_notebooks(target_dir: str = None):
@@ -12056,4 +12057,537 @@ class TestMetrologyAndExperimentalEngines:
         assert abs(res["velocity_mps"] - v_true) < 0.005
         assert abs(res["v_mic1_mps"] - v_true) < 0.005
         assert abs(res["v_mic2_mps"] - v_true) < 0.005
+```
+
+exp04_harmonic_oscillation_doppler.ipynb: (notebooks/experiments/exp04_harmonic_oscillation_doppler.ipynb)
+
+```python
+# %% [markdown] Cell 1
+# 🚄 Experiment 04: Air Track Harmonic Oscillation & Phase-Space Doppler Dynamics
+# **Project:** `pynq-sound-localizer` (`v1.3.1`)
+# **Target:** Production Damped Harmonic Oscillator Benchmark & Phase-Space Orbit Reconstruction
+# **Outputs:** `data/harmonic_oscillation_mass_200g.xlsx` & `data/harmonic_oscillation_mass_200g.csv`
+# ---
+### 🏛️ Physical Operating Principles
+# 1. **Simple Harmonic Motion & Continuous Differential Doppler:**
+# * A glider of mass $m = 0.200\,\text{kg}$ is attached between two elastic restoring cords on a $2.0\,\text{m}$ rail ($m\ddot{x} + \gamma\dot{x} + k_{\text{eff}}x = 0$).
+# * Counter-positioned microphones at $x = 0$ (Mic 1 / Left) and $x = L = 2.0\,\text{m}$ (Mic 2 / Right) track the frequency modulation (FM) Doppler signature:
+# $$v_{\text{diff}}(t) = c(T) \cdot \left(\frac{f_2(t) - f_1(t)}{f_1(t) + f_2(t)}\right), \qquad f_{0,\text{common}}(t) = \frac{f_1(t) + f_2(t)}{2}$$
+# 2. **Drift-Free Kinematics (Integer-Cycle Zero-Mean Integration):**
+# * Completely bypasses room reverberation and standing wave ripples by avoiding amplitude/intensity distance inversion.
+# * Velocity is detrended over integer cycles ($\oint v\,dt = 0$) and integrated to yield position $x(t)$ with zero spatial ramp drift.
+# 3. **Phase-Space Dynamics & Dissipation:**
+# * Trajectories are mapped onto the 2D phase-space plane $(x(t), v(t))$, forming a clockwise inward spiral collapsing to equilibrium $(x_{\text{eq}}, 0)$.
+# * Logarithmic peak envelope regression extracts viscous air-cushion drag ($\gamma$) and effective spring stiffness ($k_{\text{eff}} = m\omega_0^2$).
+# 4. **Conical Directivity Handling:**
+# * Fully models directional buzzer directivity (`AIMED_MICROPHONE = "mic1"` vs. `"mic2"`) with asymmetric SNR thresholding.
+
+# %% [code] Cell 2
+# %% [code] Cell 1: Environment Setup, Configuration & Overlay Initialization
+import time
+import json
+from pathlib import Path
+import numpy as np
+import scipy.signal as signal
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+from pynq_localizer import (
+    MicrophoneArrayOverlay,
+    KinematicAnalytics,
+    DifferentialDopplerTracker
+)
+
+# =========================================================================
+# 🎛️ CONFIGURATION: EXPERIMENTAL CONSTANTS & DIRECTIVITY
+# =========================================================================
+AIMED_MICROPHONE = "mic1"    # ◄── "mic1" (Buzzer faces Left, x=0) or "mic2" (faces Right, x=L)
+TRACK_LENGTH_M = 2.00        # Physical distance between microphones (2.00 m)
+GLIDER_MASS_KG = 0.200       # Glider assembly mass (0.200 kg = 200 g)
+TEMPERATURE_C = 20.0         # Ambient lab temperature in °C
+FLIGHT_DURATION_SEC = 10.0   # 10.0 s recording (~5-6 oscillation periods)
+N_TRIALS = 3                 # Number of repeated trial shots
+LAUNCH_POS_CM = 60.0         # Pull-back release mark (-40 cm from center)
+# =========================================================================
+
+# 1. Initialize Hardware Overlay (M=10, 50 kSPS continuous dual-channel stream)
+ol = MicrophoneArrayOverlay(version="v1.5.3")
+ol.set_profile("audio")
+fs = ol.fs_per_ch  # 50,000.0 SPS
+
+# 2. Ambient Physical Parameters
+c_sound = KinematicAnalytics.speed_of_sound(TEMPERATURE_C)
+
+# 3. Dynamic Profile Carrier Autoresolution
+profile_candidates = [
+    Path("profiles/active_buzzer_profile.json").resolve(),
+    Path("profiles/active_buzzer_2610hz.json").resolve(),
+    Path("../../profiles/active_buzzer_profile.json").resolve()
+]
+profile_path = next((p for p in profile_candidates if p.exists()), None)
+if profile_path is not None:
+    with open(profile_path, "r", encoding="utf-8") as f:
+        p_data = json.load(f)
+    f0 = float(p_data.get("f_res_hz", p_data.get("frequencies_hz", [2660.0])[0]))
+    print(f"✅ Loaded Profile: '{profile_path.name}' (f0 = {f0:.1f} Hz)")
+else:
+    f0 = KinematicAnalytics.DEFAULT_F0_HZ
+    print(f"ℹ️ Profile not found. Using default carrier: f0 = {f0:.1f} Hz")
+
+# 4. Directivity Role Mapping
+if AIMED_MICROPHONE == "mic1":
+    CH_AIMED = "Mic 1 (Left / A0)"
+    CH_REAR  = "Mic 2 (Right / A1)"
+    V_TH_AIMED = 0.015   # 15 mV RMS on-axis squelch
+    V_TH_REAR  = 0.005   # 5 mV RMS rear squelch
+else:
+    CH_AIMED = "Mic 2 (Right / A1)"
+    CH_REAR  = "Mic 1 (Left / A0)"
+    V_TH_AIMED = 0.015
+    V_TH_REAR  = 0.005
+
+print("=" * 80)
+print("✅ EXPERIMENT 04 INITIALIZED: DAMPED HARMONIC OSCILLATOR")
+print("=" * 80)
+print(f"• Rail Length        : {TRACK_LENGTH_M:.2f} m (Center x_eq = {TRACK_LENGTH_M/2:.2f} m)")
+print(f"• Glider Mass        : m = {GLIDER_MASS_KG*1000:.1f} g")
+print(f"• Buzzer Orientation : Aimed toward {CH_AIMED}")
+print(f"• Opposing Channel   : {CH_REAR}")
+print(f"• Sampling Rate      : {fs:.0f} SPS (0.00 µs inter-channel skew)")
+print(f"• Speed of Sound     : c(T) = {c_sound:.2f} m/s (at {TEMPERATURE_C}°C)")
+print("=" * 80)
+
+# %% [markdown] Cell 3
+## 1. Asymmetric Pre-Flight Noise & Directivity Check
+# Turn **ON** the pneumatic air blower.
+# Position the glider at the launch mark ($x = 60.0\,\text{cm}$). This check confirms that:
+# 1. The aimed on-axis microphone does not clip ($V_{\text{pp}} < 3.2\,\text{V}$).
+# 2. The attenuated rear microphone maintains $\text{SNR} > 12\,\text{dB}$ above the pneumatic air blower noise floor.
+
+# %% [code] Cell 4
+# %% [code] Cell 2: Pre-Flight Noise Floor & Directivity Validation
+input(f"👉 Turn ON the air blower. Hold glider at x = {LAUNCH_POS_CM:.0f} cm. Press [Enter]...")
+
+# Energize buzzer for 1.0 s pre-flight check
+ol.trigger.mmio.write(0x20, int(1.0 * 100_000_000))
+ol.trigger.fire_pulse()
+
+t_test, v_raw1, v_raw2 = ol.record_continuous(duration_sec=1.0, chunk_size=4096)
+
+ol.trigger.mmio.write(0x20, 0)
+ol.trigger.fire_pulse()
+
+# 2nd-order bandpass filter around carrier (f0 ± 120 Hz)
+nyq = fs / 2.0
+b_bp, a_bp = signal.butter(2, [max(20.0, f0 - 120.0) / nyq, min(nyq - 20.0, f0 + 120.0) / nyq], btype="bandpass")
+v1_bp = signal.filtfilt(b_bp, a_bp, v_raw1 - np.mean(v_raw1))
+v2_bp = signal.filtfilt(b_bp, a_bp, v_raw2 - np.mean(v_raw2))
+
+v1_rms = float(np.sqrt(np.mean(v1_bp ** 2)) * 1000.0)  # mV
+v2_rms = float(np.sqrt(np.mean(v2_bp ** 2)) * 1000.0)  # mV
+v1_pp = float(np.max(v_raw1) - np.min(v_raw1))
+v2_pp = float(np.max(v_raw2) - np.min(v_raw2))
+
+if AIMED_MICROPHONE == "mic1":
+    v_front_rms, v_rear_rms = v1_rms, v2_rms
+    v_front_pp, v_rear_pp = v1_pp, v2_pp
+else:
+    v_front_rms, v_rear_rms = v2_rms, v1_rms
+    v_front_pp, v_rear_pp = v2_pp, v1_pp
+
+dir_contrast_db = 20.0 * np.log10(max(v_front_rms, 1e-4) / max(v_rear_rms, 1e-4))
+gate_clip = v_front_pp < 3.20
+gate_rear_snr = v_rear_rms >= (V_TH_REAR * 1000.0)
+
+print("=" * 75)
+print("📊 PRE-FLIGHT ASYMMETRIC SIGNAL & NOISE REPORT:")
+print("=" * 75)
+print(f"• Front Channel ({CH_AIMED}) : {v_front_rms:5.1f} mV RMS (V_pp = {v_front_pp:.2f} V)")
+print(f"• Rear Channel  ({CH_REAR})  : {v_rear_rms:5.1f} mV RMS (V_pp = {v_rear_pp:.2f} V)")
+print(f"• Directivity Attenuation  : {dir_contrast_db:+.1f} dB front-to-rear contrast")
+print(f"• Rail Anti-Clipping Gate  : {'✅ PASS (Safe)' if gate_clip else '🚨 FAIL (Turn gain CCW)'}")
+print(f"• Rear Channel SNR Margin  : {'✅ PASS (Above hiss)' if gate_rear_snr else '⚠️ WEAK (Adjust rear mic)'}")
+print("=" * 75)
+if gate_clip and gate_rear_snr:
+    print("🎉 PRE-FLIGHT GATES PASSED: READY FOR OSCILLATION HARVESTING!")
+
+# %% [markdown] Cell 5
+## 2. Multi-Trial Harmonic Oscillation Acquisition Loop
+# Execute $N = 3$ repeated trials. For each run:
+# 1. Pull the glider left to $x = 60.0\,\text{cm}$ (displacing it $-40\,\text{cm}$ from center).
+# 2. Press **`[Enter]`** and release cleanly to the right ($+v > 0$).
+# 3. **Immediately drop your hands below the track.**
+# 4. The system captures $10.0\,\text{s}$ of continuous dual Doppler, applies zero-mean drift correction, and inverts $v(t)$ and $x(t)$.
+
+# %% [code] Cell 6
+# %% [code] Cell 3: Production Multi-Trial Harvester Loop
+trial_records = []
+all_trajectories = {}
+
+# 4th-order carrier tracking filter
+b_track, a_track = signal.butter(4, [max(20.0, f0 - 100.0) / nyq, min(nyq - 20.0, f0 + 100.0) / nyq], btype="bandpass")
+
+print("=" * 82)
+print(f"🚀 STARTING HARMONIC OSCILLATOR HARVESTER ({N_TRIALS} Trials | {TRACK_LENGTH_M:.1f} m Rail)")
+print(f"   Buzzer Orientation: {CH_AIMED} | Initial Pull: x = {LAUNCH_POS_CM:.0f} cm")
+print("=" * 82)
+
+for tr in range(1, N_TRIALS + 1):
+    input(f"\n📍 TRIAL [{tr}/{N_TRIALS}] — Pull glider to {LAUNCH_POS_CM:.0f} cm. Press [Enter] and release RIGHT...")
+    
+    # 1. Energize buzzer for flight duration
+    ol.trigger.mmio.write(0x20, int((FLIGHT_DURATION_SEC + 0.5) * 100_000_000))
+    ol.trigger.fire_pulse()
+    
+    t_raw, v1_raw, v2_raw = ol.record_continuous(duration_sec=FLIGHT_DURATION_SEC, chunk_size=4096)
+    
+    ol.trigger.mmio.write(0x20, 0)
+    ol.trigger.fire_pulse()
+    
+    # 2. Continuous Hilbert Phase Demodulation
+    v1_c = signal.filtfilt(b_track, a_track, v1_raw - np.mean(v1_raw))
+    v2_c = signal.filtfilt(b_track, a_track, v2_raw - np.mean(v2_raw))
+    
+    phi1 = np.unwrap(np.angle(signal.hilbert(v1_c)))
+    phi2 = np.unwrap(np.angle(signal.hilbert(v2_c)))
+    
+    # 100 Hz trajectory derivative via Savitzky-Golay
+    dphi1 = signal.savgol_filter(phi1, window_length=1251, polyorder=3, deriv=1, delta=1.0 / fs)
+    dphi2 = signal.savgol_filter(phi2, window_length=1251, polyorder=3, deriv=1, delta=1.0 / fs)
+    
+    f1_inst = dphi1 / (2.0 * np.pi)
+    f2_inst = dphi2 / (2.0 * np.pi)
+    
+    # 3. Orientation-Aware Differential Velocity
+    denom = f1_inst + f2_inst
+    v_diff = np.where(denom > 0, c_sound * ((f2_inst - f1_inst) / denom), 0.0)
+    
+    # Resample to 100 Hz kinematic rate
+    ds = int(fs / 100.0)
+    t_arr = np.arange(len(v_diff))[::ds] / fs
+    v_arr = v_diff[::ds]
+    f1_arr = f1_inst[::ds]
+    f2_arr = f2_inst[::ds]
+    f0_comm = 0.5 * (f1_arr + f2_arr)
+    
+    # Filter outliers
+    v_med = signal.medfilt(np.clip(v_arr, -1.20, 1.20), kernel_size=9)
+    
+    # 4. Zero-Mean Integer-Cycle Drift Correction (Step 2.3)
+    zc = np.where((v_med[:-1] <= 0) & (v_med[1:] > 0) & (t_arr[:-1] > 0.5))[0]
+    if len(zc) >= 2:
+        iz1, iz2 = zc[0], zc[-1]
+        v_dc = float(np.mean(v_med[iz1:iz2]))
+    else:
+        v_dc = float(np.mean(v_med))
+    
+    v_clean = v_med - v_dc
+    
+    # Trapezoidal Integration & Center Anchoring (x_eq = 1.00 m)
+    dt_step = t_arr[1] - t_arr[0]
+    x_rel = np.cumsum(v_clean) * dt_step
+    # Residual linear detrend
+    p_trend = np.polyfit(t_arr, x_rel, 1)
+    x_osc = x_rel - (p_trend[0] * t_arr)
+    x_arr = (TRACK_LENGTH_M / 2.0) + x_osc
+    
+    # 5. Harmonic Parameter Extractor (Step 2.2)
+    p_idx, _ = signal.find_peaks(v_clean, distance=int(0.8 / dt_step), prominence=0.08)
+    t_peaks = t_arr[p_idx]
+    v_peaks = v_clean[p_idx]
+    
+    if len(p_idx) >= 3:
+        T_d = float(np.median(np.diff(t_peaks)))
+        omega_d = 2.0 * np.pi / T_d
+        
+        # Log-envelope linear fit for damping alpha
+        p_log, cov = np.polyfit(t_peaks, np.log(np.maximum(v_peaks, 1e-4)), 1, cov=True)
+        alpha = float(-p_log[0])
+        
+        # Goodness of fit R2
+        fit_log = p_log[0] * t_peaks + p_log[1]
+        r2_fit = float(1.0 - np.sum((np.log(v_peaks) - fit_log)**2) / np.sum((np.log(v_peaks) - np.mean(np.log(v_peaks)))**2))
+        
+        omega_0 = float(np.sqrt(omega_d**2 + alpha**2))
+        k_eff = float(GLIDER_MASS_KG * (omega_0**2))
+        gamma_drag = float(2.0 * GLIDER_MASS_KG * alpha)
+        zeta = float(alpha / omega_0)
+        q_factor = float(omega_0 / (2.0 * max(alpha, 1e-5)))
+    else:
+        T_d, omega_d, omega_0, k_eff, alpha, gamma_drag, zeta, q_factor, r2_fit = [np.nan]*9
+        
+    max_fwd = float(np.max(v_clean)) * 100.0
+    max_rev = float(np.min(v_clean)) * 100.0
+    x_min_cm = float(np.min(x_arr)) * 100.0
+    x_max_cm = float(np.max(x_arr)) * 100.0
+    
+    trial_records.append({
+        "trial_id": tr,
+        "aimed_mic": AIMED_MICROPHONE,
+        "glider_mass_g": int(GLIDER_MASS_KG * 1000),
+        "T_d_s": T_d,
+        "omega_d_radps": omega_d,
+        "k_eff_npm": k_eff,
+        "gamma_kgps": gamma_drag,
+        "alpha_s": alpha,
+        "Q_factor": q_factor,
+        "zeta_ratio": zeta,
+        "v_max_fwd_cmps": max_fwd,
+        "v_max_rev_cmps": max_rev,
+        "x_min_cm": x_min_cm,
+        "x_max_cm": x_max_cm,
+        "r2_envelope_fit": r2_fit
+    })
+    
+    all_trajectories[f"trial_{tr}"] = {
+        "t_s": t_arr,
+        "v_cmps": v_clean * 100.0,
+        "x_cm": x_arr * 100.0,
+        "f1_hz": f1_arr,
+        "f2_hz": f2_arr,
+        "f0_comm_hz": f0_comm
+    }
+    
+    print(f"   ✅ Trial {tr}: T_d = {T_d:.3f} s | k_eff = {k_eff:.2f} N/m | γ = {gamma_drag:.4f} kg/s | R² = {r2_fit:.3f} | x ∈ [{x_min_cm:.1f}, {x_max_cm:.1f}] cm")
+    time.sleep(1.0)
+
+print("=" * 82)
+print("🎉 ALL TRIALS HARVESTED SUCCESSFULLY!")
+print("=" * 82)
+
+# %% [markdown] Cell 7
+## 3. Synchronized 3-Panel Kinematic Visualization
+# * **Panel 1 (FM Doppler):** Antiphase carrier crossings $f_1(t)$ and $f_2(t)$ crossing identically at $v = 0$.
+# * **Panel 2 (Velocity):** Decaying harmonic velocity curve with overlaid $\pm V_0 e^{-\alpha t}$ exponential envelope.
+# * **Panel 3 (Position):** Symmetrical 1D position oscillation centered at $x_{\text{eq}} = 100\,\text{cm}$.
+
+# %% [code] Cell 8
+# %% [code] Cell 4: 3-Panel Synchronized Kinematic Plot
+min_n = min(len(all_trajectories[k]["v_cmps"]) for k in all_trajectories)
+t_plot = all_trajectories["trial_1"]["t_s"][:min_n]
+
+v_mat = np.array([all_trajectories[f"trial_{tr}"]["v_cmps"][:min_n] for tr in range(1, N_TRIALS + 1)])
+x_mat = np.array([all_trajectories[f"trial_{tr}"]["x_cm"][:min_n] for tr in range(1, N_TRIALS + 1)])
+f1_mat = np.array([all_trajectories[f"trial_{tr}"]["f1_hz"][:min_n] for tr in range(1, N_TRIALS + 1)])
+f2_mat = np.array([all_trajectories[f"trial_{tr}"]["f2_hz"][:min_n] for tr in range(1, N_TRIALS + 1)])
+f0_mat = np.array([all_trajectories[f"trial_{tr}"]["f0_comm_hz"][:min_n] for tr in range(1, N_TRIALS + 1)])
+
+v_mean = np.mean(v_mat, axis=0)
+v_std = np.std(v_mat, axis=0)
+x_mean = np.mean(x_mat, axis=0)
+x_std = np.std(x_mat, axis=0)
+f1_mean = np.mean(f1_mat, axis=0)
+f2_mean = np.mean(f2_mat, axis=0)
+f0_mean = np.mean(f0_mat, axis=0)
+
+fig_kin = make_subplots(
+    rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.07,
+    subplot_titles=(
+        "<b>1. Dual FM Doppler Frequencies (f1 vs f2) & Common-Mode Drift f0(t) [Hz]</b>",
+        "<b>2. Damped Harmonic Velocity v(t) & Fitted Exponential Envelopes [cm/s]</b>",
+        "<b>3. Reconstructed 1D Glider Position x(t) on 2.0 m Rail [cm]</b>"
+    )
+)
+
+# Panel 1: FM Doppler
+fig_kin.add_scatter(x=t_plot, y=f1_mean, mode="lines", line=dict(color="#00FFCC", width=1.8), name="Mic 1 (Left)", row=1, col=1)
+fig_kin.add_scatter(x=t_plot, y=f2_mean, mode="lines", line=dict(color="#FF007F", width=1.8), name="Mic 2 (Right)", row=1, col=1)
+fig_kin.add_scatter(x=t_plot, y=f0_mean, mode="lines", line=dict(color="#FFA500", width=1.5, dash="dash"), name="Carrier f0(t)", row=1, col=1)
+
+# Panel 2: Velocity
+fig_kin.add_scatter(x=t_plot, y=v_mean + v_std, mode="lines", line=dict(width=0.5, color="rgba(255, 214, 0, 0.2)", dash="dot"), showlegend=False, row=2, col=1)
+fig_kin.add_scatter(x=t_plot, y=v_mean - v_std, mode="lines", line=dict(width=0.5, color="rgba(255, 214, 0, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(255, 214, 0, 0.15)", name="±1σ Velocity", row=2, col=1)
+fig_kin.add_scatter(x=t_plot, y=v_mean, mode="lines", line=dict(color="#FFD600", width=2.4), name="Mean v(t)", row=2, col=1)
+fig_kin.add_hline(y=0.0, line=dict(color="gray", dash="dash"), row=2, col=1)
+
+# Panel 3: Position
+fig_kin.add_scatter(x=t_plot, y=x_mean + x_std, mode="lines", line=dict(width=0.5, color="rgba(118, 255, 3, 0.2)", dash="dot"), showlegend=False, row=3, col=1)
+fig_kin.add_scatter(x=t_plot, y=x_mean - x_std, mode="lines", line=dict(width=0.5, color="rgba(118, 255, 3, 0.2)", dash="dot"), fill="tonexty", fillcolor="rgba(118, 255, 3, 0.15)", name="±1σ Position", row=3, col=1)
+fig_kin.add_scatter(x=t_plot, y=x_mean, mode="lines", line=dict(color="#76FF03", width=2.4), name="Mean x(t)", row=3, col=1)
+fig_kin.add_hline(y=100.0, line=dict(color="white", dash="dot"), annotation_text="Center (x_eq = 100 cm)", row=3, col=1)
+fig_kin.add_hline(y=0.0, line=dict(color="red", dash="dash"), annotation_text="Mic 1 (0 cm)", row=3, col=1)
+fig_kin.add_hline(y=200.0, line=dict(color="red", dash="dash"), annotation_text="Mic 2 (200 cm)", row=3, col=1)
+
+fig_kin.update_layout(template="plotly_dark", height=780, margin=dict(l=60, r=30, t=55, b=35))
+fig_kin.update_yaxes(title="Frequency [Hz]", row=1, col=1)
+fig_kin.update_yaxes(title="Velocity [cm/s]", row=2, col=1)
+fig_kin.update_yaxes(title="Position [cm]", range=[-5, 205], row=3, col=1)
+fig_kin.update_xaxes(title="Time [Seconds]", row=3, col=1)
+fig_kin.show()
+
+# %% [markdown] Cell 9
+## 4. Phase-Space Orbital Dynamics & Mechanical Energy Dissipation
+# * **Column 1:** The 2D phase-space orbit $(x(t), v(t))$ traces a clockwise inward spiral collapsing toward the equilibrium center $(100\,\text{cm}, 0)$.
+# * **Column 2:** Kinetic energy ($E_k$) and potential energy ($E_p$) oscillate in exact antiphase at $2\omega_d$, while total mechanical energy ($E_{\text{tot}}$) decays monotonically.
+
+# %% [code] Cell 10
+# %% [code] Cell 5: Phase-Space Orbit & Energy Partitioning
+df_trials_t = pd.DataFrame(trial_records)
+k_mean_npm = float(df_trials_t["k_eff_npm"].mean())
+
+# Instantaneous Energy Partitioning [mJ]
+E_k_mJ = 0.5 * GLIDER_MASS_KG * ((v_mean / 100.0)**2) * 1000.0
+E_p_mJ = 0.5 * k_mean_npm * (((x_mean - 100.0) / 100.0)**2) * 1000.0
+E_tot_mJ = E_k_mJ + E_p_mJ
+
+fig_orbit = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=(
+        "<b>1. Glider Phase-Space Orbit: v(t) vs x(t) [Clockwise Spiral]</b>",
+        "<b>2. Mechanical Energy Partitioning: Ek, Ep & Etot Decay [mJ]</b>"
+    ),
+    horizontal_spacing=0.12
+)
+
+# Column 1: Phase Space Orbit
+fig_orbit.add_scatter(
+    x=x_mean, y=v_mean, mode="lines",
+    line=dict(color="#00E5FF", width=2.2),
+    name="Phase Orbit", row=1, col=1
+)
+fig_orbit.add_scatter(
+    x=[x_mean[0]], y=[v_mean[0]], mode="markers+text",
+    marker=dict(size=12, color="#FFA500", symbol="diamond"),
+    text=["Release"], textposition="top left",
+    name="Launch Point", row=1, col=1
+)
+fig_orbit.add_scatter(
+    x=[100.0], y=[0.0], mode="markers",
+    marker=dict(size=10, color="white", symbol="cross"),
+    name="Center Attractor", row=1, col=1
+)
+
+# Column 2: Energy Dissipation
+fig_orbit.add_scatter(x=t_plot, y=E_k_mJ, mode="lines", line=dict(color="#FF007F", width=1.5), name="Kinetic Ek", row=1, col=2)
+fig_orbit.add_scatter(x=t_plot, y=E_p_mJ, mode="lines", line=dict(color="#00FFCC", width=1.5), name="Potential Ep", row=1, col=2)
+fig_orbit.add_scatter(x=t_plot, y=E_tot_mJ, mode="lines", line=dict(color="#FFD600", width=2.5), name="Total Etot", row=1, col=2)
+
+fig_orbit.update_layout(template="plotly_dark", height=480, margin=dict(l=60, r=30, t=55, b=35))
+fig_orbit.update_xaxes(title="Position x [cm]", range=[40, 160], row=1, col=1)
+fig_orbit.update_yaxes(title="Velocity v [cm/s]", range=[-100, 100], row=1, col=1)
+fig_orbit.update_xaxes(title="Time [Seconds]", row=1, col=2)
+fig_orbit.update_yaxes(title="Energy [mJ]", range=[0, max(E_tot_mJ) * 1.15], row=1, col=2)
+fig_orbit.show()
+
+# %% [markdown] Cell 11
+## 5. Statistical Aggregation & Final Metrological Report
+# Aggregates the physical observables across trials to calculate Mean $\mu$, Standard Error $\text{SEM}$, and relative uncertainty.
+
+# %% [code] Cell 12
+# %% [code] Cell 6: Metrological Summary Table
+def stat_row(name, symbol, values, unit=""):
+    arr = np.array(values, dtype=np.float64)
+    m = float(np.mean(arr))
+    s = float(np.std(arr, ddof=1)) if len(arr) > 1 else 0.0
+    sem = s / np.sqrt(len(arr)) if len(arr) > 0 else 0.0
+    rel = (sem / abs(m)) * 100.0 if abs(m) > 1e-6 else 0.0
+    return {
+        "Parameter": name,
+        "Symbol": symbol,
+        "Mean (μ)": f"{m:.4f} {unit}",
+        "± SEM": f"± {sem:.4f} {unit}",
+        "Std Dev (σ)": f"{s:.4f} {unit}",
+        "Rel Error (%)": f"{rel:.2f} %"
+    }
+
+report_rows = [
+    stat_row("Damped Oscillation Period", "T_d", df_trials_t["T_d_s"], "s"),
+    stat_row("Damped Angular Frequency", "ω_d", df_trials_t["omega_d_radps"], "rad/s"),
+    stat_row("Effective Dual Stiffness", "k_eff", df_trials_t["k_eff_npm"], "N/m"),
+    stat_row("Single Elastic Stiffness", "k_elastic", df_trials_t["k_eff_npm"] / 2.0, "N/m"),
+    stat_row("Envelope Damping Rate", "α", df_trials_t["alpha_s"], "s⁻¹"),
+    stat_row("Viscous Drag Coefficient", "γ", df_trials_t["gamma_kgps"], "kg/s"),
+    stat_row("Dimensionless Damping Ratio", "ζ", df_trials_t["zeta_ratio"]),
+    stat_row("Resonance Quality Factor", "Q", df_trials_t["Q_factor"]),
+    stat_row("Peak Initial Velocity", "v_max", df_trials_t["v_max_fwd_cmps"], "cm/s"),
+    stat_row("Envelope Fit Linearity", "R²", df_trials_t["r2_envelope_fit"])
+]
+
+df_report = pd.DataFrame(report_rows)
+print("=" * 95)
+print(f"🏆 FINAL METROLOGICAL REPORT: AIR TRACK DAMPED HARMONIC OSCILLATOR")
+print(f"   Rail: {TRACK_LENGTH_M:.1f} m | Mass: {GLIDER_MASS_KG*1000:.0f} g | Buzzer Aimed: {CH_AIMED} | N = {N_TRIALS}")
+print("=" * 95)
+print(df_report.to_string(index=False))
+print("=" * 95)
+
+# %% [markdown] Cell 13
+## 6. Multi-Tab Production Excel & CSV Data Export
+# Serializes all experimental findings into `data/harmonic_oscillation_mass_200g.xlsx` containing:
+# * **`Statistical_Summary`:** Consolidated physics metrics and uncertainty bounds.
+# * **`Trial_Metrics`:** Per-trial diagnostic breakdown.
+# * **`Synchronized_TimeSeries`:** 100 Hz kinematic and energy time series.
+
+# %% [code] Cell 14
+# %% [code] Cell 7: Multi-Tab Excel & CSV Serialization
+data_dir = Path("data")
+data_dir.mkdir(parents=True, exist_ok=True)
+
+mass_tag = int(GLIDER_MASS_KG * 1000)
+excel_path = data_dir / f"harmonic_oscillation_mass_{mass_tag}g.xlsx"
+csv_path = data_dir / f"harmonic_oscillation_mass_{mass_tag}g.csv"
+
+# Tab 1: Executive Summary
+df_summary_export = pd.DataFrame([{
+    "experiment_id": "exp04_harmonic_oscillator",
+    "aimed_microphone": AIMED_MICROPHONE,
+    "rail_length_m": TRACK_LENGTH_M,
+    "glider_mass_kg": GLIDER_MASS_KG,
+    "temperature_c": TEMPERATURE_C,
+    "speed_of_sound_mps": c_sound,
+    "f0_carrier_hz": f0,
+    "n_trials": N_TRIALS,
+    "T_d_mean_sec": float(df_trials_t["T_d_s"].mean()),
+    "k_eff_mean_npm": float(df_trials_t["k_eff_npm"].mean()),
+    "gamma_mean_kgps": float(df_trials_t["gamma_kgps"].mean()),
+    "alpha_mean_s": float(df_trials_t["alpha_s"].mean()),
+    "Q_mean": float(df_trials_t["Q_factor"].mean()),
+    "r2_envelope_mean": float(df_trials_t["r2_envelope_fit"].mean())
+}])
+
+# Tab 2: Trial Metrics
+df_trials_export = df_trials_t.copy()
+
+# Tab 3: Synchronized Time Series
+dict_ts = {
+    "time_sec": t_plot,
+    "v_mean_cmps": v_mean,
+    "v_std_cmps": v_std,
+    "x_mean_cm": x_mean,
+    "x_std_cm": x_std,
+    "E_kinetic_mJ": E_k_mJ,
+    "E_potential_mJ": E_p_mJ,
+    "E_total_mJ": E_tot_mJ,
+    "f1_mean_hz": f1_mean,
+    "f2_mean_hz": f2_mean,
+    "f0_comm_hz": f0_mean
+}
+for tr in range(1, N_TRIALS + 1):
+    dict_ts[f"v_trial_{tr}_cmps"] = all_trajectories[f"trial_{tr}"]["v_cmps"][:min_n]
+    dict_ts[f"x_trial_{tr}_cm"] = all_trajectories[f"trial_{tr}"]["x_cm"][:min_n]
+
+df_ts = pd.DataFrame(dict_ts)
+
+with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+    df_summary_export.to_excel(writer, sheet_name="Statistical_Summary", index=False)
+    df_trials_export.to_excel(writer, sheet_name="Trial_Metrics", index=False)
+    df_ts.to_excel(writer, sheet_name="Synchronized_TimeSeries", index=False)
+
+df_ts.to_csv(csv_path, index=False)
+
+print("=" * 85)
+print(f"🎉 EXPERIMENTAL DATASET EXPORTED SUCCESSFULLY!")
+print(f"• Multi-Tab Excel Workbook : {excel_path.resolve()}")
+print(f"• Flat Time-Series CSV    : {csv_path.resolve()}")
+print("=" * 85)
+
+# %% [markdown] Cell 15
+## 7. Hardware Teardown & Buffer Release
+
+# %% [code] Cell 16
+# %% [code] Cell 8: Clean Teardown
+ol.close()
+print("🔒 FPGA hardware overlay and DMA buffers cleanly released.")
+
 ```
