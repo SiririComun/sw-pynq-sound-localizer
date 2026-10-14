@@ -23,6 +23,7 @@ EXPERIMENT_NOTEBOOKS = [
     "exp01_distance_energy_characterization.ipynb",
     "exp02_angle_3method_characterization.ipynb",
     "exp03_air_track_kinematics_harvesting.ipynb",
+    "exp04_harmonic_oscillation_doppler.ipynb",
 ]
 
 
